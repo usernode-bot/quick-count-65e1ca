@@ -1,0 +1,35 @@
+# Quick Count — production-style standalone stack (app + Postgres).
+# Polls a real Usernode node when NODE_RPC_URL is set.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: quickcount
+      POSTGRES_PASSWORD: quickcount
+      POSTGRES_DB: quickcount
+    volumes:
+      - qc_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quickcount"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      USERNODE_ENV: production
+      DATABASE_URL: postgres://quickcount:quickcount@db:5432/quickcount
+      NODE_RPC_URL: ${NODE_RPC_URL:-}
+      TREASURY_ADDR: ${TREASURY_ADDR:-ut1treasuryquickcount00000000000000000000}
+      ORG_FEE: ${ORG_FEE:-100}
+      ADMIN_ADDRS: ${ADMIN_ADDRS:-}
+    ports:
+      - "3000:3000"
+
+volumes:
+  qc_pgdata:

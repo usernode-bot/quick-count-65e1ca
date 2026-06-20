@@ -1,34 +1,199 @@
+// Quick Count — standalone usernode-dapp-starter server.
+//
+// A plain Node/Express server. The chain is the source of truth: every state
+// change is an on-chain transaction carrying an app:"quickcount" memo. A
+// deterministic indexer (lib/indexer.js) replays the transaction log to build
+// all read state, so the server itself never mutates election data — it only
+// reads the chain and serves the UI. Identity is the wallet address.
+//
+// Two run modes:
+//   • production  — polls a Usernode node at NODE_RPC_URL.
+//   • --local-dev — uses an in-process mock ledger + /__mock/* endpoints so the
+//     whole app runs offline. The mock wallet bridge signs against it.
+//
+// Persistence is optional: with DATABASE_URL set the raw transaction log is
+// stored in `chain_txs` (durable across restarts); without it the log lives in
+// memory only. Either way the read model is rebuilt from the log on every poll.
+
+try { require('dotenv').config(); } catch { /* dotenv optional */ }
+
 const express = require('express');
 const path = require('path');
-const { Pool } = require('pg');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
-const txsource = require('./lib/txsource');
-const { normalizeTx, applyTx } = require('./lib/indexer');
-const { latestPerStation, computeTally, reporting } = require('./lib/aggregate');
+const { normalizeTx, QuickCountIndexer } = require('./lib/indexer');
+const memo = require('./lib/memo');
+const mock = require('./lib/mockledger');
+const { makeSource } = require('./lib/txsource');
 
-const app = express();
-const port = process.env.PORT || 3000;
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const JWT_SECRET = process.env.JWT_SECRET;
+let Pool = null;
+try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
+
+// ── Configuration ───────────────────────────────────────────────────────────
+const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
+const IS_DEMO = LOCAL_DEV || IS_STAGING; // seed obviously-fake data so every screen renders
+const PORT = process.env.PORT || 3000;
+const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
+const TREASURY_ADDR = process.env.TREASURY_ADDR || 'ut1treasuryquickcount00000000000000000000';
+const ORG_FEE = Number(process.env.ORG_FEE) || 100;
 
-// Paths that stay open without authentication.
+// Demo personas (local-dev persona switcher + admin).
+const DEMO = {
+  admin: 'ut1demoadmin000000000000000000000000000000',
+  orgA: 'ut1democitizenscount0000000000000000000000',
+  orgB: 'ut1demounpaidorg000000000000000000000000000',
+  obs1: 'ut1demoobserverone000000000000000000000000',
+  obs2: 'ut1demoobservertwo000000000000000000000000',
+  obs3: 'ut1demoobserverthree00000000000000000000000',
+};
+const ADMIN_ADDRS = (process.env.ADMIN_ADDRS || '').split(',').map((s) => s.trim()).filter(Boolean);
+if (IS_DEMO) ADMIN_ADDRS.push(DEMO.admin);
+
+const pool = (Pool && process.env.DATABASE_URL)
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : null;
+
+const indexer = new QuickCountIndexer({ treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS });
+const source = makeSource({ localDev: LOCAL_DEV, nodeUrl: NODE_RPC_URL });
+
+// In-memory transaction log (source for every rebuild) and dedupe set.
+const txLog = [];
+const seen = new Set();
+const watched = new Map(); // address -> cursor
+watched.set(TREASURY_ADDR, null);
+
+// ── Ingest / rebuild ─────────────────────────────────────────────────────────
+function ingestRaw(raw) {
+  const n = normalizeTx(raw);
+  if (!n.txId || seen.has(n.txId)) return false;
+  seen.add(n.txId);
+  txLog.push(n);
+  if (pool) {
+    pool.query(
+      `INSERT INTO chain_txs (tx_id, from_addr, to_addr, amount, memo, created_at, seen_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW()) ON CONFLICT (tx_id) DO NOTHING`,
+      [n.txId, n.from, n.to, n.amount, n.memo, n.createdAt]
+    ).catch((e) => console.error('persist failed:', e.message));
+  }
+  return true;
+}
+
+function rebuild() {
+  indexer.rebuild(txLog);
+  // Discover org wallets so the poller watches them for elections/results/etc.
+  for (const org of indexer.orgs.values()) {
+    if (!watched.has(org.addr)) watched.set(org.addr, null);
+  }
+}
+
+async function pollOnce() {
+  let added = false;
+  if (LOCAL_DEV) {
+    for (const raw of mock.all()) if (ingestRaw(raw)) added = true;
+  } else {
+    for (const [addr, cursor] of watched) {
+      let txs = [];
+      try { txs = await source.listTransactions({ account: addr, sinceCursor: cursor }); } catch { continue; }
+      if (!Array.isArray(txs)) continue;
+      for (const raw of txs) {
+        if (ingestRaw(raw)) added = true;
+        const n = normalizeTx(raw);
+        if (n.createdAt && (!cursor || n.createdAt > cursor)) watched.set(addr, n.createdAt);
+      }
+    }
+  }
+  rebuild(); // deterministic full replay — cheap at this scale
+  return added;
+}
+
+// ── Demo seed (obviously fake; only in local-dev / staging) ──────────────────
+function evHash(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
+
+function buildDemoTxs() {
+  let t = Date.parse('2026-06-19T08:00:00.000Z');
+  const at = () => new Date(t += 60000).toISOString();
+  const mk = (txId, from, to, amount, env) => ({ txId, from, to, amount, memo: memo.encode(env), createdAt: at() });
+  const eid = 'demo_el_general';
+  const ev1 = evHash('Staging demo — tally sheet station 1');
+  const ev2 = evHash('Staging demo — tally sheet station 3');
+
+  const txs = [
+    // Organizations — one pays the fee (active), one does not (pending).
+    mk('demo_org_a', DEMO.orgA, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Citizens Count', 'Demo Republic')),
+    mk('demo_org_b', DEMO.orgB, TREASURY_ADDR, 0, memo.orgMemo('Staging demo — Unpaid Org', 'Demo Republic')),
+    // Election + candidates (by the active org).
+    mk(eid, DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — General Election')),
+    mk('demo_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 1, 'Demo Candidate Red')),
+    mk('demo_c2', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 2, 'Demo Candidate Blue')),
+    mk('demo_c3', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 3, 'Demo Candidate Green')),
+    // Stations.
+    mk('demo_s1', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 1, 'Demo Station A', 'North district')),
+    mk('demo_s2', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 2, 'Demo Station B', 'East district')),
+    mk('demo_s3', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 3, 'Demo Station C', 'South district')),
+    mk('demo_s4', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 4, 'Demo Station D', 'West district')),
+    // Observers (one scoped to station 2).
+    mk('demo_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo(eid, DEMO.obs1)),
+    mk('demo_o2', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo(eid, DEMO.obs2)),
+    mk('demo_o3', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo(eid, DEMO.obs3, 2)),
+    // Station 1: two submissions (latest wins) — later one carries evidence.
+    mk('demo_res_s1_a', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo(eid, 1, { 1: 40, 2: 60, 3: 12 }, 117, 5)),
+    mk('demo_res_s1_b', DEMO.obs2, DEMO.orgA, 0, memo.resultMemo(eid, 1, { 1: 52, 2: 71, 3: 14 }, 142, 5, ev1)),
+    // Station 2: two observers disagree → exercises consensus / median / review.
+    mk('demo_res_s2_a', DEMO.obs3, DEMO.orgA, 0, memo.resultMemo(eid, 2, { 1: 80, 2: 35, 3: 20 }, 140, 5)),
+    mk('demo_res_s2_b', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo(eid, 2, { 1: 81, 2: 33, 3: 21 }, 140, 5)),
+    // Station 3: one submission with evidence — later invalidated by an upheld dispute.
+    mk('demo_res_s3_a', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo(eid, 3, { 1: 200, 2: 5, 3: 5 }, 215, 5, ev2)),
+    // Station 4: no submission → "3 of 4 reported".
+    // Disputes: one open (station 2), one upheld (station 3 → invalid).
+    mk('demo_disp_open', DEMO.obs2, DEMO.orgA, 0, memo.disputeMemo(eid, 'demo_res_s2_a', 'Numbers look inconsistent with turnout')),
+    mk('demo_disp_up', DEMO.obs2, DEMO.orgA, 0, memo.disputeMemo(eid, 'demo_res_s3_a', 'Tally sheet altered', ev2)),
+    mk('demo_dres_up', DEMO.orgA, DEMO.orgA, 0, memo.resolveMemo(eid, 'demo_disp_up', 'uphold')),
+  ];
+  return txs;
+}
+
+function seedDemo() {
+  if (!IS_DEMO) return;
+  const txs = buildDemoTxs();
+  if (LOCAL_DEV) {
+    for (const tx of txs) mock.append(tx); // flows through the normal poll path
+  } else {
+    for (const tx of txs) ingestRaw(tx);
+  }
+}
+
+// ── Express app ──────────────────────────────────────────────────────────────
+const app = express();
+app.use(express.json({ limit: '256kb' }));
+
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// Local-dev mock chain endpoints — mounted BEFORE the auth gate, 404 otherwise.
+if (LOCAL_DEV) {
+  app.post('/__mock/submit', async (req, res) => {
+    const { from, to, amount, memo: m } = req.body || {};
+    if (!from) return res.status(400).json({ error: 'from required' });
+    const tx = mock.append({ from, to: to || from, amount: amount || 0, memo: m });
+    await pollOnce();
+    res.json({ txId: tx.txId, ok: true });
+  });
+  app.get('/__mock/transactions', (_req, res) => res.json({ transactions: mock.all() }));
+  app.post('/__mock/reset', async (_req, res) => { mock.reset(); txLog.length = 0; seen.clear(); rebuild(); res.json({ ok: true }); });
+  app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
+}
+
+// Platform-compatible auth gate: verify a JWT if present and deny-by-default for
+// non-GET / /api/* routes. The Quick Count read endpoints live under
+// /__quickcount/* (GET) and are intentionally public — the server is read-only
+// and the chain is already public.
+const JWT_SECRET = process.env.JWT_SECRET;
 const PUBLIC_API_PATHS = new Set(['/health']);
-// Public path prefixes that bypass the JWT gate. `/explorer-api/*` is the
-// platform's transparent explorer proxy. `/api/public/*` serves the public
-// live dashboard, which logged-out visitors must be able to read.
-const PUBLIC_PREFIXES = ['/explorer-api/', '/api/public/'];
-
-app.use(express.json());
-
-// Verify platform-issued JWT if present, then enforce auth on anything not
-// explicitly marked public.
+const PUBLIC_PREFIXES = ['/__quickcount/', '/__mock/', '/explorer-api/'];
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
-  if (token && JWT_SECRET) {
-    try { req.user = jwt.verify(token, JWT_SECRET); } catch {}
-  }
+  if (token && JWT_SECRET) { try { req.user = jwt.verify(token, JWT_SECRET); } catch { /* ignore */ } }
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     if (PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
@@ -37,290 +202,104 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-
-// ── Read-model store (PgStore) used by the indexer ──────────────────────────
-// All writes are insert-if-absent so replaying a tx_id is a no-op.
-const store = {
-  async getElection(eid) {
-    const { rows } = await pool.query('SELECT eid, name, root_pubkey, creator_pubkey FROM elections WHERE eid = $1', [eid]);
-    return rows[0] || null;
-  },
-  async putElection(r) {
-    await pool.query(
-      `INSERT INTO elections (eid, name, root_pubkey, creator_pubkey, tx_id, created_at)
-       VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, NOW()))
-       ON CONFLICT (eid) DO NOTHING`,
-      [r.eid, r.name, r.root_pubkey, r.creator_pubkey, r.tx_id, r.created_at]
-    );
-  },
-  async putCandidate(r) {
-    await pool.query(
-      `INSERT INTO candidates (eid, cid, name, tx_id) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (eid, cid) DO NOTHING`,
-      [r.eid, r.cid, r.name, r.tx_id]
-    );
-  },
-  async putStation(r) {
-    await pool.query(
-      `INSERT INTO stations (eid, sid, name, tx_id) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (eid, sid) DO NOTHING`,
-      [r.eid, r.sid, r.name, r.tx_id]
-    );
-  },
-  async putResult(r) {
-    await pool.query(
-      `INSERT INTO results (tx_id, eid, sid, submitter_pubkey, votes, tot, inv, created_at)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, COALESCE($8::timestamptz, NOW()))
-       ON CONFLICT (tx_id) DO NOTHING`,
-      [r.tx_id, r.eid, r.sid, r.submitter_pubkey, JSON.stringify(r.votes || {}), r.tot, r.inv, r.created_at]
-    );
-  },
-};
-
-// ── Indexer poll loop ───────────────────────────────────────────────────────
-async function pollOnce() {
-  const ws = (await pool.query('SELECT address, cursor FROM watched_addresses')).rows;
-  for (const w of ws) {
-    let txs = [];
-    try {
-      txs = await txsource.listTransactions({ account: w.address, sinceCursor: w.cursor });
-    } catch { continue; }
-    if (!Array.isArray(txs) || !txs.length) continue;
-    const norm = txs.map(normalizeTx).filter((t) => t.txId);
-    // Apply oldest-first so an election is indexed before its children.
-    norm.sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-    let cursor = w.cursor;
-    for (const t of norm) {
-      try { await applyTx(store, t); } catch (e) { console.error('applyTx failed:', e.message); }
-      if (t.createdAt && (!cursor || t.createdAt > cursor)) cursor = t.createdAt;
-    }
-    if (cursor && cursor !== w.cursor) {
-      await pool.query('UPDATE watched_addresses SET cursor = $2 WHERE address = $1', [w.address, cursor]);
-    }
-  }
-}
-
-// ── API ─────────────────────────────────────────────────────────────────────
-
-// Public config (staging banner, poll hint). Public so the dashboard can read it.
-app.get('/api/public/config', (_req, res) => {
-  res.json({ staging: IS_STAGING });
+// Public config for the frontend.
+app.get('/__quickcount/config', (_req, res) => {
+  const personas = LOCAL_DEV ? [
+    { label: 'Org — Citizens Count', addr: DEMO.orgA },
+    { label: 'Observer One', addr: DEMO.obs1 },
+    { label: 'Observer Three (Station B)', addr: DEMO.obs3 },
+    { label: 'Platform Admin', addr: DEMO.admin },
+    { label: 'Fresh wallet', addr: null },
+  ] : null;
+  res.json({
+    localDev: LOCAL_DEV, staging: IS_STAGING, demo: IS_DEMO,
+    treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
+    methods: require('./lib/aggregate').METHODS, personas,
+  });
 });
 
-// Authenticated: who am I (header / wallet hint for the app shell).
-app.get('/api/me', (req, res) => {
-  res.json({ username: req.user.username, usernode_pubkey: req.user.usernode_pubkey || null, staging: IS_STAGING });
-});
-
-// Authenticated: register a newly-created election's root address so the
-// indexer starts watching it. Carries NO election content — the chain remains
-// the source of truth.
-app.post('/api/elections/track', async (req, res) => {
+// Visibility-aware app state. `viewer` is the connected wallet (or empty).
+app.get('/__quickcount/state', (req, res) => {
   try {
-    const { root_pubkey, tx_id } = req.body || {};
-    if (!root_pubkey) return res.status(400).json({ error: 'root_pubkey required' });
-    if (req.user.usernode_pubkey && req.user.usernode_pubkey !== root_pubkey) {
-      return res.status(403).json({ error: 'root_pubkey does not match your linked wallet' });
+    const viewer = (req.query.viewer || '').toString() || null;
+    const method = require('./lib/aggregate').METHODS.includes(req.query.method) ? req.query.method : 'latest';
+    const role = indexer.viewerRole(viewer);
+    const visible = indexer.visibleElections({ viewer, admin: role.isAdmin });
+    const elections = visible.map((el) => indexer.electionSummary(el));
+
+    let detail = null;
+    if (req.query.eid) {
+      const can = visible.some((el) => el.eid === req.query.eid);
+      detail = can ? indexer.electionDetail(req.query.eid, method) : null;
     }
-    await pool.query(
-      `INSERT INTO watched_addresses (address, cursor, added_at) VALUES ($1, NULL, NOW())
-       ON CONFLICT (address) DO NOTHING`,
-      [root_pubkey]
-    );
-    pollOnce().catch(() => {}); // kick an immediate index pass
-    res.json({ ok: true, tx_id: tx_id || null });
+    res.json({ role, elections, detail, method });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Public: list elections with counts.
-app.get('/api/public/elections', async (_req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT e.eid, e.name, e.created_at,
-        (SELECT COUNT(*) FROM candidates c WHERE c.eid = e.eid) AS candidate_count,
-        (SELECT COUNT(*) FROM stations s WHERE s.eid = e.eid) AS station_count,
-        (SELECT COUNT(DISTINCT r.sid) FROM results r WHERE r.eid = e.eid) AS reported_count
-      FROM elections e
-      ORDER BY e.created_at DESC NULLS LAST, e.eid
-    `);
-    res.json({
-      elections: rows.map((r) => ({
-        eid: r.eid,
-        name: r.name,
-        candidate_count: Number(r.candidate_count),
-        station_count: Number(r.station_count),
-        reported_count: Number(r.reported_count),
-      })),
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: election detail with Latest-Submission aggregation.
-app.get('/api/public/elections/:eid', async (req, res) => {
-  try {
-    const eid = req.params.eid;
-    const el = (await pool.query('SELECT eid, name, root_pubkey, created_at FROM elections WHERE eid = $1', [eid])).rows[0];
-    if (!el) return res.status(404).json({ error: 'not found' });
-
-    const candidates = (await pool.query('SELECT cid, name FROM candidates WHERE eid = $1 ORDER BY cid', [eid])).rows
-      .map((c) => ({ cid: Number(c.cid), name: c.name }));
-    const stations = (await pool.query('SELECT sid, name FROM stations WHERE eid = $1 ORDER BY sid', [eid])).rows
-      .map((s) => ({ sid: Number(s.sid), name: s.name }));
-    const results = (await pool.query(
-      'SELECT sid, tx_id, submitter_pubkey, votes, tot, inv, created_at FROM results WHERE eid = $1', [eid]
-    )).rows.map((r) => ({
-      sid: Number(r.sid),
-      tx_id: r.tx_id,
-      submitter_pubkey: r.submitter_pubkey,
-      votes: r.votes || {},
-      tot: r.tot,
-      inv: r.inv,
-      created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
-    }));
-
-    const latest = latestPerStation(results);
-    const tally = computeTally(candidates, latest);
-    const prog = reporting(stations, latest);
-    const perStation = stations.map((s) => {
-      const r = latest.get(s.sid);
-      return {
-        sid: s.sid,
-        name: s.name,
-        reported: !!r,
-        votes: r ? r.votes : null,
-        tot: r ? r.tot : null,
-        inv: r ? r.inv : null,
-        at: r ? r.created_at : null,
-        submitter: r ? r.submitter_pubkey : null,
-      };
-    });
-    let lastUpdated = null;
-    for (const r of results) if (r.created_at && (!lastUpdated || r.created_at > lastUpdated)) lastUpdated = r.created_at;
-
-    res.json({
-      election: { eid: el.eid, name: el.name, root_pubkey: el.root_pubkey },
-      candidates,
-      stations: perStation,
-      tally,
-      reporting: prog,
-      lastUpdated,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// Platform-admin read view — all orgs incl. pending. Scoped to admin wallets.
+app.get('/__quickcount/admin', (req, res) => {
+  const viewer = (req.query.viewer || '').toString() || null;
+  if (!indexer.isAdmin(viewer)) return res.status(403).json({ error: 'admin scope required' });
+  const orgs = indexer.allOrgs();
+  res.json({
+    orgs,
+    stats: {
+      orgs: orgs.length,
+      activeOrgs: orgs.filter((o) => o.active).length,
+      elections: indexer.elections.size,
+      treasury: TREASURY_ADDR,
+      orgFee: ORG_FEE,
+    },
+  });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// HTML shell: serve the app if authenticated, otherwise an "open in Usernode"
-// landing page. The public dashboard lives at /dashboard.html and is served
-// by express.static above (a GET, non-/api path) without auth.
-app.get('*', (req, res) => {
-  if (!req.user) {
-    return res.status(401).send(`<!doctype html><meta charset=utf-8><title>Open in Usernode</title>
-<body style="font-family:system-ui;background:#09090b;color:#e4e4e7;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-  <div style="max-width:24rem;padding:2rem;text-align:center">
-    <h1 style="font-size:1.25rem;margin:0 0 0.5rem">Open this app inside Usernode</h1>
-    <p style="color:#a1a1aa;font-size:0.9rem;margin:0 0 1.25rem">This page is served via the platform; direct visits aren't authenticated. The public live dashboard is at <code>/dashboard.html</code>.</p>
-    <a href="https://social-vibecoding.usernodelabs.org" style="display:inline-block;padding:0.5rem 1rem;background:#7c3aed;color:white;border-radius:0.5rem;text-decoration:none;font-size:0.9rem">Go to Usernode</a>
-  </div>
-</body>`);
-  }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// SPA shell. The public dashboard works without a wallet, so serve index.html
+// for any GET (the auth gate above only protects non-GET / /api/* routes).
+app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
+// ── Boot ─────────────────────────────────────────────────────────────────────
 async function migrate() {
+  if (!pool) return;
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS elections (
-      eid TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      root_pubkey TEXT,
-      creator_pubkey TEXT,
-      tx_id TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS candidates (
-      eid TEXT NOT NULL,
-      cid INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      tx_id TEXT,
-      PRIMARY KEY (eid, cid)
-    )`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS stations (
-      eid TEXT NOT NULL,
-      sid INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      tx_id TEXT,
-      PRIMARY KEY (eid, sid)
-    )`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS results (
+    CREATE TABLE IF NOT EXISTS chain_txs (
       tx_id TEXT PRIMARY KEY,
-      eid TEXT NOT NULL,
-      sid INTEGER NOT NULL,
-      submitter_pubkey TEXT,
-      votes JSONB NOT NULL DEFAULT '{}'::jsonb,
-      tot INTEGER,
-      inv INTEGER,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS results_eid_sid_idx ON results (eid, sid)`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS watched_addresses (
-      address TEXT PRIMARY KEY,
-      cursor TEXT,
-      added_at TIMESTAMPTZ DEFAULT NOW()
+      from_addr TEXT,
+      to_addr TEXT,
+      amount NUMERIC DEFAULT 0,
+      memo TEXT,
+      created_at TIMESTAMPTZ,
+      seen_at TIMESTAMPTZ DEFAULT NOW()
     )`);
 }
 
-// Staging-only demo data so the public dashboard isn't empty in PR previews.
-// All rows are obviously fake and never reference real users. Strict no-op
-// outside staging. Writes directly into the read model (the one sanctioned
-// bypass of the indexer, for demo only — there is no live chain in staging).
-async function seedStaging() {
-  if (!IS_STAGING) return;
-  const root = 'ut1demo00000000000000000000000000000000';
-  await pool.query(
-    `INSERT INTO elections (eid, name, root_pubkey, creator_pubkey, tx_id, created_at)
-     VALUES ('demo-election', 'Staging demo — General Election', $1, $1, 'demo-election', NOW())
-     ON CONFLICT (eid) DO NOTHING`, [root]);
-  await pool.query(
-    `INSERT INTO watched_addresses (address, cursor, added_at) VALUES ($1, NULL, NOW())
-     ON CONFLICT (address) DO NOTHING`, [root]);
-  await pool.query(
-    `INSERT INTO candidates (eid, cid, name, tx_id) VALUES
-       ('demo-election', 1, 'Demo Candidate Red', 'demo-c1'),
-       ('demo-election', 2, 'Demo Candidate Blue', 'demo-c2')
-     ON CONFLICT (eid, cid) DO NOTHING`);
-  await pool.query(
-    `INSERT INTO stations (eid, sid, name, tx_id) VALUES
-       ('demo-election', 1, 'Demo Station A', 'demo-s1'),
-       ('demo-election', 2, 'Demo Station B', 'demo-s2'),
-       ('demo-election', 3, 'Demo Station C', 'demo-s3')
-     ON CONFLICT (eid, sid) DO NOTHING`);
-  // Station A has TWO submissions (the later one wins). Station B has one.
-  // Station C is unreported → "2 of 3 stations reported".
-  await pool.query(
-    `INSERT INTO results (tx_id, eid, sid, submitter_pubkey, votes, tot, inv, created_at) VALUES
-       ('demo-r1', 'demo-election', 1, $1, '{"1":40,"2":60}'::jsonb, 105, 5, NOW() - INTERVAL '20 minutes'),
-       ('demo-r2', 'demo-election', 1, $1, '{"1":52,"2":71}'::jsonb, 128, 5, NOW() - INTERVAL '2 minutes'),
-       ('demo-r3', 'demo-election', 2, $1, '{"1":80,"2":35}'::jsonb, 120, 5, NOW() - INTERVAL '10 minutes')
-     ON CONFLICT (tx_id) DO NOTHING`, [root]);
+async function loadFromDb() {
+  if (!pool) return;
+  const { rows } = await pool.query('SELECT tx_id, from_addr, to_addr, amount, memo, created_at FROM chain_txs');
+  for (const r of rows) {
+    if (seen.has(r.tx_id)) continue;
+    seen.add(r.tx_id);
+    txLog.push({
+      txId: r.tx_id, from: r.from_addr, to: r.to_addr,
+      amount: Number(r.amount) || 0, memo: r.memo,
+      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    });
+  }
 }
 
 async function start() {
   await migrate();
-  await seedStaging();
-  // Continuous indexer: rebuild the read model from on-chain transactions.
-  setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), 4000);
-  app.listen(port, () => console.log(`Listening on :${port}`));
+  await loadFromDb();
+  seedDemo();
+  await pollOnce();
+  const interval = LOCAL_DEV ? 2000 : 4000;
+  setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), interval);
+  app.listen(PORT, () => console.log(`Quick Count listening on :${PORT}` + (LOCAL_DEV ? ' (local-dev)' : '') + (IS_STAGING ? ' (staging)' : '')));
 }
 
 start().catch((err) => { console.error(err); process.exit(1); });
+
+module.exports = { app, indexer, buildDemoTxs };
