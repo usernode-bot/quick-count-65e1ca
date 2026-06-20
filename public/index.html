@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
   <script>
   // usernode-dev-console@1
   (function () {
@@ -19,13 +18,10 @@
         if (typeof v === 'number' || typeof v === 'boolean') return String(v);
         if (typeof v === 'function') return '[Function ' + (v.name || 'anonymous') + ']';
         if (v instanceof Error) return (v.stack || (v.name + ': ' + v.message));
-        if (depth > 3) return '[…]';
+        if (depth > 3) return '[...]';
         var seen = new WeakSet();
         return JSON.stringify(v, function (k, val) {
-          if (typeof val === 'object' && val !== null) {
-            if (seen.has(val)) return '[Circular]';
-            seen.add(val);
-          }
+          if (typeof val === 'object' && val !== null) { if (seen.has(val)) return '[Circular]'; seen.add(val); }
           if (typeof val === 'function') return '[Function ' + (val.name || 'anonymous') + ']';
           if (val instanceof Error) return val.stack || (val.name + ': ' + val.message);
           return val;
@@ -34,17 +30,9 @@
     }
     function post(level, args, meta) {
       try {
-        var payload = {
-          sentinel: S,
-          level: level,
-          args: Array.prototype.slice.call(args).map(function (a) { return serialize(a); }),
-          ts: Date.now(),
-          url: location.href,
-        };
+        var payload = { sentinel: S, level: level, args: Array.prototype.slice.call(args).map(function (a) { return serialize(a); }), ts: Date.now(), url: location.href };
         if (meta) for (var k in meta) payload[k] = meta[k];
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage(payload, '*');
-        }
+        if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
       } catch (_) {}
     }
     ['log','info','warn','error','debug'].forEach(function (level) {
@@ -56,8 +44,7 @@
       post('error', [msg], { source: e.filename || '', line: e.lineno || 0, col: e.colno || 0, kind: 'error' });
     });
     window.addEventListener('unhandledrejection', function (e) {
-      var r = e.reason;
-      var msg = (r && (r.stack || r.message)) || String(r);
+      var r = e.reason; var msg = (r && (r.stack || r.message)) || String(r);
       post('error', [msg], { kind: 'unhandledrejection' });
     });
     try { post('info', ['[dev-console ready]'], { kind: 'ready' }); } catch (_) {}
@@ -66,56 +53,775 @@
   <title>Quick Count</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
+  <style>
+    .progress-ring-circle { transition: stroke-dashoffset 0.5s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+  </style>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-center gap-8 p-4">
-  <h1 class="text-2xl font-bold">Quick Count</h1>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
 
-  <button id="press-btn" class="w-32 h-32 rounded-full bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white text-xl font-bold shadow-lg shadow-violet-600/30">
-    Press!
-  </button>
+<div id="loading" class="flex items-center justify-center min-h-screen">
+  <div class="text-zinc-400 text-sm">Loading Quick Count...</div>
+</div>
 
-  <div id="count" class="text-lg text-zinc-400">0 total presses</div>
+<div id="staging-banner" class="hidden bg-amber-900/50 border-b border-amber-700 text-amber-200 text-xs text-center py-1.5 px-4">
+  Staging environment — data is synthetic and does not represent real election results
+</div>
 
-  <div class="w-full max-w-sm">
-    <h2 class="text-sm font-medium text-zinc-500 mb-2 text-center">Leaderboard</h2>
-    <div id="leaderboard" class="space-y-1"></div>
-  </div>
+<div id="app" class="hidden">
+  <nav class="bg-zinc-900 border-b border-zinc-800 px-4 py-3">
+    <div class="max-w-6xl mx-auto flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <button onclick="navigate('/')" class="text-violet-400 font-bold text-base hover:text-violet-300">Quick Count</button>
+        <span class="text-zinc-700 hidden sm:block">|</span>
+        <div class="hidden sm:flex items-center gap-1 text-sm">
+          <button onclick="navigate('/')" id="nav-dashboard" class="nav-btn px-3 py-1 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors">Dashboard</button>
+          <button onclick="navigate('/explorer')" id="nav-explorer" class="nav-btn px-3 py-1 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors">Explorer</button>
+          <button onclick="navigate('/my-station')" id="nav-mystation" class="nav-btn hidden px-3 py-1 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors">My Station</button>
+          <button onclick="navigate('/admin')" id="nav-admin" class="nav-btn hidden px-3 py-1 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors">Admin</button>
+        </div>
+      </div>
+      <div id="user-info" class="text-xs text-zinc-600"></div>
+    </div>
+  </nav>
 
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token') || '';
-    const headers = token ? { 'x-usernode-token': token } : {};
+  <main class="max-w-6xl mx-auto p-4">
 
-    async function loadLeaderboard() {
-      const res = await fetch('/api/leaderboard', { headers });
-      if (!res.ok) return;
-      const { leaderboard } = await res.json();
-      const el = document.getElementById('leaderboard');
-      if (!leaderboard.length) {
-        el.innerHTML = '<p class="text-center text-zinc-600 text-sm">No presses yet</p>';
-        return;
-      }
-      el.innerHTML = leaderboard.map((r, i) =>
-        '<div class="flex justify-between px-3 py-1 rounded ' + (i === 0 ? 'bg-violet-600/20 text-violet-300' : 'text-zinc-400') + '">' +
-        '<span>' + (i + 1) + '. ' + r.username + '</span>' +
-        '<span class="font-mono">' + r.presses + '</span></div>'
-      ).join('');
-      const total = leaderboard.reduce((s, r) => s + parseInt(r.presses), 0);
-      document.getElementById('count').textContent = total + ' total presses';
+    <div id="screen-dashboard" class="screen">
+      <div id="dashboard">
+        <div id="election-selector-wrap" class="hidden mb-4">
+          <label class="text-sm text-zinc-400 mr-2">Election:</label>
+          <select id="election-select" onchange="loadDashboard(this.value)" class="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100"></select>
+        </div>
+
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex items-center gap-6 mb-6">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="#27272a" stroke-width="8"/>
+            <circle id="progress-ring-circle" cx="40" cy="40" r="34" fill="none" stroke="#7c3aed" stroke-width="8"
+              stroke-dasharray="213.6" stroke-dashoffset="213.6" class="progress-ring-circle"/>
+          </svg>
+          <div>
+            <div id="progress-label" class="text-2xl font-bold text-violet-400">--</div>
+            <div id="progress-sub" class="text-sm text-zinc-400 mt-0.5">Loading election data...</div>
+            <div id="election-name-display" class="text-xs text-zinc-600 mt-1"></div>
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <h2 class="text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wide">Candidate Results</h2>
+          <div id="candidates-list" class="space-y-3"></div>
+          <div id="ballots-summary" class="mt-3 text-sm text-zinc-500 flex gap-4"></div>
+        </div>
+
+        <div id="regions-section" class="hidden mb-6">
+          <h2 class="text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wide">Regional Breakdown</h2>
+          <div id="regions-list" class="space-y-2"></div>
+        </div>
+
+        <div class="mb-6">
+          <h2 class="text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wide">Polling Stations</h2>
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <table id="stations-table" class="w-full text-sm">
+              <thead class="border-b border-zinc-800">
+                <tr class="text-left text-zinc-500 text-xs">
+                  <th class="px-4 py-2 font-medium">Station</th>
+                  <th class="px-4 py-2 font-medium hidden sm:table-cell">Region</th>
+                  <th class="px-4 py-2 font-medium">Status</th>
+                  <th class="px-4 py-2 font-medium hidden md:table-cell">Submitted</th>
+                  <th class="px-4 py-2 font-medium hidden md:table-cell">Tx</th>
+                </tr>
+              </thead>
+              <tbody id="stations-tbody" class="divide-y divide-zinc-800/50"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="recent-section" class="hidden mb-6">
+          <h2 class="text-xs font-medium text-zinc-500 mb-3 uppercase tracking-wide">Recent Submissions</h2>
+          <div id="recent-list" class="space-y-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="screen-explorer" class="screen">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-lg font-bold">Transaction Explorer</h1>
+        <button onclick="loadExplorer()" class="text-xs text-violet-400 hover:text-violet-300">Refresh</button>
+      </div>
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden mb-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="border-b border-zinc-800">
+              <tr class="text-left text-zinc-500 text-xs">
+                <th class="px-4 py-2 font-medium">Tx Hash</th>
+                <th class="px-4 py-2 font-medium hidden sm:table-cell">Station</th>
+                <th class="px-4 py-2 font-medium hidden md:table-cell">Region</th>
+                <th class="px-4 py-2 font-medium">Submitter</th>
+                <th class="px-4 py-2 font-medium hidden sm:table-cell">Time</th>
+                <th class="px-4 py-2 font-medium hidden lg:table-cell">Block</th>
+              </tr>
+            </thead>
+            <tbody id="tx-list" class="divide-y divide-zinc-800/50"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="tx-detail" class="hidden bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-semibold text-sm">Transaction Detail</h2>
+          <button onclick="closeTxDetail()" class="text-zinc-500 hover:text-zinc-300 text-xl leading-none">&times;</button>
+        </div>
+        <div id="tx-detail-content"></div>
+      </div>
+    </div>
+
+    <div id="screen-mystation" class="screen">
+      <h1 class="text-lg font-bold mb-4">My Station</h1>
+      <div id="my-station-content"></div>
+    </div>
+
+    <div id="screen-submit" class="screen">
+      <div class="flex items-center gap-3 mb-4">
+        <button onclick="navigate('/my-station')" class="text-zinc-500 hover:text-zinc-300 text-sm">&larr; Back</button>
+        <h1 class="text-lg font-bold">Submit Results</h1>
+      </div>
+      <div id="submit-content"></div>
+    </div>
+
+    <div id="screen-admin" class="screen">
+      <h1 class="text-lg font-bold mb-4">Admin Panel</h1>
+      <div class="flex gap-2 mb-6 border-b border-zinc-800 pb-3 flex-wrap">
+        <button onclick="showAdminTab('elections')" id="atab-elections" class="admin-tab px-3 py-1.5 rounded text-sm text-zinc-400 hover:text-zinc-200 transition-colors">Elections</button>
+        <button onclick="showAdminTab('stations')" id="atab-stations" class="admin-tab px-3 py-1.5 rounded text-sm text-zinc-400 hover:text-zinc-200 transition-colors">Stations</button>
+        <button onclick="showAdminTab('agents')" id="atab-agents" class="admin-tab px-3 py-1.5 rounded text-sm text-zinc-400 hover:text-zinc-200 transition-colors">Agents</button>
+        <button onclick="showAdminTab('audit')" id="atab-audit" class="admin-tab px-3 py-1.5 rounded text-sm text-zinc-400 hover:text-zinc-200 transition-colors">Audit Log</button>
+      </div>
+      <div id="admin-tab-elections" class="admin-tab-content hidden"></div>
+      <div id="admin-tab-stations" class="admin-tab-content hidden"></div>
+      <div id="admin-tab-agents" class="admin-tab-content hidden"></div>
+      <div id="admin-tab-audit" class="admin-tab-content hidden"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+var qsParams = new URLSearchParams(window.location.search);
+var token = qsParams.get('token') || '';
+var hdrs = token ? { 'x-usernode-token': token } : {};
+var appConfig = { isStaging: false, appPubkey: '' };
+var elections = [];
+var currentElectionId = null;
+var userRole = 'observer';
+var _adminCandidates = [];
+var submitCtx = { stationId: null, electionId: null, candidates: [], gps: null };
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+async function api(path, opts) {
+  opts = opts || {};
+  var res = await fetch(path, Object.assign({}, opts, { headers: Object.assign({ 'Content-Type': 'application/json' }, hdrs, opts.headers || {}) }));
+  if (!res.ok) { var err = await res.json().catch(function() { return { error: res.statusText }; }); throw new Error(err.error || res.statusText); }
+  return res.json();
+}
+
+function navigate(path) { history.pushState({}, '', path); renderRoute(path); }
+window.addEventListener('popstate', function() { renderRoute(location.pathname); });
+
+function activateNav(id) {
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('bg-zinc-800','text-zinc-100'); b.classList.add('text-zinc-400'); });
+  var el = document.getElementById(id);
+  if (el) { el.classList.remove('text-zinc-400'); el.classList.add('bg-zinc-800','text-zinc-100'); }
+}
+
+function renderRoute(path) {
+  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  if (path === '/explorer') {
+    document.getElementById('screen-explorer').classList.add('active');
+    activateNav('nav-explorer');
+    loadExplorer();
+  } else if (path === '/my-station') {
+    document.getElementById('screen-mystation').classList.add('active');
+    activateNav('nav-mystation');
+    loadMyStation();
+  } else if (path === '/submit') {
+    document.getElementById('screen-submit').classList.add('active');
+    activateNav('nav-mystation');
+    loadSubmitForm();
+  } else if (path === '/admin') {
+    document.getElementById('screen-admin').classList.add('active');
+    activateNav('nav-admin');
+    showAdminTab('elections');
+  } else {
+    document.getElementById('screen-dashboard').classList.add('active');
+    activateNav('nav-dashboard');
+    if (currentElectionId) loadDashboard(currentElectionId);
+  }
+}
+
+async function init() {
+  try {
+    appConfig = await api('/api/config');
+    if (appConfig.isStaging) document.getElementById('staging-banner').classList.remove('hidden');
+
+    var elecData = await api('/api/elections');
+    elections = elecData.elections || [];
+
+    try {
+      var assignData = await api('/api/my-assignment');
+      if ((assignData.assignments || []).length > 0) userRole = 'agent';
+    } catch (_) {}
+
+    try {
+      await api('/api/admin/organizations');
+      userRole = 'admin';
+    } catch (_) {}
+
+    if (userRole === 'agent' || userRole === 'admin') {
+      var ms = document.getElementById('nav-mystation');
+      if (ms) ms.classList.remove('hidden');
+    }
+    if (userRole === 'admin') {
+      var na = document.getElementById('nav-admin');
+      if (na) na.classList.remove('hidden');
     }
 
-    document.getElementById('press-btn').addEventListener('click', async () => {
-      try {
-        const res = await fetch('/api/press', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headers },
-        });
-        if (res.ok) loadLeaderboard();
-        else if (res.status === 401) document.getElementById('count').textContent = 'Sign in to press!';
-      } catch {}
-    });
+    if (elections.length > 0) {
+      currentElectionId = elections[0].id;
+      if (elections.length > 1) {
+        var sel = document.getElementById('election-select');
+        sel.innerHTML = elections.map(function(e) { return '<option value="' + e.id + '">' + esc(e.name) + '</option>'; }).join('');
+        document.getElementById('election-selector-wrap').classList.remove('hidden');
+      }
+    }
 
-    loadLeaderboard();
-  </script>
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').classList.remove('hidden');
+    renderRoute(location.pathname);
+  } catch (err) {
+    document.getElementById('loading').innerHTML = '<div class="text-red-400 text-sm p-8 text-center">Failed to load: ' + esc(err.message) + '</div>';
+  }
+}
+
+async function loadDashboard(electionId) {
+  currentElectionId = parseInt(electionId);
+  try {
+    var data = await api('/api/elections/' + electionId + '/dashboard');
+    renderDashboard(data);
+  } catch (err) {
+    document.getElementById('candidates-list').innerHTML = '<div class="text-red-400 text-sm">' + esc(err.message) + '</div>';
+  }
+}
+
+function renderDashboard(data) {
+  var election = data.election, progress = data.progress, candidates = data.candidates;
+  var blank = data.blank, invalid = data.invalid, regions = data.regions, stations = data.stations;
+  var recent = data.recent_submissions || [];
+
+  var circ = 2 * Math.PI * 34;
+  var offset = circ * (1 - (progress.pct || 0) / 100);
+  document.getElementById('progress-ring-circle').style.strokeDashoffset = offset;
+  document.getElementById('progress-label').textContent = (progress.pct || 0) + '%';
+  document.getElementById('progress-sub').textContent = progress.reported + ' of ' + progress.total + ' stations reporting';
+  document.getElementById('election-name-display').textContent = election.name;
+
+  var totalValid = candidates.reduce(function(s, c) { return s + c.votes; }, 0);
+  document.getElementById('candidates-list').innerHTML = candidates.map(function(c, i) {
+    return '<div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">' +
+      '<div class="flex justify-between items-center mb-2">' +
+        '<div class="flex items-center gap-2">' +
+          (i === 0 && c.votes > 0 ? '<span class="text-xs bg-violet-600/30 text-violet-300 px-1.5 py-0.5 rounded">Leading</span>' : '') +
+          '<span class="font-medium">' + esc(c.name) + '</span>' +
+        '</div>' +
+        '<div class="text-right">' +
+          '<span class="font-mono font-bold text-violet-300">' + c.votes.toLocaleString() + '</span>' +
+          '<span class="text-zinc-500 text-sm ml-1">(' + c.pct + '%)</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="bg-zinc-800 rounded-full h-2">' +
+        '<div class="bg-violet-500 h-2 rounded-full transition-all duration-500" style="width:' + c.pct + '%"></div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('ballots-summary').innerHTML =
+    '<span>Blank: <strong>' + blank.toLocaleString() + '</strong></span>' +
+    '<span>Invalid: <strong>' + invalid.toLocaleString() + '</strong></span>' +
+    '<span class="text-zinc-600">Total valid: ' + totalValid.toLocaleString() + '</span>';
+
+  if (regions.length > 0) {
+    document.getElementById('regions-section').classList.remove('hidden');
+    document.getElementById('regions-list').innerHTML = regions.map(function(r) {
+      return '<div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">' +
+        '<button onclick="toggleRegion(\'r' + r.id + '\')" class="w-full flex justify-between items-center px-4 py-3 hover:bg-zinc-800/50 transition-colors text-sm">' +
+          '<span class="font-medium">' + esc(r.name) + '</span>' +
+          '<span class="text-zinc-400 text-xs">' + r.reported_stations + '/' + r.total_stations + ' reported</span>' +
+        '</button>' +
+        '<div id="r' + r.id + '" class="hidden border-t border-zinc-800 px-4 py-3 space-y-1">' +
+          r.candidates.map(function(c) {
+            return '<div class="flex justify-between text-sm"><span class="text-zinc-300">' + esc(c.name) + '</span><span class="text-zinc-400">' + c.votes.toLocaleString() + ' (' + c.pct + '%)</span></div>';
+          }).join('') +
+          '<div class="flex gap-4 text-xs text-zinc-600 mt-1 pt-1 border-t border-zinc-800"><span>Blank: ' + r.blank + '</span><span>Invalid: ' + r.invalid + '</span></div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  document.getElementById('stations-tbody').innerHTML = stations.map(function(s) {
+    return '<tr class="hover:bg-zinc-900/50">' +
+      '<td class="px-4 py-2 text-sm">' + esc(s.name) + '</td>' +
+      '<td class="px-4 py-2 text-zinc-400 text-sm hidden sm:table-cell">' + esc(s.region_name || '--') + '</td>' +
+      '<td class="px-4 py-2"><span class="text-xs px-2 py-0.5 rounded-full ' + (s.reported ? 'bg-green-600/20 text-green-400' : 'bg-zinc-800 text-zinc-500') + '">' + (s.reported ? 'Reported' : 'Pending') + '</span></td>' +
+      '<td class="px-4 py-2 text-zinc-500 text-xs hidden md:table-cell">' + (s.chain_timestamp ? new Date(s.chain_timestamp).toLocaleString() : '--') + '</td>' +
+      '<td class="px-4 py-2 text-xs hidden md:table-cell">' + (s.tx_hash ? '<button onclick="navigate(\'/explorer\');viewTx(\'' + esc(s.tx_hash) + '\')" class="font-mono text-violet-400 hover:text-violet-300">' + s.tx_hash.slice(0,10) + '...</button>' : '--') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  if (recent.length > 0) {
+    document.getElementById('recent-section').classList.remove('hidden');
+    document.getElementById('recent-list').innerHTML = recent.map(function(s) {
+      return '<div class="flex justify-between items-center text-sm py-1.5 border-b border-zinc-800/50">' +
+        '<div class="flex items-center gap-2">' +
+          '<span class="w-2 h-2 bg-green-500 rounded-full"></span>' +
+          '<span class="text-zinc-300">' + esc(s.station_name) + '</span>' +
+          '<span class="text-zinc-600 text-xs">by ' + esc(s.submitter_username) + '</span>' +
+        '</div>' +
+        '<div class="flex items-center gap-3 text-xs text-zinc-500">' +
+          '<span>' + (s.chain_timestamp ? new Date(s.chain_timestamp).toLocaleTimeString() : '') + '</span>' +
+          '<button onclick="navigate(\'/explorer\');viewTx(\'' + esc(s.tx_hash) + '\')" class="font-mono text-violet-400 hover:text-violet-300">' + s.tx_hash.slice(0,8) + '...</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+function toggleRegion(id) { var el = document.getElementById(id); if (el) el.classList.toggle('hidden'); }
+
+async function loadExplorer() {
+  document.getElementById('tx-list').innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-zinc-500 text-sm">Loading...</td></tr>';
+  try {
+    var qs = currentElectionId ? '?election_id=' + currentElectionId : '';
+    var data = await api('/api/explorer/transactions' + qs);
+    var txs = data.transactions || [];
+    if (!txs.length) {
+      document.getElementById('tx-list').innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-zinc-500 text-sm">No transactions found</td></tr>';
+      return;
+    }
+    document.getElementById('tx-list').innerHTML = txs.map(function(tx) {
+      return '<tr class="hover:bg-zinc-900/50 cursor-pointer" onclick="viewTx(\'' + esc(tx.tx_hash) + '\')">' +
+        '<td class="px-4 py-2 font-mono text-violet-400 text-xs">' + tx.tx_hash.slice(0,12) + '...</td>' +
+        '<td class="px-4 py-2 text-sm hidden sm:table-cell">' + esc(tx.station_name) + '</td>' +
+        '<td class="px-4 py-2 text-zinc-400 text-sm hidden md:table-cell">' + esc(tx.region_name || '--') + '</td>' +
+        '<td class="px-4 py-2 text-zinc-400 text-sm">' + esc(tx.submitter_username) + '</td>' +
+        '<td class="px-4 py-2 text-zinc-500 text-xs hidden sm:table-cell">' + (tx.chain_timestamp ? new Date(tx.chain_timestamp).toLocaleString() : '--') + '</td>' +
+        '<td class="px-4 py-2 text-zinc-600 text-xs hidden lg:table-cell">' + (tx.block_height || '--') + '</td>' +
+      '</tr>';
+    }).join('');
+  } catch (err) {
+    document.getElementById('tx-list').innerHTML = '<tr><td colspan="6" class="px-4 py-4 text-red-400 text-sm">' + esc(err.message) + '</td></tr>';
+  }
+}
+
+async function viewTx(txHash) {
+  var detail = document.getElementById('tx-detail');
+  var content = document.getElementById('tx-detail-content');
+  detail.classList.remove('hidden');
+  content.innerHTML = '<div class="text-zinc-500 text-sm">Loading...</div>';
+  try {
+    var data = await api('/api/explorer/transactions/' + encodeURIComponent(txHash));
+    var tx = data.transaction;
+    var votes = typeof tx.votes === 'string' ? JSON.parse(tx.votes) : (tx.votes || {});
+    content.innerHTML =
+      '<div class="space-y-3 text-sm">' +
+        '<div><span class="text-zinc-500">Tx Hash: </span><span class="font-mono text-violet-300 break-all text-xs">' + esc(tx.tx_hash) + '</span></div>' +
+        '<div class="grid sm:grid-cols-2 gap-2">' +
+          '<div><span class="text-zinc-500">Election: </span>' + esc(tx.election_name) + '</div>' +
+          '<div><span class="text-zinc-500">Station: </span>' + esc(tx.station_name) + '</div>' +
+          '<div><span class="text-zinc-500">Region: </span>' + esc(tx.region_name || '--') + '</div>' +
+          '<div><span class="text-zinc-500">Submitter: </span>' + esc(tx.submitter_username) + '</div>' +
+          '<div><span class="text-zinc-500">Block: </span>' + (tx.block_height || '--') + '</div>' +
+          '<div><span class="text-zinc-500">Time: </span>' + (tx.chain_timestamp ? new Date(tx.chain_timestamp).toLocaleString() : '--') + '</div>' +
+        '</div>' +
+        '<div><span class="text-zinc-500">Pubkey: </span><span class="font-mono text-xs text-zinc-400 break-all">' + esc(tx.submitter_pubkey || '--') + '</span></div>' +
+        (tx.cid ? '<div><span class="text-zinc-500">Photo CID: </span><a href="https://ipfs.io/ipfs/' + esc(tx.cid) + '" target="_blank" class="font-mono text-xs text-violet-400 hover:underline break-all">' + esc(tx.cid) + '</a></div>' : '') +
+        '<div><div class="text-zinc-500 mb-1">Votes:</div><pre class="bg-zinc-800 rounded p-3 text-xs overflow-x-auto text-zinc-300">' + esc(JSON.stringify(votes, null, 2)) + '</pre></div>' +
+      '</div>';
+  } catch (err) {
+    content.innerHTML = '<div class="text-red-400 text-sm">' + esc(err.message) + '</div>';
+  }
+}
+
+function closeTxDetail() { document.getElementById('tx-detail').classList.add('hidden'); }
+
+async function loadMyStation() {
+  var el = document.getElementById('my-station-content');
+  el.innerHTML = '<div class="text-zinc-500 text-sm">Loading...</div>';
+  try {
+    var data = await api('/api/my-assignment');
+    var assignments = data.assignments || [];
+    if (!assignments.length) {
+      el.innerHTML = '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-zinc-400 text-sm">You are not assigned to any polling station.</div>';
+      return;
+    }
+    el.innerHTML = assignments.map(function(a) {
+      return '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-4">' +
+        '<div class="flex justify-between items-start mb-3">' +
+          '<div>' +
+            '<div class="font-semibold">' + esc(a.station_name) + '</div>' +
+            '<div class="text-xs text-zinc-500 mt-0.5">' + esc(a.election_name) + (a.region_name ? ' — ' + esc(a.region_name) : '') + '</div>' +
+          '</div>' +
+          '<span class="text-xs px-2 py-0.5 rounded-full ' + (a.submitted_tx_hash ? 'bg-green-600/20 text-green-400' : 'bg-yellow-600/20 text-yellow-400') + '">' +
+            (a.submitted_tx_hash ? 'Submitted' : 'Pending') +
+          '</span>' +
+        '</div>' +
+        (a.submitted_tx_hash ?
+          '<div class="text-xs text-zinc-500 mb-3">Submitted: ' + (a.submitted_at ? new Date(a.submitted_at).toLocaleString() : '') + '</div>' +
+          '<button onclick="navigate(\'/explorer\'); viewTx(\'' + esc(a.submitted_tx_hash) + '\')" class="text-xs text-violet-400 hover:text-violet-300">View transaction &rarr;</button>' :
+          (a.election_status === 'active' ?
+            '<button onclick="startSubmit(' + a.station_id + ',' + a.election_id + ')" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Submit Results</button>' :
+            '<div class="text-xs text-zinc-500">Election is ' + esc(a.election_status) + '</div>'
+          )
+        ) +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="text-red-400 text-sm">' + esc(err.message) + '</div>';
+  }
+}
+
+function startSubmit(stationId, electionId) {
+  submitCtx = { stationId: stationId, electionId: electionId, candidates: [], gps: null };
+  navigate('/submit');
+}
+
+async function loadSubmitForm() {
+  var el = document.getElementById('submit-content');
+  el.innerHTML = '<div class="text-zinc-500 text-sm">Loading...</div>';
+  if (!submitCtx.stationId) {
+    el.innerHTML = '<div class="text-zinc-500 text-sm">No station selected. <button onclick="navigate(\'/my-station\')" class="text-violet-400 hover:underline">Go to My Station</button></div>';
+    return;
+  }
+  try {
+    var assignData = await api('/api/my-assignment');
+    var a = (assignData.assignments || []).find(function(x) { return x.station_id === submitCtx.stationId && x.election_id === submitCtx.electionId; });
+    if (!a) { el.innerHTML = '<div class="text-red-400 text-sm">Assignment not found</div>'; return; }
+
+    if (a.submitted_tx_hash) {
+      el.innerHTML = '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center">' +
+        '<div class="text-green-400 font-medium mb-2">Results already submitted</div>' +
+        '<div class="font-mono text-xs text-violet-300 break-all mb-3">' + esc(a.submitted_tx_hash) + '</div>' +
+        '<button onclick="navigate(\'/explorer\'); viewTx(\'' + esc(a.submitted_tx_hash) + '\')" class="text-sm text-violet-400 hover:underline">View in explorer &rarr;</button>' +
+      '</div>';
+      return;
+    }
+
+    var dashData = await api('/api/elections/' + submitCtx.electionId + '/dashboard');
+    submitCtx.candidates = dashData.candidates || [];
+    submitCtx.assignment = a;
+
+    var balanceInfo = { balance: null };
+    try { balanceInfo = await api('/api/balance'); } catch (_) {}
+
+    if (a.gps_required) {
+      try {
+        var pos = await new Promise(function(resolve, reject) {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+        });
+        submitCtx.gps = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      } catch (_) { submitCtx.gps = null; }
+    }
+
+    renderSubmitForm(a, balanceInfo);
+  } catch (err) {
+    el.innerHTML = '<div class="text-red-400 text-sm">' + esc(err.message) + '</div>';
+  }
+}
+
+function renderSubmitForm(a, balanceInfo) {
+  var gpsOk = !a.gps_required || submitCtx.gps !== null;
+  var balOk = balanceInfo.balance === null || balanceInfo.balance >= 11;
+  var el = document.getElementById('submit-content');
+  el.innerHTML =
+    '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-5">' +
+      '<div><div class="font-semibold">' + esc(a.station_name) + '</div><div class="text-xs text-zinc-500">' + esc(a.election_name) + '</div></div>' +
+      (a.gps_required ? '<div class="flex items-center gap-2 text-sm ' + (gpsOk ? 'text-green-400' : 'text-red-400') + '">' +
+        '<span>' + (gpsOk ? '&#10003;' : '&#10007;') + '</span>' +
+        '<span>' + (gpsOk ? 'GPS location verified' : 'GPS unavailable — please allow location access') + '</span>' +
+      '</div>' : '') +
+      (a.qr_required ? '<div><label class="block text-sm text-zinc-400 mb-1">QR Code *</label>' +
+        '<input id="qr-input" type="text" placeholder="Scan or enter station QR code" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/></div>' : '') +
+      '<div><h3 class="text-sm font-medium text-zinc-400 mb-2">Vote Counts</h3><div class="space-y-2">' +
+        submitCtx.candidates.map(function(c) {
+          return '<div class="flex items-center justify-between gap-3">' +
+            '<label class="text-sm flex-1">' + esc(c.name) + '</label>' +
+            '<input type="number" id="vote-' + c.id + '" min="0" value="0" class="w-28 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-right font-mono focus:outline-none focus:border-violet-500"/>' +
+          '</div>';
+        }).join('') +
+        '<div class="flex items-center justify-between gap-3 border-t border-zinc-800 pt-2">' +
+          '<label class="text-sm text-zinc-500">Blank Ballots</label>' +
+          '<input type="number" id="vote-blank" min="0" value="0" class="w-28 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-right font-mono focus:outline-none focus:border-violet-500"/>' +
+        '</div>' +
+        '<div class="flex items-center justify-between gap-3">' +
+          '<label class="text-sm text-zinc-500">Invalid Ballots</label>' +
+          '<input type="number" id="vote-invalid" min="0" value="0" class="w-28 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-right font-mono focus:outline-none focus:border-violet-500"/>' +
+        '</div>' +
+      '</div></div>' +
+      '<div><label class="block text-sm text-zinc-400 mb-1">Photo Evidence *</label>' +
+        '<input type="file" id="photo-input" accept="image/*" onchange="previewPhoto(this)" class="w-full text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-violet-600 file:text-white file:text-sm hover:file:bg-violet-500 cursor-pointer"/>' +
+        '<img id="photo-preview" class="hidden mt-2 max-h-40 rounded border border-zinc-700 object-contain"/>' +
+      '</div>' +
+      '<div class="text-xs ' + (balOk ? 'text-zinc-500' : 'text-red-400') + '">' +
+        'Wallet balance: ' + (balanceInfo.balance !== null ? balanceInfo.balance.toLocaleString() + ' units' : 'unavailable') +
+        (!balOk ? ' — Insufficient (need &ge;11 units)' : '') +
+      '</div>' +
+      '<button id="submit-btn" onclick="doSubmit()" ' + (gpsOk && balOk ? '' : 'disabled') + ' class="w-full bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg font-medium transition-colors">Submit Results</button>' +
+      '<div id="submit-status" class="hidden text-sm text-center text-zinc-400 min-h-5"></div>' +
+    '</div>';
+}
+
+function previewPhoto(input) {
+  var file = input.files[0];
+  if (file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = document.getElementById('photo-preview');
+      img.src = e.target.result;
+      img.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+async function doSubmit() {
+  var btn = document.getElementById('submit-btn');
+  var statusEl = document.getElementById('submit-status');
+  var a = submitCtx.assignment;
+  if (!a) return;
+
+  var votes = {};
+  submitCtx.candidates.forEach(function(c) {
+    votes[c.id] = parseInt(document.getElementById('vote-' + c.id).value || '0') || 0;
+  });
+  votes.blank = parseInt(document.getElementById('vote-blank').value || '0') || 0;
+  votes.invalid = parseInt(document.getElementById('vote-invalid').value || '0') || 0;
+
+  var photoInput = document.getElementById('photo-input');
+  if (!photoInput.files[0]) { alert('Please upload a photo of the tally sheet'); return; }
+
+  btn.disabled = true;
+  statusEl.classList.remove('hidden');
+  statusEl.className = 'text-sm text-center text-zinc-400 min-h-5';
+
+  var setStatus = function(msg) { statusEl.textContent = msg; };
+  try {
+    setStatus('Validating...');
+    var formData = new FormData();
+    formData.append('stationId', submitCtx.stationId);
+    formData.append('electionId', submitCtx.electionId);
+    formData.append('votes', JSON.stringify(votes));
+    if (submitCtx.gps) formData.append('gps', JSON.stringify(submitCtx.gps));
+    if (a.qr_required) { var qrEl = document.getElementById('qr-input'); if (qrEl) formData.append('qrCode', qrEl.value); }
+    formData.append('photo', photoInput.files[0]);
+
+    setStatus('Uploading photo...');
+    var prepRes = await fetch('/api/prepare-submission', { method: 'POST', headers: Object.assign({}, hdrs), body: formData });
+    if (!prepRes.ok) { var prepErr = await prepRes.json().catch(function() { return { error: prepRes.statusText }; }); throw new Error(prepErr.error || prepRes.statusText); }
+    var prepared = await prepRes.json();
+
+    setStatus('Awaiting wallet signature...');
+    var txHash;
+    if (typeof usernode !== 'undefined' && usernode.sendTransaction) {
+      var result = await usernode.sendTransaction({ to: prepared.recipient || appConfig.appPubkey, amount: prepared.amount || 1, memo: prepared.memo });
+      txHash = result.txHash || result.id || result;
+    } else {
+      txHash = 'dev-' + Date.now().toString(16) + Math.random().toString(16).slice(2, 10);
+      console.warn('Bridge not available, using simulated tx hash:', txHash);
+    }
+
+    setStatus('Broadcasting...');
+    await api('/api/watch-submission', { method: 'POST', body: JSON.stringify({ txHash: txHash, stationId: submitCtx.stationId, electionId: submitCtx.electionId }) });
+
+    setStatus('Confirming on chain...');
+    var confirmed = false;
+    for (var i = 0; i < 20; i++) {
+      await sleep(3000);
+      try {
+        var statusData = await api('/api/submission-status/' + encodeURIComponent(txHash));
+        if (statusData.status === 'confirmed') { confirmed = true; break; }
+      } catch (_) {}
+    }
+
+    document.getElementById('submit-content').innerHTML =
+      '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center space-y-4">' +
+        '<div class="text-green-400 text-lg font-semibold">Results Submitted</div>' +
+        '<div class="text-sm text-zinc-400">' + (confirmed ? 'Confirmed on blockchain.' : 'Broadcast — confirmation pending.') + '</div>' +
+        '<div class="bg-zinc-800 rounded p-3 text-left"><div class="text-xs text-zinc-500 mb-1">Transaction Hash</div>' +
+          '<div class="font-mono text-xs text-violet-300 break-all">' + esc(txHash) + '</div></div>' +
+        '<div class="flex gap-3 justify-center pt-2">' +
+          '<button onclick="navigate(\'/explorer\'); viewTx(\'' + esc(txHash) + '\')" class="text-sm text-violet-400 hover:underline">View in Explorer</button>' +
+          '<button onclick="navigate(\'/\')" class="text-sm text-zinc-400 hover:text-zinc-200">Dashboard</button>' +
+        '</div>' +
+      '</div>';
+  } catch (err) {
+    btn.disabled = false;
+    setStatus('Error: ' + err.message);
+    statusEl.className = 'text-sm text-center text-red-400 min-h-5';
+  }
+}
+
+function showAdminTab(tab) {
+  document.querySelectorAll('.admin-tab-content').forEach(function(el) { el.classList.add('hidden'); });
+  document.querySelectorAll('.admin-tab').forEach(function(el) { el.classList.remove('bg-zinc-800','text-zinc-100'); el.classList.add('text-zinc-400'); });
+  var content = document.getElementById('admin-tab-' + tab);
+  var tabBtn = document.getElementById('atab-' + tab);
+  if (content) { content.classList.remove('hidden'); loadAdminTab(tab, content); }
+  if (tabBtn) { tabBtn.classList.add('bg-zinc-800','text-zinc-100'); tabBtn.classList.remove('text-zinc-400'); }
+}
+
+async function loadAdminTab(tab, el) {
+  if (tab === 'elections') {
+    var orgs = [];
+    try { orgs = (await api('/api/admin/organizations')).organizations || []; } catch (_) {}
+    _adminCandidates = [];
+    el.innerHTML =
+      '<div class="space-y-6">' +
+        '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5"><h3 class="font-medium mb-3 text-sm">Create Organization</h3>' +
+          '<div class="flex gap-2">' +
+            '<input id="new-org-name" type="text" placeholder="Organization name" class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/>' +
+            '<button onclick="createOrg()" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded text-sm">Create</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5"><h3 class="font-medium mb-3 text-sm">Create Election</h3>' +
+          '<div class="space-y-3">' +
+            '<select id="new-election-org" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">' + orgs.map(function(o) { return '<option value="' + o.id + '">' + esc(o.name) + '</option>'; }).join('') + '</select>' +
+            '<input id="new-election-name" type="text" placeholder="Election name" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/>' +
+            '<div class="space-y-2"><div class="text-xs text-zinc-500">Candidates</div>' +
+              '<div class="flex gap-2"><input id="new-candidate" type="text" placeholder="Candidate name" class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-violet-500"/>' +
+                '<button onclick="addCandidate()" class="text-violet-400 hover:text-violet-300 text-sm px-2">+ Add</button></div>' +
+              '<div id="candidates-list-admin" class="space-y-1"></div></div>' +
+            '<button onclick="createElection()" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded text-sm w-full">Create Election</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5"><h3 class="font-medium mb-3 text-sm">Active Elections</h3>' +
+          '<div class="space-y-1">' + (elections.length ? elections.map(function(e) { return '<div class="text-sm py-1.5 border-b border-zinc-800/50">' + esc(e.name) + ' <span class="text-xs text-zinc-600">(ID: ' + e.id + ')</span></div>'; }).join('') : '<div class="text-zinc-500 text-sm">No elections yet</div>') + '</div>' +
+        '</div>' +
+        '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5"><h3 class="font-medium mb-3 text-sm">Re-index Blockchain</h3>' +
+          '<p class="text-xs text-zinc-500 mb-3">Full re-scan from genesis. Use to recover from cache inconsistencies.</p>' +
+          '<button onclick="reindex()" class="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/30 px-4 py-2 rounded text-sm">Re-index All</button>' +
+        '</div>' +
+      '</div>';
+  } else if (tab === 'stations') {
+    el.innerHTML =
+      '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5"><h3 class="font-medium mb-3 text-sm">Add Polling Station</h3>' +
+        '<div class="space-y-3">' +
+          '<select id="station-election" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">' + elections.map(function(e) { return '<option value="' + e.id + '">' + esc(e.name) + '</option>'; }).join('') + '</select>' +
+          '<input id="station-name" type="text" placeholder="Station name" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/>' +
+          '<input id="station-code" type="text" placeholder="QR Code (optional)" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/>' +
+          '<div class="flex gap-2">' +
+            '<input id="station-lat" type="number" step="any" placeholder="Latitude" class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/>' +
+            '<input id="station-lng" type="number" step="any" placeholder="Longitude" class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/>' +
+          '</div>' +
+          '<button onclick="createStation()" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded text-sm w-full">Add Station</button>' +
+        '</div>' +
+      '</div>';
+  } else if (tab === 'agents') {
+    el.innerHTML =
+      '<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5"><h3 class="font-medium mb-3 text-sm">Assign Polling Agent</h3>' +
+        '<div class="space-y-3">' +
+          '<select id="agent-election" onchange="loadStationsForAgent(this.value)" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">' + elections.map(function(e) { return '<option value="' + e.id + '">' + esc(e.name) + '</option>'; }).join('') + '</select>' +
+          '<select id="agent-station" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm"><option>Loading stations...</option></select>' +
+          '<input id="agent-username" type="text" placeholder="Usernode username" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-violet-500"/>' +
+          '<button onclick="assignAgent()" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded text-sm w-full">Assign Agent</button>' +
+        '</div>' +
+      '</div>';
+    if (elections.length) loadStationsForAgent(elections[0].id);
+  } else if (tab === 'audit') {
+    el.innerHTML = '<div class="text-zinc-500 text-sm">Loading...</div>';
+    try {
+      var data = await api('/api/admin/audit-log');
+      var log = data.log || [];
+      if (!log.length) { el.innerHTML = '<div class="text-zinc-500 text-sm">No audit events</div>'; return; }
+      el.innerHTML = '<div class="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-xs"><thead class="border-b border-zinc-800"><tr class="text-left text-zinc-500"><th class="px-4 py-2">Tx</th><th class="px-4 py-2">Station</th><th class="px-4 py-2">Agent</th><th class="px-4 py-2">Time</th><th class="px-4 py-2">Block</th></tr></thead><tbody class="divide-y divide-zinc-800/50">' +
+        log.map(function(e) {
+          return '<tr><td class="px-4 py-2 font-mono text-violet-400"><button onclick="navigate(\'/explorer\'); viewTx(\'' + esc(e.tx_hash) + '\')">' + e.tx_hash.slice(0,10) + '...</button></td><td class="px-4 py-2">' + esc(e.station_name) + '</td><td class="px-4 py-2 text-zinc-400">' + esc(e.submitter_username) + '</td><td class="px-4 py-2 text-zinc-500">' + (e.chain_timestamp ? new Date(e.chain_timestamp).toLocaleString() : '--') + '</td><td class="px-4 py-2 text-zinc-600">' + (e.block_height || '--') + '</td></tr>';
+        }).join('') +
+      '</tbody></table></div></div>';
+    } catch (err) { el.innerHTML = '<div class="text-red-400 text-sm">' + esc(err.message) + '</div>'; }
+  }
+}
+
+function addCandidate() {
+  var inp = document.getElementById('new-candidate');
+  var name = inp.value.trim();
+  if (!name) return;
+  _adminCandidates.push(name);
+  inp.value = '';
+  document.getElementById('candidates-list-admin').innerHTML = _adminCandidates.map(function(c, i) {
+    return '<div class="flex justify-between text-sm text-zinc-300 py-1"><span>' + esc(c) + '</span><button onclick="_adminCandidates.splice(' + i + ',1); document.getElementById(\'candidates-list-admin\').innerHTML = _adminCandidates.map(function(x,j){return \'<div>\'+x+\'</div>\';}).join(\'\');" class="text-red-400 hover:text-red-300 text-xs">&times;</button></div>';
+  }).join('');
+}
+
+async function createOrg() {
+  var name = document.getElementById('new-org-name').value.trim();
+  if (!name) return;
+  try { await api('/api/admin/organizations', { method: 'POST', body: JSON.stringify({ name: name }) }); document.getElementById('new-org-name').value = ''; alert('Organization created'); loadAdminTab('elections', document.getElementById('admin-tab-elections')); }
+  catch (err) { alert('Error: ' + err.message); }
+}
+
+async function createElection() {
+  var name = document.getElementById('new-election-name').value.trim();
+  var orgId = document.getElementById('new-election-org').value;
+  if (!name || !orgId) return alert('Name and organization required');
+  try {
+    await api('/api/admin/elections', { method: 'POST', body: JSON.stringify({ organization_id: parseInt(orgId), name: name, candidates: _adminCandidates.map(function(n) { return { name: n }; }) }) });
+    var elecData = await api('/api/elections'); elections = elecData.elections || [];
+    alert('Election created'); loadAdminTab('elections', document.getElementById('admin-tab-elections'));
+  } catch (err) { alert('Error: ' + err.message); }
+}
+
+async function createStation() {
+  var electionId = document.getElementById('station-election').value;
+  var name = document.getElementById('station-name').value.trim();
+  var code = document.getElementById('station-code').value.trim();
+  var lat = document.getElementById('station-lat').value;
+  var lng = document.getElementById('station-lng').value;
+  if (!name || !electionId) return alert('Name and election required');
+  try { await api('/api/admin/elections/' + electionId + '/stations', { method: 'POST', body: JSON.stringify({ name: name, code: code || null, latitude: lat ? parseFloat(lat) : null, longitude: lng ? parseFloat(lng) : null }) }); alert('Station added'); document.getElementById('station-name').value = ''; }
+  catch (err) { alert('Error: ' + err.message); }
+}
+
+async function loadStationsForAgent(electionId) {
+  var sel = document.getElementById('agent-station');
+  if (!sel) return;
+  try {
+    var data = await api('/api/elections/' + electionId + '/dashboard');
+    var stations = data.stations || [];
+    sel.innerHTML = stations.map(function(s) { return '<option value="' + s.id + '">' + esc(s.name) + '</option>'; }).join('') || '<option>No stations</option>';
+  } catch (_) { sel.innerHTML = '<option>Error loading</option>'; }
+}
+
+async function assignAgent() {
+  var electionId = document.getElementById('agent-election').value;
+  var stationId = document.getElementById('agent-station').value;
+  var username = document.getElementById('agent-username').value.trim();
+  if (!username || !stationId) return alert('Username and station required');
+  try { await api('/api/admin/elections/' + electionId + '/agents', { method: 'POST', body: JSON.stringify({ username: username, station_id: parseInt(stationId) }) }); alert('Agent assigned'); document.getElementById('agent-username').value = ''; }
+  catch (err) { alert('Error: ' + err.message); }
+}
+
+async function reindex() {
+  if (!confirm('Re-index all transactions from genesis?')) return;
+  try { await api('/api/admin/reindex', { method: 'POST', body: '{}' }); alert('Re-index complete'); }
+  catch (err) { alert('Error: ' + err.message); }
+}
+
+init();
+</script>
 </body>
 </html>

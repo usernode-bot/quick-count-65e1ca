@@ -2,7 +2,7 @@
   "name": "quick-count-65e1ca",
   "version": "1.0.0",
   "private": true,
-  "description": "Quick Count",
+  "description": "Quick Count — blockchain-first election results reporting platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,6 +10,7 @@
   "dependencies": {
     "express": "^4.21.0",
     "pg": "^8.13.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.0"
   }
 }
