@@ -56,6 +56,7 @@
   <title>Quick Count — Live</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
   <div class="max-w-3xl mx-auto p-4 sm:p-6">
@@ -75,9 +76,21 @@
   </div>
 
   <script>
+    // Tailwind bar classes + matching hex for the conic-gradient pie.
     const COLORS = ['bg-rose-500', 'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-pink-500', 'bg-teal-500'];
+    const HEX = ['#f43f5e', '#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
+
     const qs = new URLSearchParams(location.search);
     let currentEid = qs.get('eid') || '';
+    const token = qs.get('token') || '';
+    const authHeaders = token ? { 'x-usernode-token': token } : {};
+
+    // Unlock memo must match lib/unlock.js isUnlockMemo().
+    const UNLOCK_MEMO = JSON.stringify({ v: 1, t: 'unlock' });
+
+    let cfg = { staging: false, unlock: { enabled: false, recipient: null, price: 0 } };
+    let lastData = null;
+    let unlocking = false; // pause auto-refresh during a payment
 
     function escapeHtml(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -91,10 +104,185 @@
       const hrs = Math.round(mins / 60);
       return hrs + 'h ago';
     }
+    function priceLabel() {
+      const p = (cfg.unlock && cfg.unlock.price) || 0;
+      return p + ' test token' + (p === 1 ? '' : 's');
+    }
 
+    // ── Bridge helpers (mirror index.html) ───────────────────────────
+    function bridgeReady() {
+      return new Promise((resolve) => {
+        let tries = 0;
+        (function poll() {
+          if (typeof window.sendTransaction === 'function' && typeof window.getNodeAddress === 'function') return resolve(true);
+          if (tries++ > 100) return resolve(false);
+          setTimeout(poll, 100);
+        })();
+      });
+    }
+    function extractTxId(res) {
+      if (!res) return null;
+      const cands = [];
+      const probe = (o) => {
+        if (!o || typeof o !== 'object') return;
+        for (const k of ['txId', 'tx_id', 'id', 'txid', 'hash', 'tx_hash', 'txHash']) {
+          if (typeof o[k] === 'string' && o[k].trim()) cands.push(o[k].trim());
+        }
+      };
+      probe(res); probe(res.matchedTx); probe(res.tx); probe(res.transaction);
+      return cands[0] || null;
+    }
+
+    // ── Chart rendering ──────────────────────────────────────────────
+    function pieGradient(entries) {
+      if (!entries.length) return 'conic-gradient(#3f3f46 0% 100%)';
+      let acc = 0;
+      const stops = entries.map((e) => {
+        const start = acc; acc += e.pct;
+        return e.color + ' ' + start.toFixed(3) + '% ' + acc.toFixed(3) + '%';
+      });
+      return 'conic-gradient(' + stops.join(', ') + ')';
+    }
+
+    // Build the chart + per-station table. When `locked`, every figure is a
+    // placeholder ("•••") and slices are even — the real numbers aren't even
+    // present in the locked API response.
+    function resultsHtml(d, locked) {
+      const cands = d.candidates || [];
+      const tallyByCid = (!locked && d.tally) ? d.tally : {};
+      const totalVotes = Object.values(tallyByCid).reduce((s, n) => s + Number(n || 0), 0);
+      const n = cands.length || 1;
+
+      const entries = cands.map((c, i) => ({
+        color: HEX[i % HEX.length],
+        pct: locked ? (100 / n) : (totalVotes ? (Number(tallyByCid[c.cid] || 0) / totalVotes) * 100 : 100 / n),
+      }));
+
+      const pie = '<div class="relative shrink-0 mx-auto sm:mx-0" style="width:160px;height:160px">'
+        + '<div class="rounded-full w-full h-full" style="background:' + pieGradient(entries) + '"></div>'
+        + '<div class="absolute rounded-full bg-zinc-950" style="inset:36px"></div>'
+        + '<div class="absolute inset-0 flex items-center justify-center text-center">'
+        + '<div><div class="text-lg font-bold">' + (locked ? '•••' : totalVotes.toLocaleString()) + '</div>'
+        + '<div class="text-[10px] uppercase tracking-wide text-zinc-500">votes</div></div></div>'
+        + '</div>';
+
+      const bars = cands
+        .map((c, i) => ({ c, i, votes: Number(tallyByCid[c.cid] || 0) }))
+        .sort((a, b) => locked ? 0 : (b.votes - a.votes))
+        .map(({ c, i, votes }) => {
+          const pct = locked ? Math.round(100 / n) : (totalVotes ? Math.round((votes / totalVotes) * 100) : 0);
+          const num = locked ? '•••' : (votes.toLocaleString() + ' <span class="text-zinc-500">(' + pct + '%)</span>');
+          return '<div class="mb-3">'
+            + '<div class="flex justify-between text-sm mb-1"><span>' + escapeHtml(c.name) + '</span>'
+            + '<span class="font-mono text-zinc-300">' + num + '</span></div>'
+            + '<div class="h-3 rounded bg-zinc-800 overflow-hidden"><div class="h-full ' + COLORS[i % COLORS.length] + '" style="width:' + pct + '%"></div></div>'
+            + '</div>';
+        }).join('');
+
+      const chartRow = '<div class="flex flex-col sm:flex-row sm:items-center gap-6 mb-6">'
+        + pie + '<div class="flex-1 w-full">' + (bars || '<p class="text-zinc-500 text-sm">No candidates.</p>') + '</div></div>';
+
+      const headCells = cands.map((c) => '<th class="py-2 px-2 text-right font-medium text-zinc-400">' + escapeHtml(c.name) + '</th>').join('');
+      const stationRows = (d.stations || []).map((s) => {
+        if (!s.reported) {
+          return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
+            + '<td class="py-2 text-zinc-500" colspan="' + (cands.length + 1) + '">Awaiting result</td></tr>';
+        }
+        const cells = cands.map((c) => {
+          const val = locked ? '•••' : Number((s.votes || {})[c.cid] || 0).toLocaleString();
+          return '<td class="py-2 px-2 text-right font-mono">' + val + '</td>';
+        }).join('');
+        const upd = locked ? '•••' : timeAgo(s.at);
+        return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
+          + cells + '<td class="py-2 pl-2 text-right text-xs text-zinc-500 whitespace-nowrap">' + upd + '</td></tr>';
+      }).join('');
+
+      const table = '<h3 class="text-sm font-medium text-zinc-400 mb-2">By station (latest submission)</h3>'
+        + '<div class="overflow-x-auto"><table class="w-full text-sm">'
+        + '<thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-zinc-400">Station</th>' + headCells
+        + '<th class="py-2 pl-2 text-right font-medium text-zinc-400">Updated</th></tr></thead>'
+        + '<tbody>' + stationRows + '</tbody></table></div>';
+
+      return chartRow + table;
+    }
+
+    // ── Lock overlay ─────────────────────────────────────────────────
+    function card(title, body, action) {
+      return '<div class="max-w-xs text-center p-5 rounded-2xl bg-zinc-900/85 backdrop-blur border border-zinc-700 shadow-2xl">'
+        + '<div class="text-3xl mb-2">🔒</div>'
+        + '<h3 class="font-semibold mb-1">' + escapeHtml(title) + '</h3>'
+        + '<p class="text-sm text-zinc-400 mb-3">' + escapeHtml(body) + '</p>'
+        + (action || '') + '</div>';
+    }
+
+    function updateOverlay() {
+      const ov = document.getElementById('lock-overlay');
+      if (!ov) return;
+      const enabled = cfg.unlock && cfg.unlock.enabled;
+      let html;
+      if (!enabled) {
+        html = card('Live results are locked', 'Unlocking is unavailable right now — no payment recipient is configured.', '');
+      } else if (!token) {
+        html = card('Unlock live results',
+          'Open this dashboard inside Usernode and sign in with your wallet to pay ' + priceLabel() + ' once and unlock the live charts permanently.',
+          '<a href="https://social-vibecoding.usernodelabs.org" target="_blank" class="inline-block px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold">Open in Usernode</a>');
+      } else {
+        html = card('Unlock live results',
+          'Pay ' + priceLabel() + ' once with your Usernode wallet to unlock the live charts permanently for this wallet.',
+          '<button id="unlock-btn" class="w-full px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold disabled:opacity-50">Unlock live results — ' + priceLabel() + '</button>'
+          + '<div id="unlock-status" class="mt-2 text-xs text-zinc-400"></div>');
+      }
+      ov.innerHTML = html;
+      const b = document.getElementById('unlock-btn');
+      if (b) b.addEventListener('click', doUnlock);
+    }
+
+    async function doUnlock() {
+      const btn = document.getElementById('unlock-btn');
+      const status = document.getElementById('unlock-status');
+      const setStatus = (t) => { if (status) status.textContent = t; };
+      if (!cfg.unlock || !cfg.unlock.enabled) { setStatus('Unlocking unavailable.'); return; }
+      if (!token) { setStatus('Open this dashboard inside Usernode to unlock.'); return; }
+      unlocking = true;
+      if (btn) btn.disabled = true;
+      try {
+        let txId = null;
+        if (cfg.staging) {
+          // Staging has no live chain — the server records a demo unlock.
+          setStatus('Unlocking (staging demo)…');
+        } else {
+          const ready = await bridgeReady();
+          if (!ready) { setStatus('Wallet bridge unavailable — open inside Usernode.'); return; }
+          const addr = await window.getNodeAddress();
+          if (!addr) throw new Error('No wallet address');
+          setStatus('Awaiting wallet approval…');
+          const res = await window.sendTransaction(cfg.unlock.recipient, cfg.unlock.price, UNLOCK_MEMO);
+          txId = extractTxId(res);
+          if (!txId) throw new Error('Could not read the payment transaction id');
+          setStatus('Confirming payment…');
+        }
+        const r = await fetch('/api/unlock/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ tx_id: txId }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.unlocked) throw new Error(j.error || 'Verification failed');
+        setStatus('Unlocked ✓');
+        unlocking = false;
+        await render();
+      } catch (e) {
+        setStatus('Failed: ' + (e.message || e));
+      } finally {
+        unlocking = false;
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // ── Data loading + render ────────────────────────────────────────
     async function loadElectionsList() {
       try {
-        const r = await fetch('/api/public/elections');
+        const r = await fetch('/api/public/elections', { headers: authHeaders });
         const { elections } = await r.json();
         const sel = document.getElementById('election-select');
         if (!elections.length) {
@@ -112,66 +300,48 @@
     }
 
     async function render() {
-      if (!currentEid) return;
+      if (!currentEid || unlocking) return;
       let d;
       try {
-        const r = await fetch('/api/public/elections/' + encodeURIComponent(currentEid));
+        const r = await fetch('/api/public/elections/' + encodeURIComponent(currentEid), { headers: authHeaders });
         if (!r.ok) throw new Error('not found');
         d = await r.json();
       } catch (e) {
         document.getElementById('content').innerHTML = '<p class="text-rose-400 text-sm">Could not load this election.</p>';
         return;
       }
+      lastData = d;
+      const locked = !!d.locked;
+      const totalVotes = (!locked && d.tally) ? Object.values(d.tally).reduce((s, n) => s + Number(n || 0), 0) : null;
 
-      const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0) || 1;
-      const candById = {};
-      d.candidates.forEach((c) => { candById[c.cid] = c.name; });
-
-      const tallyRows = d.candidates
-        .map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
-        .sort((a, b) => b.votes - a.votes)
-        .map(({ c, i, votes }) => {
-          const pct = Math.round((votes / totalVotes) * 100);
-          return '<div class="mb-3">'
-            + '<div class="flex justify-between text-sm mb-1"><span>' + escapeHtml(c.name) + '</span>'
-            + '<span class="font-mono text-zinc-300">' + votes.toLocaleString() + ' <span class="text-zinc-500">(' + pct + '%)</span></span></div>'
-            + '<div class="h-3 rounded bg-zinc-800 overflow-hidden"><div class="h-full ' + COLORS[i % COLORS.length] + '" style="width:' + pct + '%"></div></div>'
-            + '</div>';
-        }).join('');
-
-      const stationRows = d.stations.map((s) => {
-        if (!s.reported) {
-          return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
-            + '<td class="py-2 text-zinc-500" colspan="' + (d.candidates.length + 1) + '">Awaiting result</td></tr>';
-        }
-        const cells = d.candidates.map((c) => '<td class="py-2 px-2 text-right font-mono">' + (Number(s.votes[c.cid] || 0)).toLocaleString() + '</td>').join('');
-        return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
-          + cells
-          + '<td class="py-2 pl-2 text-right text-xs text-zinc-500 whitespace-nowrap">' + timeAgo(s.at) + '</td></tr>';
-      }).join('');
-
-      const headCells = d.candidates.map((c) => '<th class="py-2 px-2 text-right font-medium text-zinc-400">' + escapeHtml(c.name) + '</th>').join('');
-
+      const votesLine = locked ? 'live count locked' : (totalVotes.toLocaleString() + ' votes counted');
       document.getElementById('content').innerHTML =
         '<h2 class="text-lg font-semibold mb-1">' + escapeHtml(d.election.name) + '</h2>'
-        + '<p class="text-sm text-zinc-400 mb-5">' + d.reporting.reported + ' of ' + d.reporting.total + ' stations reported'
-        + ' · ' + Object.values(d.tally).reduce((s, n) => s + n, 0).toLocaleString() + ' votes counted</p>'
-        + '<div class="mb-6">' + (tallyRows || '<p class="text-zinc-500 text-sm">No candidates.</p>') + '</div>'
-        + '<h3 class="text-sm font-medium text-zinc-400 mb-2">By station (latest submission)</h3>'
-        + '<div class="overflow-x-auto"><table class="w-full text-sm">'
-        + '<thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-zinc-400">Station</th>' + headCells + '<th class="py-2 pl-2 text-right font-medium text-zinc-400">Updated</th></tr></thead>'
-        + '<tbody>' + stationRows + '</tbody></table></div>';
+        + '<p class="text-sm text-zinc-400 mb-5">' + d.reporting.reported + ' of ' + d.reporting.total + ' stations reported · ' + votesLine + '</p>'
+        + '<div id="stage" class="relative">'
+        + '  <div id="results">' + resultsHtml(d, locked) + '</div>'
+        + '  <div id="lock-overlay" class="hidden absolute inset-0 flex items-start justify-center pt-10"></div>'
+        + '</div>';
+
+      const results = document.getElementById('results');
+      results.classList.toggle('blur-md', locked);
+      results.classList.toggle('select-none', locked);
+      results.classList.toggle('pointer-events-none', locked);
+      document.getElementById('lock-overlay').classList.toggle('hidden', !locked);
+      if (locked) updateOverlay();
 
       document.getElementById('updated').textContent = d.lastUpdated
-        ? 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing'
+        ? (locked ? 'Live · auto-refreshing' : 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing')
         : 'No submissions yet · auto-refreshing';
     }
 
-    fetch('/api/public/config').then((r) => r.json()).then((c) => {
-      if (c && c.staging) document.getElementById('staging-badge').classList.remove('hidden');
-    }).catch(() => {});
+    async function loadConfig() {
+      try { cfg = await (await fetch('/api/public/config')).json(); } catch (_) {}
+      if (cfg && cfg.staging) document.getElementById('staging-badge').classList.remove('hidden');
+    }
 
     (async function init() {
+      await loadConfig();
       await loadElectionsList();
       await render();
       setInterval(render, 5000);
