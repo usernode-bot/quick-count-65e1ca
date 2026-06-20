@@ -9,23 +9,8 @@
       "default": "ut1placeholder000000000000000000000000000000000000000"
     },
     {
-      "key": "IPFS_API_URL",
-      "description": "IPFS pinning service API endpoint (e.g. https://api.pinata.cloud). Used to store photo evidence for vote submissions.",
-      "required": true,
-      "private": false,
-      "default": "https://api.pinata.cloud"
-    },
-    {
-      "key": "PINATA_JWT",
-      "description": "Pinata JWT bearer token for IPFS pinning. Required to upload photo evidence files. Encrypted at rest; staging uses a dummy value that returns a placeholder CID.",
-      "required": true,
-      "private": true,
-      "staging_default": "staging-dummy-jwt",
-      "default": "staging-dummy-jwt"
-    },
-    {
       "key": "LOCAL_DEV",
-      "description": "Set to true to enable local dev mode — skips all real blockchain and IPFS calls, returns fake data",
+      "description": "Set to true to enable local dev mode — skips all blockchain and file I/O calls, returns fake data",
       "required": false,
       "private": false,
       "default": "true"

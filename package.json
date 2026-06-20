@@ -5,13 +5,15 @@
   "description": "Quick Count — blockchain-first election results reporting platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.21.0",
-    "pg": "^8.13.0",
+    "@prisma/client": "^6.0.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.0.1"
   }
 }

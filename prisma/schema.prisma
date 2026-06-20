@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        Int       @id @default(autoincrement())
+  name      String
+  createdAt DateTime  @default(now())
+  elections Election[]
+
+  @@map("organizations")
+}
+
+model Election {
+  id                  Int       @id @default(autoincrement())
+  organizationId      Int
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  name                String
+  status              String    @default("active")
+  gpsRequired         Boolean   @default(false)
+  gpsRadiusMeters     Int       @default(500)
+  qrRequired          Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+
+  candidates          Candidate[]
+  regions             Region[]
+  pollingStations     PollingStation[]
+  cachedSubmissions   CachedSubmission[]
+
+  @@map("elections")
+}
+
+model Candidate {
+  id          Int      @id @default(autoincrement())
+  electionId  Int
+  election    Election @relation(fields: [electionId], references: [id])
+  name        String
+  sortOrder   Int      @default(0)
+
+  @@map("candidates")
+}
+
+model Region {
+  id         Int      @id @default(autoincrement())
+  electionId Int
+  election   Election @relation(fields: [electionId], references: [id])
+  name       String
+
+  pollingStations PollingStation[]
+
+  @@map("regions")
+}
+
+model PollingStation {
+  id                    Int      @id @default(autoincrement())
+  electionId            Int
+  election              Election @relation(fields: [electionId], references: [id])
+  regionId              Int?
+  region                Region?  @relation(fields: [regionId], references: [id])
+  name                  String
+  code                  String?
+  latitude              Float?
+  longitude             Float?
+  totalRegisteredVoters Int?
+
+  stationAgents        StationAgent[]
+  cachedSubmissions    CachedSubmission[]
+
+  @@map("polling_stations")
+}
+
+model StationAgent {
+  id        Int      @id @default(autoincrement())
+  stationId Int
+  station   PollingStation @relation(fields: [stationId], references: [id])
+  userId    Int      @default(0)
+  username  String   @default("")
+
+  @@map("station_agents")
+}
+
+model UserRole {
+  id       Int     @id @default(autoincrement())
+  userId   Int     @unique
+  username String
+  role     String
+
+  @@map("user_roles")
+}
+
+model CachedSubmission {
+  id                  Int      @id @default(autoincrement())
+  txHash              String   @unique
+  stationId           Int
+  station             PollingStation @relation(fields: [stationId], references: [id])
+  electionId          Int
+  election            Election @relation(fields: [electionId], references: [id])
+  submitterUserId     Int?
+  submitterUsername   String   @default("")
+  submitterPubkey     String   @default("")
+  votes               String   @default("{}")
+  photoFilename       String?
+  blockHeight         Int?
+  chainTimestamp      DateTime?
+  indexedAt           DateTime @default(now())
+
+  @@map("cached_submissions")
+}
+
+model IndexerState {
+  id               Int      @id @default(1)
+  lastIndexedBlock Int      @default(0)
+  lastIndexedAt    DateTime?
+
+  @@map("indexer_state")
+}
+
+model WatchedAddress {
+  address  String   @id
+  cursor   String?
+  addedAt  DateTime @default(now())
+
+  @@map("watched_addresses")
+}
+
+model Station {
+  eid  String
+  sid  Int
+  name String
+  txId String?
+
+  @@id([eid, sid])
+  @@map("stations")
+}
+
+model Result {
+  txId              String   @id
+  eid               String
+  sid               Int
+  submitterPubkey   String?
+  votes             String   @default("{}")
+  tot               Int?
+  inv               Int?
+  createdAt         DateTime @default(now())
+
+  @@map("results")
+}
