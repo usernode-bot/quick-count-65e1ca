@@ -6,18 +6,19 @@ const memo = require('../lib/memo');
 const { normalizeTx, applyTx } = require('../lib/indexer');
 const { latestPerStation, computeTally, reporting } = require('../lib/aggregate');
 
-// Minimal in-memory store mirroring PgStore semantics (insert-if-absent).
+// Minimal in-memory store mirroring the new store interface (insert-if-absent
+// for elections/candidates/stations, upsert by txHash for submissions).
 function makeStore() {
   return {
     elections: new Map(),
     candidates: new Map(),
     stations: new Map(),
-    results: new Map(),
+    submissions: new Map(),
     async getElection(eid) { return this.elections.get(eid) || null; },
     async putElection(r) { if (!this.elections.has(r.eid)) this.elections.set(r.eid, r); },
     async putCandidate(r) { const k = r.eid + '/' + r.cid; if (!this.candidates.has(k)) this.candidates.set(k, r); },
     async putStation(r) { const k = r.eid + '/' + r.sid; if (!this.stations.has(k)) this.stations.set(k, r); },
-    async putResult(r) { if (!this.results.has(r.tx_id)) this.results.set(r.tx_id, r); },
+    async upsertSubmission(r) { this.submissions.set(r.txHash, r); },
   };
 }
 
@@ -63,7 +64,7 @@ test('structural tx from a non-creator pubkey is ignored; results accepted from 
   // Anyone may submit a result.
   const ok = await applyTx(store, { txId: 'R1', from: 'utAgent', to: 'utCreator', memo: memo.encode(memo.resultMemo('EL1', 1, { 1: 5 })), createdAt: '2026-06-20T10:03:00.000Z' });
   assert.strictEqual(ok.applied, true);
-  assert.strictEqual(store.results.size, 1);
+  assert.strictEqual(store.submissions.size, 1);
 });
 
 test('normalizeTx maps field-name variants', () => {

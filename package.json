@@ -6,11 +6,15 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "generate": "prisma generate"
   },
   "dependencies": {
     "express": "^4.21.0",
-    "pg": "^8.13.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "@prisma/client": "^6.0.0",
+    "prisma": "^6.0.0",
+    "multer": "^1.4.5-lts.1",
+    "dotenv": "^16.4.0"
   }
 }

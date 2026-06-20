@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        Int        @id @default(autoincrement())
+  name      String
+  createdAt DateTime   @default(now())
+  elections Election[]
+}
+
+model Election {
+  id              Int              @id @default(autoincrement())
+  organizationId  Int
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  name            String
+  status          String           @default("active")
+  gpsRequired     Boolean          @default(false)
+  gpsRadiusMeters Int?
+  qrRequired      Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  candidates      Candidate[]
+  regions         Region[]
+  stations        PollingStation[]
+  submissions     CachedSubmission[]
+}
+
+model Candidate {
+  id         Int      @id @default(autoincrement())
+  electionId Int
+  election   Election @relation(fields: [electionId], references: [id])
+  name       String
+  sortOrder  Int
+}
+
+model Region {
+  id         Int              @id @default(autoincrement())
+  electionId Int
+  election   Election         @relation(fields: [electionId], references: [id])
+  name       String
+  stations   PollingStation[]
+}
+
+model PollingStation {
+  id                    Int                @id @default(autoincrement())
+  electionId            Int
+  election              Election           @relation(fields: [electionId], references: [id])
+  regionId              Int
+  region                Region             @relation(fields: [regionId], references: [id])
+  name                  String
+  code                  String
+  latitude              Float?
+  longitude             Float?
+  totalRegisteredVoters Int?
+  agents                StationAgent[]
+  submissions           CachedSubmission[]
+}
+
+model StationAgent {
+  id        Int            @id @default(autoincrement())
+  stationId Int
+  station   PollingStation @relation(fields: [stationId], references: [id])
+  userId    String
+  username  String
+}
+
+model UserRole {
+  id       Int    @id @default(autoincrement())
+  userId   String @unique
+  username String
+  role     String
+}
+
+model CachedSubmission {
+  id                Int            @id @default(autoincrement())
+  txHash            String         @unique
+  stationId         Int
+  station           PollingStation @relation(fields: [stationId], references: [id])
+  electionId        Int
+  election          Election       @relation(fields: [electionId], references: [id])
+  submitterUserId   String
+  submitterUsername String
+  submitterPubkey   String
+  votes             Json
+  photoFilename     String?
+  blockHeight       Int
+  chainTimestamp    DateTime
+  indexedAt         DateTime       @default(now())
+}
+
+model IndexerState {
+  id               Int      @id @default(1)
+  lastIndexedBlock Int
+  lastIndexedAt    DateTime
+}

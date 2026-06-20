@@ -34,17 +34,9 @@
     }
     function post(level, args, meta) {
       try {
-        var payload = {
-          sentinel: S,
-          level: level,
-          args: Array.prototype.slice.call(args).map(function (a) { return serialize(a); }),
-          ts: Date.now(),
-          url: location.href,
-        };
+        var payload = { sentinel: S, level: level, args: Array.prototype.slice.call(args).map(function (a) { return serialize(a); }), ts: Date.now(), url: location.href };
         if (meta) for (var k in meta) payload[k] = meta[k];
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage(payload, '*');
-        }
+        if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
       } catch (_) {}
     }
     ['log','info','warn','error','debug'].forEach(function (level) {
@@ -56,11 +48,9 @@
       post('error', [msg], { source: e.filename || '', line: e.lineno || 0, col: e.colno || 0, kind: 'error' });
     });
     window.addEventListener('unhandledrejection', function (e) {
-      var r = e.reason;
-      var msg = (r && (r.stack || r.message)) || String(r);
+      var r = e.reason; var msg = (r && (r.stack || r.message)) || String(r);
       post('error', [msg], { kind: 'unhandledrejection' });
     });
-    try { post('info', ['[dev-console ready]'], { kind: 'ready' }); } catch (_) {}
   })();
   </script>
   <title>Quick Count</title>
@@ -69,274 +59,876 @@
   <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
-  <div class="max-w-2xl mx-auto p-4 sm:p-6">
-    <header class="flex items-center justify-between mb-6">
-      <h1 class="text-xl font-bold">Quick Count</h1>
-      <span id="staging-badge" class="hidden text-xs font-medium px-2 py-1 rounded bg-amber-500/20 text-amber-300">staging</span>
-    </header>
 
-    <nav class="flex gap-2 mb-6">
-      <button data-tab="create" class="tab-btn flex-1 py-2 rounded-lg text-sm font-medium bg-violet-600 text-white">Create election</button>
-      <button data-tab="submit" class="tab-btn flex-1 py-2 rounded-lg text-sm font-medium bg-zinc-800 text-zinc-300">Submit result</button>
-    </nav>
-
-    <!-- ── Create election ──────────────────────────────────────────── -->
-    <section id="tab-create">
-      <p class="text-sm text-zinc-400 mb-4">As an organizer, define the candidates and polling stations. Publishing signs one on-chain transaction per item with your Usernode wallet.</p>
-
-      <label class="block text-sm mb-1 text-zinc-300">Election name</label>
-      <input id="el-name" placeholder="Springfield Mayoral 2026" class="w-full mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-violet-500 outline-none">
-
-      <div class="mb-4">
-        <div class="flex items-center justify-between mb-1">
-          <label class="text-sm text-zinc-300">Candidates</label>
-          <button id="add-candidate" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700">+ Add candidate</button>
-        </div>
-        <div id="candidates" class="space-y-2"></div>
-      </div>
-
-      <div class="mb-6">
-        <div class="flex items-center justify-between mb-1">
-          <label class="text-sm text-zinc-300">Polling stations</label>
-          <button id="add-station" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700">+ Add station</button>
-        </div>
-        <div id="stations" class="space-y-2"></div>
-      </div>
-
-      <button id="create-btn" class="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold disabled:opacity-50">Create &amp; publish</button>
-      <div id="create-status" class="mt-3 text-sm text-zinc-400"></div>
-
-      <div id="create-done" class="hidden mt-5 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
-        <p class="font-semibold text-emerald-400 mb-2">Election published ✓</p>
-        <p class="text-sm text-zinc-400 mb-2">Share the public live dashboard:</p>
-        <a id="dash-link" href="#" target="_blank" class="text-violet-400 underline text-sm break-all"></a>
-        <p class="text-sm text-zinc-400 mt-3">Polling agents report results from the <strong>Submit result</strong> tab.</p>
-      </div>
-    </section>
-
-    <!-- ── Submit result ────────────────────────────────────────────── -->
-    <section id="tab-submit" class="hidden">
-      <p class="text-sm text-zinc-400 mb-4">As a polling agent, report your station's count. Submitting signs one on-chain transaction. Re-submitting replaces your station's previous figure (latest wins).</p>
-
-      <label class="block text-sm mb-1 text-zinc-300">Election</label>
-      <select id="sub-election" class="w-full mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
-
-      <label class="block text-sm mb-1 text-zinc-300">Your polling station</label>
-      <select id="sub-station" class="w-full mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
-
-      <div id="sub-candidates" class="space-y-2 mb-4"></div>
-
-      <div class="grid grid-cols-2 gap-3 mb-6">
-        <div>
-          <label class="block text-xs mb-1 text-zinc-400">Total ballots (optional)</label>
-          <input id="sub-tot" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">
-        </div>
-        <div>
-          <label class="block text-xs mb-1 text-zinc-400">Invalid / blank (optional)</label>
-          <input id="sub-inv" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">
-        </div>
-      </div>
-
-      <button id="submit-btn" class="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold disabled:opacity-50">Submit result</button>
-      <div id="submit-status" class="mt-3 text-sm text-zinc-400"></div>
-    </section>
+  <div id="root" class="min-h-screen">
+    <div class="flex items-center justify-center min-h-screen">
+      <p class="text-zinc-500">Loading…</p>
+    </div>
   </div>
 
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token') || '';
-    const authHeaders = token ? { 'x-usernode-token': token } : {};
+  // ── State ──────────────────────────────────────────────────────────────────
+  let TOKEN = new URLSearchParams(location.search).get('token') || '';
+  let CURRENT_USER = null;
+  let ROLE = 'observer';
+  let ELECTIONS = [];
+  let CURRENT_ELECTION_ID = null;
+  const ROLE_LEVELS = { observer: 0, agent: 1, admin: 2 };
 
-    // ── Memo envelopes (mirror lib/memo.js) ──────────────────────────
-    const V = 1;
-    const elMemo = (name) => JSON.stringify({ v: V, t: 'el', name: String(name).slice(0, 120) });
-    const candMemo = (eid, cid, name) => JSON.stringify({ v: V, t: 'cand', eid, cid, name: String(name).slice(0, 80) });
-    const stnMemo = (eid, sid, name) => JSON.stringify({ v: V, t: 'stn', eid, sid, name: String(name).slice(0, 80) });
-    function resMemo(eid, sid, votes, tot, inv) {
-      const m = { v: V, t: 'res', eid, sid, votes };
-      if (tot !== '' && tot != null) m.tot = Number(tot);
-      if (inv !== '' && inv != null) m.inv = Number(inv);
-      return JSON.stringify(m);
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function timeAgo(iso) {
+    if (!iso) return '';
+    const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (secs < 60) return secs + 's ago';
+    const mins = Math.round(secs / 60);
+    if (mins < 60) return mins + 'm ago';
+    return Math.round(mins / 60) + 'h ago';
+  }
+  function fmt(n) { return Number(n || 0).toLocaleString(); }
+
+  async function apiFetch(path, opts) {
+    const headers = { 'x-usernode-token': TOKEN, ...(opts?.headers || {}) };
+    if (opts && opts.body && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const r = await fetch(path, { ...opts, headers });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: r.status }));
+      throw Object.assign(new Error(err.error || r.status), { status: r.status });
+    }
+    return r.json();
+  }
+
+  function canAccess(minRole) {
+    return (ROLE_LEVELS[ROLE] || 0) >= (ROLE_LEVELS[minRole] || 0);
+  }
+
+  // ── Routing ────────────────────────────────────────────────────────────────
+  function currentScreen() {
+    const h = location.hash.replace('#', '').trim();
+    return h || 'dashboard';
+  }
+
+  function navigate(screen) {
+    location.hash = screen;
+  }
+
+  window.addEventListener('hashchange', () => renderScreen(currentScreen()));
+
+  // ── Nav ────────────────────────────────────────────────────────────────────
+  function renderNav() {
+    const screen = currentScreen();
+    const items = [
+      { id: 'dashboard', label: 'Dashboard', minRole: 'observer' },
+      { id: 'explorer', label: 'Explorer', minRole: 'observer' },
+      { id: 'station', label: 'My Station', minRole: 'agent' },
+      { id: 'submit', label: 'Submit Results', minRole: 'agent' },
+      { id: 'admin', label: 'Admin', minRole: 'admin' },
+    ].filter((i) => canAccess(i.minRole));
+
+    return `
+      <header class="bg-zinc-900 border-b border-zinc-800 px-4 py-3">
+        <div class="max-w-5xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+          <div class="flex items-center gap-3">
+            <h1 class="text-base font-bold">Quick Count</h1>
+            ${CURRENT_USER ? `<span class="text-xs text-zinc-500">${esc(CURRENT_USER.username)} · ${esc(ROLE)}</span>` : ''}
+            ${CURRENT_USER?.staging ? '<span class="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">staging</span>' : ''}
+          </div>
+          <nav class="flex gap-1 flex-wrap">
+            ${items.map((i) => `<button onclick="navigate('${i.id}')" class="nav-btn px-3 py-1.5 rounded text-sm font-medium ${screen === i.id ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}">${esc(i.label)}</button>`).join('')}
+          </nav>
+        </div>
+      </header>`;
+  }
+
+  function rerenderNav() {
+    const navEl = document.getElementById('nav');
+    if (navEl) navEl.innerHTML = renderNav();
+  }
+
+  // ── Screen dispatcher ──────────────────────────────────────────────────────
+  async function renderScreen(name) {
+    rerenderNav();
+    const content = document.getElementById('content');
+    if (!content) return;
+    content.innerHTML = '<div class="flex justify-center py-12"><p class="text-zinc-500">Loading…</p></div>';
+    try {
+      switch (name) {
+        case 'dashboard': await renderDashboard(content); break;
+        case 'explorer': await renderExplorer(content); break;
+        case 'station': canAccess('agent') ? await renderStation(content) : renderUnauthorized(content); break;
+        case 'submit': canAccess('agent') ? await renderSubmit(content) : renderUnauthorized(content); break;
+        case 'admin': canAccess('admin') ? await renderAdmin(content) : renderUnauthorized(content); break;
+        default: await renderDashboard(content);
+      }
+    } catch (e) {
+      content.innerHTML = `<div class="p-4 text-rose-400">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function renderUnauthorized(el) {
+    el.innerHTML = '<div class="p-6 text-zinc-400">You do not have permission to view this screen.</div>';
+  }
+
+  // ── Dashboard ──────────────────────────────────────────────────────────────
+  const COLORS = ['bg-rose-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-violet-500','bg-pink-500','bg-teal-500'];
+
+  async function renderDashboard(el) {
+    const apiBase = canAccess('observer') ? '/api' : '/api/public';
+
+    // Load elections list
+    let electionsData;
+    try {
+      if (canAccess('observer') && CURRENT_USER) {
+        electionsData = await apiFetch('/api/elections');
+        ELECTIONS = electionsData.elections;
+      } else {
+        electionsData = await fetch('/api/public/elections').then((r) => r.json());
+        ELECTIONS = electionsData.elections;
+      }
+    } catch {
+      ELECTIONS = [];
     }
 
-    // Wait until the hosted bridge has defined its window API.
-    function bridgeReady() {
-      return new Promise((resolve) => {
-        let tries = 0;
-        (function poll() {
-          if (typeof window.sendTransaction === 'function' && typeof window.getNodeAddress === 'function') return resolve(true);
-          if (tries++ > 100) return resolve(false);
-          setTimeout(poll, 100);
-        })();
-      });
+    if (!ELECTIONS.length) {
+      el.innerHTML = '<div class="p-6 text-zinc-500">No elections found.</div>';
+      return;
     }
 
-    // Pull a transaction id out of whatever sendTransaction resolved with.
-    function extractTxId(res) {
-      if (!res) return null;
-      const cands = [];
-      const probe = (o) => {
-        if (!o || typeof o !== 'object') return;
-        for (const k of ['txId', 'tx_id', 'id', 'txid', 'hash', 'tx_hash', 'txHash']) {
-          if (typeof o[k] === 'string' && o[k].trim()) cands.push(o[k].trim());
-        }
+    if (!CURRENT_ELECTION_ID) CURRENT_ELECTION_ID = ELECTIONS[0].id || ELECTIONS[0].eid;
+
+    const elId = CURRENT_ELECTION_ID;
+    let d;
+    try {
+      if (canAccess('observer') && CURRENT_USER) {
+        d = await apiFetch(`/api/elections/${elId}/dashboard`);
+      } else {
+        const pub = await fetch(`/api/public/elections/${elId}`).then((r) => r.json());
+        d = {
+          election: pub.election,
+          candidates: pub.candidates,
+          tally: pub.tally,
+          reporting: pub.reporting,
+          stations: pub.stations,
+          lastUpdated: pub.lastUpdated,
+          regionalBreakdown: [],
+        };
+      }
+    } catch (e) {
+      el.innerHTML = `<div class="p-4 text-rose-400">Failed to load dashboard: ${esc(e.message)}</div>`;
+      return;
+    }
+
+    const totalVotes = Object.values(d.tally || {}).reduce((s, n) => s + Number(n), 0) || 1;
+    const elSelector = `<select id="el-select" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+      ${ELECTIONS.map((e) => `<option value="${e.id || e.eid}" ${(e.id || e.eid) == elId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}
+    </select>`;
+
+    const tallyRows = (d.candidates || [])
+      .map((c, i) => ({ c, i, votes: Number(d.tally[c.cid] || d.tally[c.id] || 0) }))
+      .sort((a, b) => b.votes - a.votes)
+      .map(({ c, i, votes }) => {
+        const pct = Math.round((votes / totalVotes) * 100);
+        return `<div class="mb-3">
+          <div class="flex justify-between text-sm mb-1">
+            <span>${esc(c.name)}</span>
+            <span class="font-mono text-zinc-300">${fmt(votes)} <span class="text-zinc-500">(${pct}%)</span></span>
+          </div>
+          <div class="h-3 rounded bg-zinc-800 overflow-hidden">
+            <div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+      }).join('');
+
+    const regionalRows = (d.regionalBreakdown || []).map((r) =>
+      `<tr class="border-t border-zinc-800">
+        <td class="py-2 pr-4">${esc(r.regionName)}</td>
+        <td class="py-2 font-mono text-right">${r.reported} / ${r.total}</td>
+      </tr>`
+    ).join('');
+
+    const stationRows = (d.stations || []).map((s) => {
+      const votesCells = (d.candidates || []).map((c) => {
+        const v = s.votes ? Number(s.votes[c.cid] || s.votes[c.id] || 0) : 0;
+        return `<td class="py-2 px-2 text-right font-mono text-sm">${s.reported ? fmt(v) : '—'}</td>`;
+      }).join('');
+      return `<tr class="border-t border-zinc-800">
+        <td class="py-2 pr-2 text-sm">${esc(s.name)}</td>
+        <td class="py-2 px-2 text-sm">${s.regionName ? `<span class="text-zinc-500">${esc(s.regionName)}</span>` : ''}</td>
+        ${votesCells}
+        <td class="py-2 pl-2 text-right text-xs text-zinc-500 whitespace-nowrap">${s.reported ? timeAgo(s.at) : 'Awaiting'}</td>
+      </tr>`;
+    }).join('');
+
+    const headCells = (d.candidates || []).map((c) =>
+      `<th class="py-2 px-2 text-right font-medium text-zinc-400 text-sm">${esc(c.name)}</th>`
+    ).join('');
+
+    el.innerHTML = `
+      <div class="max-w-5xl mx-auto p-4">
+        <div class="flex items-center gap-3 mb-5 flex-wrap">
+          ${elSelector}
+          <span class="text-sm text-zinc-400">${d.reporting.reported} of ${d.reporting.total} stations reported</span>
+          ${d.election?.status === 'closed' ? '<span class="text-xs px-2 py-0.5 rounded bg-zinc-700 text-zinc-400">Closed</span>' : ''}
+        </div>
+
+        <div class="mb-6">${tallyRows || '<p class="text-zinc-500 text-sm">No candidates.</p>'}</div>
+
+        ${d.regionalBreakdown?.length ? `
+        <h3 class="text-sm font-medium text-zinc-400 mb-2">By region</h3>
+        <div class="overflow-x-auto mb-6">
+          <table class="text-sm"><thead><tr>
+            <th class="py-2 pr-4 text-left font-medium text-zinc-400">Region</th>
+            <th class="py-2 text-right font-medium text-zinc-400">Reported / Total</th>
+          </tr></thead><tbody>${regionalRows}</tbody></table>
+        </div>` : ''}
+
+        <h3 class="text-sm font-medium text-zinc-400 mb-2">Per station</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left">
+              <th class="py-2 pr-2 font-medium text-zinc-400">Station</th>
+              <th class="py-2 px-2 font-medium text-zinc-400">Region</th>
+              ${headCells}
+              <th class="py-2 pl-2 text-right font-medium text-zinc-400">Updated</th>
+            </tr></thead>
+            <tbody>${stationRows}</tbody>
+          </table>
+        </div>
+
+        <p class="mt-4 text-xs text-zinc-600">
+          ${d.lastUpdated ? 'Last submission ' + timeAgo(d.lastUpdated) : 'No submissions yet'}
+        </p>
+      </div>`;
+
+    document.getElementById('el-select')?.addEventListener('change', (e) => {
+      CURRENT_ELECTION_ID = e.target.value;
+      renderDashboard(el);
+    });
+  }
+
+  // ── Explorer ───────────────────────────────────────────────────────────────
+  let explorerPage = 1;
+  let explorerFilter = {};
+
+  async function renderExplorer(el) {
+    el.innerHTML = `
+      <div class="max-w-5xl mx-auto p-4" id="screen-explorer">
+        <h2 class="text-lg font-semibold mb-4">Transaction Explorer</h2>
+        <div class="flex gap-2 mb-4 flex-wrap">
+          <select id="exp-election" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+            <option value="">All elections</option>
+            ${ELECTIONS.map((e) => `<option value="${e.id || e.eid}">${esc(e.name)}</option>`).join('')}
+          </select>
+          <input id="exp-txhash" placeholder="Filter by tx hash…" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none w-48">
+          <button id="exp-search" class="px-3 py-1.5 rounded bg-zinc-700 text-sm hover:bg-zinc-600">Search</button>
+        </div>
+        <div id="exp-results"><p class="text-zinc-500 text-sm">Loading…</p></div>
+      </div>`;
+
+    async function loadPage() {
+      const expEl = document.getElementById('exp-results');
+      if (!expEl) return;
+      expEl.innerHTML = '<p class="text-zinc-500 text-sm">Loading…</p>';
+      try {
+        const params = new URLSearchParams({ page: explorerPage });
+        if (explorerFilter.electionId) params.set('electionId', explorerFilter.electionId);
+        if (explorerFilter.txHash) params.set('txHash', explorerFilter.txHash);
+        const d = await apiFetch(`/api/explorer?${params}`);
+        const totalPages = Math.ceil(d.total / d.pageSize) || 1;
+        const rows = (d.submissions || []).map((s) => `
+          <tr class="border-t border-zinc-800 hover:bg-zinc-900/50">
+            <td class="py-2 px-2 font-mono text-xs text-zinc-400 max-w-xs truncate">${esc(s.txHash)}</td>
+            <td class="py-2 px-2 text-sm">${esc(s.stationName)}</td>
+            <td class="py-2 px-2 text-sm text-zinc-400">${esc(s.electionName)}</td>
+            <td class="py-2 px-2 font-mono text-sm">${fmt(s.blockHeight)}</td>
+            <td class="py-2 px-2 text-xs text-zinc-500 truncate max-w-xs">${esc(s.submitterPubkey)}</td>
+            <td class="py-2 px-2 text-xs text-zinc-500 whitespace-nowrap">${timeAgo(s.chainTimestamp)}</td>
+          </tr>`).join('');
+
+        expEl.innerHTML = `
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead><tr class="text-left">
+                <th class="py-2 px-2 font-medium text-zinc-400">Tx Hash</th>
+                <th class="py-2 px-2 font-medium text-zinc-400">Station</th>
+                <th class="py-2 px-2 font-medium text-zinc-400">Election</th>
+                <th class="py-2 px-2 font-medium text-zinc-400">Block</th>
+                <th class="py-2 px-2 font-medium text-zinc-400">Submitter</th>
+                <th class="py-2 px-2 font-medium text-zinc-400">Time</th>
+              </tr></thead>
+              <tbody>${rows || '<tr><td colspan="6" class="py-4 text-center text-zinc-500">No results found</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div class="flex items-center gap-3 mt-4 text-sm text-zinc-400">
+            <span>${d.total} total</span>
+            ${explorerPage > 1 ? '<button id="exp-prev" class="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700">Prev</button>' : ''}
+            <span>Page ${explorerPage} of ${totalPages}</span>
+            ${explorerPage < totalPages ? '<button id="exp-next" class="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700">Next</button>' : ''}
+          </div>`;
+        document.getElementById('exp-prev')?.addEventListener('click', () => { explorerPage--; loadPage(); });
+        document.getElementById('exp-next')?.addEventListener('click', () => { explorerPage++; loadPage(); });
+      } catch (e) {
+        expEl.innerHTML = `<p class="text-rose-400 text-sm">Failed: ${esc(e.message)}</p>`;
+      }
+    }
+
+    document.getElementById('exp-search')?.addEventListener('click', () => {
+      explorerPage = 1;
+      explorerFilter = {
+        electionId: document.getElementById('exp-election')?.value || '',
+        txHash: document.getElementById('exp-txhash')?.value || '',
       };
-      probe(res); probe(res.matchedTx); probe(res.tx); probe(res.transaction);
-      return cands[0] || null;
+      loadPage();
+    });
+
+    await loadPage();
+  }
+
+  // ── My Station ─────────────────────────────────────────────────────────────
+  async function renderStation(el) {
+    const d = await apiFetch('/api/station/mine').catch((e) => {
+      if (e.status === 404) return null;
+      throw e;
+    });
+
+    if (!d) {
+      el.innerHTML = `
+        <div class="max-w-lg mx-auto p-6">
+          <h2 class="text-lg font-semibold mb-3">My Station</h2>
+          <p class="text-zinc-400">You have not been assigned to a polling station yet. Contact an admin.</p>
+        </div>`;
+      return;
     }
 
-    // ── Tabs ─────────────────────────────────────────────────────────
-    document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => {
-      const tab = b.dataset.tab;
-      document.querySelectorAll('.tab-btn').forEach((x) => {
-        const on = x.dataset.tab === tab;
-        x.className = 'tab-btn flex-1 py-2 rounded-lg text-sm font-medium ' + (on ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300');
-      });
-      document.getElementById('tab-create').classList.toggle('hidden', tab !== 'create');
-      document.getElementById('tab-submit').classList.toggle('hidden', tab !== 'submit');
-      if (tab === 'submit') loadElections();
-    }));
+    const { station, submitted, lastSubmission } = d;
+    el.innerHTML = `
+      <div class="max-w-lg mx-auto p-6">
+        <h2 class="text-lg font-semibold mb-4">My Station</h2>
+        <div class="rounded-xl bg-zinc-900 border border-zinc-800 p-5 mb-4">
+          <p class="text-xl font-bold mb-1">${esc(station.name)}</p>
+          <p class="text-sm text-zinc-400 mb-3">${esc(station.code)} · ${esc(station.regionName)}</p>
+          ${station.totalRegisteredVoters ? `<p class="text-sm text-zinc-400">Registered voters: <span class="text-zinc-200 font-mono">${fmt(station.totalRegisteredVoters)}</span></p>` : ''}
+          ${station.latitude ? `<p class="text-sm text-zinc-500 mt-1">Coordinates: ${station.latitude.toFixed(5)}, ${station.longitude.toFixed(5)}</p>` : ''}
+          <p class="text-sm text-zinc-400 mt-2">Election: ${esc(station.electionName)}</p>
+          <div class="mt-3">
+            ${submitted
+              ? `<span class="inline-block px-3 py-1 rounded bg-emerald-500/20 text-emerald-300 text-sm">Result submitted ${timeAgo(lastSubmission?.at)}</span>`
+              : `<span class="inline-block px-3 py-1 rounded bg-amber-500/20 text-amber-300 text-sm">Result not yet submitted</span>`}
+          </div>
+        </div>
+        ${submitted && lastSubmission ? `
+        <div class="rounded-xl bg-zinc-900 border border-zinc-800 p-5">
+          <p class="text-sm font-medium text-zinc-400 mb-2">Last submission</p>
+          <p class="font-mono text-xs text-zinc-500 mb-2">${esc(lastSubmission.txHash)}</p>
+          <div class="space-y-1">
+            ${station.candidates.map((c) => `
+              <div class="flex justify-between text-sm">
+                <span>${esc(c.name)}</span>
+                <span class="font-mono">${fmt((lastSubmission.votes || {})[c.id] || 0)}</span>
+              </div>`).join('')}
+          </div>
+        </div>` : ''}
+        <button onclick="navigate('submit')" class="mt-4 w-full py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm">
+          ${submitted ? 'Re-submit result' : 'Submit result'}
+        </button>
+      </div>`;
+  }
 
-    // ── Create: dynamic name rows ────────────────────────────────────
-    function addRow(containerId, placeholder) {
-      const wrap = document.createElement('div');
-      wrap.className = 'flex gap-2';
-      wrap.innerHTML = '<input placeholder="' + placeholder + '" class="row-input flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">'
-        + '<button class="px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">×</button>';
-      wrap.querySelector('button').addEventListener('click', () => wrap.remove());
-      document.getElementById(containerId).appendChild(wrap);
-    }
-    document.getElementById('add-candidate').addEventListener('click', () => addRow('candidates', 'Candidate name'));
-    document.getElementById('add-station').addEventListener('click', () => addRow('stations', 'Station name / label'));
-    addRow('candidates', 'Candidate name');
-    addRow('candidates', 'Candidate name');
-    addRow('stations', 'Station name / label');
+  // ── Submit Results ─────────────────────────────────────────────────────────
+  let submitStation = null;
 
-    function rowValues(containerId) {
-      return Array.from(document.querySelectorAll('#' + containerId + ' .row-input'))
-        .map((i) => i.value.trim()).filter(Boolean);
-    }
-
-    document.getElementById('create-btn').addEventListener('click', async () => {
-      const name = document.getElementById('el-name').value.trim();
-      const cands = rowValues('candidates');
-      const stns = rowValues('stations');
-      const status = document.getElementById('create-status');
-      if (!name || !cands.length || !stns.length) {
-        status.textContent = 'Add an election name, at least one candidate and one station.';
+  async function renderSubmit(el) {
+    let assignment;
+    try {
+      assignment = await apiFetch('/api/station/mine');
+    } catch (e) {
+      if (e.status === 404) {
+        el.innerHTML = '<div class="p-6 text-zinc-400">No station assigned. Contact an admin.</div>';
         return;
       }
-      const ready = await bridgeReady();
-      if (!ready) { status.textContent = 'Wallet bridge unavailable — open this app inside Usernode.'; return; }
-
-      const btn = document.getElementById('create-btn');
-      btn.disabled = true;
-      try {
-        const addr = await window.getNodeAddress();
-        if (!addr) throw new Error('No wallet address');
-        const total = 1 + cands.length + stns.length;
-        let done = 0;
-        const tick = (label) => { done++; status.textContent = label + '  (' + done + ' of ' + total + ' confirmed)'; };
-
-        status.textContent = 'Creating election… approve in your wallet';
-        const elRes = await window.sendTransaction(addr, 0, elMemo(name));
-        const eid = extractTxId(elRes);
-        if (!eid) throw new Error('Could not read election transaction id');
-        tick('Election created');
-
-        // Register the root address so the indexer starts watching it.
-        await fetch('/api/elections/track', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ root_pubkey: addr, tx_id: eid }),
-        });
-
-        for (let i = 0; i < cands.length; i++) {
-          await window.sendTransaction(addr, 0, candMemo(eid, i + 1, cands[i]));
-          tick('Added candidate "' + cands[i] + '"');
-        }
-        for (let j = 0; j < stns.length; j++) {
-          await window.sendTransaction(addr, 0, stnMemo(eid, j + 1, stns[j]));
-          tick('Added station "' + stns[j] + '"');
-        }
-
-        const url = location.origin + '/dashboard.html?eid=' + encodeURIComponent(eid);
-        const link = document.getElementById('dash-link');
-        link.href = url; link.textContent = url;
-        document.getElementById('create-done').classList.remove('hidden');
-        status.textContent = 'All ' + total + ' transactions confirmed.';
-      } catch (e) {
-        status.textContent = 'Failed: ' + (e.message || e);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    // ── Submit: load elections / stations / candidates ───────────────
-    let subDetail = null;
-    async function loadElections() {
-      const sel = document.getElementById('sub-election');
-      try {
-        const r = await fetch('/api/public/elections', { headers: authHeaders });
-        const { elections } = await r.json();
-        sel.innerHTML = elections.length
-          ? elections.map((e) => '<option value="' + e.eid + '">' + escapeHtml(e.name) + '</option>').join('')
-          : '<option value="">No elections yet — create one first</option>';
-        if (elections.length) loadDetail(sel.value);
-      } catch { sel.innerHTML = '<option value="">Failed to load</option>'; }
-    }
-    document.getElementById('sub-election').addEventListener('change', (e) => loadDetail(e.target.value));
-
-    async function loadDetail(eid) {
-      if (!eid) return;
-      const r = await fetch('/api/public/elections/' + encodeURIComponent(eid), { headers: authHeaders });
-      subDetail = await r.json();
-      const ss = document.getElementById('sub-station');
-      ss.innerHTML = subDetail.stations.map((s) => '<option value="' + s.sid + '">' + escapeHtml(s.name) + '</option>').join('');
-      const cc = document.getElementById('sub-candidates');
-      cc.innerHTML = subDetail.candidates.map((c) =>
-        '<div class="flex items-center gap-2">'
-        + '<label class="flex-1 text-sm text-zinc-300">' + escapeHtml(c.name) + '</label>'
-        + '<input type="number" min="0" data-cid="' + c.cid + '" value="0" class="cand-vote w-28 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-right">'
-        + '</div>'
-      ).join('');
+      throw e;
     }
 
-    document.getElementById('submit-btn').addEventListener('click', async () => {
-      const status = document.getElementById('submit-status');
-      if (!subDetail || !subDetail.election) { status.textContent = 'Pick an election first.'; return; }
-      const sid = Number(document.getElementById('sub-station').value);
-      if (!sid) { status.textContent = 'Pick your polling station.'; return; }
-      const votes = {};
-      document.querySelectorAll('.cand-vote').forEach((i) => { votes[i.dataset.cid] = Number(i.value) || 0; });
-      const tot = document.getElementById('sub-tot').value;
-      const inv = document.getElementById('sub-inv').value;
+    submitStation = assignment.station;
+    const { station } = assignment;
 
-      const ready = await bridgeReady();
-      if (!ready) { status.textContent = 'Wallet bridge unavailable — open this app inside Usernode.'; return; }
+    let gpsOk = !station.gpsRequired;
+    let gpsStatus = station.gpsRequired ? 'Checking GPS…' : '';
+    let gpsCoords = null;
+
+    el.innerHTML = `
+      <div class="max-w-lg mx-auto p-6" id="submit-form">
+        <h2 class="text-lg font-semibold mb-1">Submit Results</h2>
+        <p class="text-sm text-zinc-400 mb-5">${esc(station.name)} · ${esc(station.electionName)}</p>
+
+        ${station.gpsRequired ? `
+        <div id="gps-section" class="rounded-lg bg-zinc-900 border border-zinc-800 p-4 mb-4">
+          <p class="text-sm font-medium mb-2">GPS Verification</p>
+          <p id="gps-status" class="text-sm text-zinc-400">${gpsStatus}</p>
+          <button id="gps-check-btn" class="mt-2 px-4 py-1.5 rounded bg-zinc-700 hover:bg-zinc-600 text-sm">Check Location</button>
+        </div>` : ''}
+
+        <div class="mb-4">
+          <p class="text-sm font-medium text-zinc-300 mb-3">Vote counts</p>
+          <div class="space-y-2" id="vote-inputs">
+            ${station.candidates.map((c) => `
+              <div class="flex items-center gap-3">
+                <label class="flex-1 text-sm text-zinc-300">${esc(c.name)}</label>
+                <input type="number" min="0" data-cid="${c.id}" value="0"
+                  class="vote-input w-28 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-right font-mono">
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-zinc-300 mb-2">Tally sheet photo (optional)</label>
+          <input id="photo-input" type="file" accept="image/*" capture="environment"
+            class="block text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700">
+        </div>
+
+        <button id="submit-btn" class="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          ${station.gpsRequired ? 'disabled' : ''}>
+          Submit result
+        </button>
+        <div id="submit-status" class="mt-3 text-sm text-zinc-400"></div>
+      </div>`;
+
+    if (station.gpsRequired) {
+      document.getElementById('gps-check-btn')?.addEventListener('click', () => {
+        const statusEl = document.getElementById('gps-status');
+        statusEl.textContent = 'Requesting location…';
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            gpsCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            if (station.latitude && station.longitude) {
+              const dist = haversine(gpsCoords.lat, gpsCoords.lng, station.latitude, station.longitude);
+              const radius = station.gpsRadiusMeters || 500;
+              if (dist <= radius) {
+                gpsOk = true;
+                statusEl.textContent = `Location verified (${Math.round(dist)}m from station)`;
+                statusEl.className = 'text-sm text-emerald-400';
+                document.getElementById('submit-btn').disabled = false;
+              } else {
+                gpsOk = false;
+                statusEl.textContent = `Too far from station: ${Math.round(dist)}m (max ${radius}m)`;
+                statusEl.className = 'text-sm text-rose-400';
+              }
+            } else {
+              gpsOk = true;
+              statusEl.textContent = 'Location captured';
+              statusEl.className = 'text-sm text-emerald-400';
+              document.getElementById('submit-btn').disabled = false;
+            }
+          },
+          (err) => {
+            statusEl.textContent = 'Location unavailable: ' + err.message;
+            statusEl.className = 'text-sm text-amber-400';
+          }
+        );
+      });
+    }
+
+    document.getElementById('submit-btn')?.addEventListener('click', async () => {
       const btn = document.getElementById('submit-btn');
+      const statusEl = document.getElementById('submit-status');
+      if (!gpsOk) { statusEl.textContent = 'GPS verification required.'; return; }
+
+      const votes = {};
+      document.querySelectorAll('.vote-input').forEach((i) => { votes[i.dataset.cid] = Number(i.value) || 0; });
+
+      const fd = new FormData();
+      fd.append('electionId', String(station.electionId));
+      fd.append('stationId', String(station.id));
+      fd.append('votes', JSON.stringify(votes));
+      if (gpsCoords) { fd.append('gpsLat', String(gpsCoords.lat)); fd.append('gpsLng', String(gpsCoords.lng)); }
+      const photo = document.getElementById('photo-input')?.files?.[0];
+      if (photo) fd.append('photo', photo);
+
       btn.disabled = true;
+      statusEl.textContent = 'Broadcasting transaction…';
       try {
-        status.textContent = 'Submitting… approve in your wallet';
-        const memo = resMemo(subDetail.election.eid, sid, votes, tot, inv);
-        await window.sendTransaction(subDetail.election.root_pubkey, 0, memo);
-        const stationName = subDetail.stations.find((s) => s.sid === sid);
-        status.textContent = 'Result submitted for ' + (stationName ? stationName.name : ('station ' + sid)) + ' ✓ — the live dashboard will update shortly.';
+        const result = await fetch('/api/submit', {
+          method: 'POST',
+          headers: { 'x-usernode-token': TOKEN },
+          body: fd,
+        }).then((r) => r.json());
+        if (result.error) throw new Error(result.error);
+
+        statusEl.textContent = '';
+        const confirmDiv = document.createElement('div');
+        confirmDiv.className = 'mt-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30';
+        confirmDiv.innerHTML = `
+          <p class="text-emerald-300 font-semibold mb-1">Result submitted</p>
+          <p class="text-xs text-zinc-400 font-mono break-all">${esc(result.txHash)}</p>
+          <p class="text-sm text-zinc-400 mt-1">${result.confirmed ? 'Confirmed on chain' : 'Pending confirmation'}</p>`;
+        document.getElementById('submit-form').appendChild(confirmDiv);
+
+        if (!result.confirmed) {
+          const spinner = document.createElement('p');
+          spinner.className = 'text-sm text-zinc-400 mt-2';
+          spinner.textContent = 'Waiting for confirmation…';
+          confirmDiv.appendChild(spinner);
+          let attempts = 0;
+          const poll = setInterval(async () => {
+            attempts++;
+            if (attempts > 30) { clearInterval(poll); spinner.textContent = 'Confirmation timed out.'; return; }
+            try {
+              const d = await apiFetch(`/api/explorer?txHash=${encodeURIComponent(result.txHash)}`);
+              if (d.submissions?.length) {
+                clearInterval(poll);
+                spinner.textContent = 'Confirmed on chain at block ' + d.submissions[0].blockHeight;
+                spinner.className = 'text-sm text-emerald-400 mt-2';
+              }
+            } catch {}
+          }, 2000);
+        }
       } catch (e) {
-        status.textContent = 'Failed: ' + (e.message || e);
-      } finally {
+        statusEl.textContent = 'Failed: ' + e.message;
         btn.disabled = false;
       }
     });
+  }
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000, toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // ── Admin ──────────────────────────────────────────────────────────────────
+  let adminTab = 'organizations';
+
+  async function renderAdmin(el) {
+    const tabs = ['organizations', 'elections', 'stations', 'agents', 'audit'];
+    el.innerHTML = `
+      <div class="max-w-5xl mx-auto p-4" id="screen-admin">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 class="text-lg font-semibold">Admin Panel</h2>
+          <button id="reindex-btn" class="px-3 py-1.5 rounded bg-zinc-700 hover:bg-zinc-600 text-sm">Re-index chain</button>
+        </div>
+        <div class="flex gap-1 mb-5 flex-wrap" id="admin-tabs">
+          ${tabs.map((t) => `<button data-tab="${t}" class="admin-tab-btn px-3 py-1.5 rounded text-sm font-medium ${adminTab === t ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}">${t.charAt(0).toUpperCase() + t.slice(1)}</button>`).join('')}
+        </div>
+        <div id="admin-content"></div>
+      </div>`;
+
+    document.getElementById('reindex-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('reindex-btn');
+      btn.disabled = true; btn.textContent = 'Re-indexing…';
+      try {
+        await apiFetch('/api/admin/reindex', { method: 'POST', body: '{}' });
+        btn.textContent = 'Re-index started';
+      } catch (e) {
+        btn.textContent = 'Failed: ' + e.message;
+      } finally { setTimeout(() => { btn.disabled = false; btn.textContent = 'Re-index chain'; }, 3000); }
+    });
+
+    document.querySelectorAll('.admin-tab-btn').forEach((b) => b.addEventListener('click', () => {
+      adminTab = b.dataset.tab;
+      document.querySelectorAll('.admin-tab-btn').forEach((x) => {
+        const on = x.dataset.tab === adminTab;
+        x.className = `admin-tab-btn px-3 py-1.5 rounded text-sm font-medium ${on ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`;
+      });
+      loadAdminTab();
+    }));
+
+    async function loadAdminTab() {
+      const c = document.getElementById('admin-content');
+      if (!c) return;
+      c.innerHTML = '<p class="text-zinc-500 text-sm">Loading…</p>';
+      try {
+        switch (adminTab) {
+          case 'organizations': await renderAdminOrgs(c); break;
+          case 'elections': await renderAdminElections(c); break;
+          case 'stations': await renderAdminStations(c); break;
+          case 'agents': await renderAdminAgents(c); break;
+          case 'audit': await renderAdminAudit(c); break;
+        }
+      } catch (e) {
+        c.innerHTML = `<p class="text-rose-400 text-sm">Error: ${esc(e.message)}</p>`;
+      }
     }
 
-    // Staging badge.
-    fetch('/api/public/config').then((r) => r.json()).then((c) => {
-      if (c && c.staging) document.getElementById('staging-badge').classList.remove('hidden');
-    }).catch(() => {});
+    await loadAdminTab();
+  }
+
+  async function renderAdminOrgs(el) {
+    const { organizations } = await apiFetch('/api/admin/organizations');
+    el.innerHTML = `
+      <div class="space-y-3">
+        <div class="flex gap-2">
+          <input id="org-name" placeholder="Organization name" class="flex-1 px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+          <button id="org-create" class="px-4 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium">Create</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left">
+              <th class="py-2 pr-4 font-medium text-zinc-400">ID</th>
+              <th class="py-2 font-medium text-zinc-400">Name</th>
+              <th class="py-2 pl-4 font-medium text-zinc-400">Created</th>
+            </tr></thead>
+            <tbody>${organizations.map((o) => `<tr class="border-t border-zinc-800"><td class="py-2 pr-4 font-mono text-zinc-400">${o.id}</td><td class="py-2">${esc(o.name)}</td><td class="py-2 pl-4 text-zinc-500 text-xs">${new Date(o.createdAt).toLocaleDateString()}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-zinc-500">No organizations yet</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>`;
+    document.getElementById('org-create')?.addEventListener('click', async () => {
+      const name = document.getElementById('org-name').value.trim();
+      if (!name) return;
+      await apiFetch('/api/admin/organizations', { method: 'POST', body: JSON.stringify({ name }) });
+      await renderAdminOrgs(el);
+    });
+  }
+
+  async function renderAdminElections(el) {
+    const { organizations } = await apiFetch('/api/admin/organizations');
+    const { elections } = await apiFetch('/api/elections');
+    el.innerHTML = `
+      <div class="space-y-4">
+        <details class="bg-zinc-900 border border-zinc-800 rounded-lg">
+          <summary class="px-4 py-3 cursor-pointer text-sm font-medium">Create election</summary>
+          <div class="px-4 pb-4 space-y-3">
+            <select id="el-org" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+              ${organizations.map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}
+            </select>
+            <input id="el-name" placeholder="Election name" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+            <div class="flex gap-3 flex-wrap">
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="el-gps"> GPS required</label>
+              <input id="el-gps-radius" type="number" min="50" placeholder="Radius (m)" class="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none w-28">
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="el-qr"> QR required</label>
+            </div>
+            <div>
+              <p class="text-xs text-zinc-400 mb-1">Candidates (one per line)</p>
+              <textarea id="el-candidates" rows="3" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none" placeholder="Alpha&#10;Beta&#10;Gamma"></textarea>
+            </div>
+            <div>
+              <p class="text-xs text-zinc-400 mb-1">Regions (one per line)</p>
+              <textarea id="el-regions" rows="2" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none" placeholder="Northern&#10;Southern"></textarea>
+            </div>
+            <button id="el-create" class="px-4 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium">Create election</button>
+            <p id="el-create-status" class="text-sm text-zinc-400"></p>
+          </div>
+        </details>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left">
+              <th class="py-2 pr-3 font-medium text-zinc-400">ID</th>
+              <th class="py-2 pr-3 font-medium text-zinc-400">Name</th>
+              <th class="py-2 pr-3 font-medium text-zinc-400">Status</th>
+              <th class="py-2 pr-3 font-medium text-zinc-400">Stations</th>
+              <th class="py-2 font-medium text-zinc-400">Reported</th>
+            </tr></thead>
+            <tbody>${elections.map((e) => `<tr class="border-t border-zinc-800">
+              <td class="py-2 pr-3 font-mono text-zinc-400">${e.id}</td>
+              <td class="py-2 pr-3">${esc(e.name)}</td>
+              <td class="py-2 pr-3">
+                <select data-eid="${e.id}" class="el-status-select px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-xs outline-none">
+                  <option ${e.status === 'active' ? 'selected' : ''}>active</option>
+                  <option ${e.status === 'closed' ? 'selected' : ''}>closed</option>
+                </select>
+              </td>
+              <td class="py-2 pr-3 font-mono">${e.stationCount}</td>
+              <td class="py-2 font-mono">${e.reportedCount}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    document.querySelectorAll('.el-status-select').forEach((sel) => sel.addEventListener('change', async () => {
+      await apiFetch(`/api/elections/${sel.dataset.eid}`, { method: 'PUT', body: JSON.stringify({ status: sel.value }) });
+    }));
+
+    document.getElementById('el-create')?.addEventListener('click', async () => {
+      const statusEl = document.getElementById('el-create-status');
+      const orgId = document.getElementById('el-org').value;
+      const name = document.getElementById('el-name').value.trim();
+      const gpsRequired = document.getElementById('el-gps').checked;
+      const gpsRadius = document.getElementById('el-gps-radius').value;
+      const qrRequired = document.getElementById('el-qr').checked;
+      const candidates = document.getElementById('el-candidates').value.split('\n').map((s) => s.trim()).filter(Boolean).map((n) => ({ name: n }));
+      const regions = document.getElementById('el-regions').value.split('\n').map((s) => s.trim()).filter(Boolean).map((n) => ({ name: n }));
+      if (!name) { statusEl.textContent = 'Name required'; return; }
+      try {
+        await apiFetch('/api/elections', { method: 'POST', body: JSON.stringify({ organizationId: orgId, name, gpsRequired, gpsRadiusMeters: gpsRadius || null, qrRequired, candidates, regions }) });
+        statusEl.textContent = 'Election created!';
+        await renderAdminElections(el);
+      } catch (e) {
+        statusEl.textContent = 'Error: ' + e.message;
+      }
+    });
+  }
+
+  async function renderAdminStations(el) {
+    const { elections } = await apiFetch('/api/elections');
+    let selElId = elections[0]?.id || '';
+    async function loadStations() {
+      if (!selElId) return;
+      const { stations } = await apiFetch(`/api/elections/${selElId}/stations`);
+      const el2 = document.getElementById('stations-list');
+      if (!el2) return;
+      el2.innerHTML = stations.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-left"><th class="py-2 pr-3 font-medium text-zinc-400">Code</th><th class="py-2 pr-3 font-medium text-zinc-400">Name</th><th class="py-2 font-medium text-zinc-400">Region</th></tr></thead>
+        <tbody>${stations.map((s) => `<tr class="border-t border-zinc-800"><td class="py-2 pr-3 font-mono text-zinc-400">${esc(s.code)}</td><td class="py-2 pr-3">${esc(s.name)}</td><td class="py-2 text-zinc-400">${esc(s.regionName)}</td></tr>`).join('')}</tbody>
+      </table></div>` : '<p class="text-zinc-500 text-sm">No stations yet</p>';
+    }
+
+    const el2 = document.createElement('div');
+    el2.className = 'space-y-4';
+    el.innerHTML = '';
+    el.appendChild(el2);
+
+    el2.innerHTML = `
+      <select id="st-election" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+        ${elections.map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+      </select>
+      <div id="stations-list"><p class="text-zinc-500 text-sm">Loading…</p></div>
+      <details class="bg-zinc-900 border border-zinc-800 rounded-lg">
+        <summary class="px-4 py-3 cursor-pointer text-sm font-medium">Add station</summary>
+        <div class="px-4 pb-4 space-y-2">
+          <input id="st-name" placeholder="Station name" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+          <input id="st-code" placeholder="Code (e.g. N-01)" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+          <input id="st-region" type="number" placeholder="Region ID" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+          <div class="flex gap-2">
+            <input id="st-lat" type="number" step="any" placeholder="Latitude" class="flex-1 px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+            <input id="st-lng" type="number" step="any" placeholder="Longitude" class="flex-1 px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+          </div>
+          <input id="st-voters" type="number" placeholder="Registered voters" class="w-full px-3 py-2 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+          <button id="st-create" class="px-4 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium">Add station</button>
+          <p id="st-status" class="text-sm text-zinc-400"></p>
+        </div>
+      </details>`;
+
+    document.getElementById('st-election')?.addEventListener('change', (e) => { selElId = e.target.value; loadStations(); });
+    document.getElementById('st-create')?.addEventListener('click', async () => {
+      const statusEl = document.getElementById('st-status');
+      try {
+        await apiFetch(`/api/elections/${selElId}/stations`, { method: 'POST', body: JSON.stringify({
+          name: document.getElementById('st-name').value,
+          code: document.getElementById('st-code').value,
+          regionId: document.getElementById('st-region').value,
+          latitude: document.getElementById('st-lat').value || null,
+          longitude: document.getElementById('st-lng').value || null,
+          totalRegisteredVoters: document.getElementById('st-voters').value || null,
+        })});
+        statusEl.textContent = 'Station added!';
+        await loadStations();
+      } catch (e) { statusEl.textContent = 'Error: ' + e.message; }
+    });
+    await loadStations();
+  }
+
+  async function renderAdminAgents(el) {
+    const { elections } = await apiFetch('/api/elections');
+    let selElId = elections[0]?.id || '';
+    async function loadStationsForAgents() {
+      if (!selElId) return;
+      const { stations } = await apiFetch(`/api/elections/${selElId}/stations`);
+      const stSel = document.getElementById('agent-station');
+      if (!stSel) return;
+      stSel.innerHTML = stations.map((s) => `<option value="${s.id}">${esc(s.name)} (${esc(s.code)})</option>`).join('');
+      const agList = document.getElementById('agents-list');
+      if (agList) {
+        agList.innerHTML = stations.flatMap((s) => s.agents.map((a) =>
+          `<div class="flex items-center justify-between py-2 border-t border-zinc-800">
+            <div class="text-sm"><span class="font-medium">${esc(a.username)}</span> <span class="text-zinc-500">→ ${esc(s.name)}</span></div>
+            <button data-sid="${s.id}" data-uid="${esc(a.userId)}" class="del-agent text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-rose-900 text-zinc-400 hover:text-rose-300">Remove</button>
+          </div>`
+        )).join('') || '<p class="text-zinc-500 text-sm pt-2">No agents assigned</p>';
+        document.querySelectorAll('.del-agent').forEach((b) => b.addEventListener('click', async () => {
+          await apiFetch(`/api/stations/${b.dataset.sid}/agents/${b.dataset.uid}`, { method: 'DELETE', body: '{}' }).catch(() => {});
+          await loadStationsForAgents();
+        }));
+      }
+    }
+
+    el.innerHTML = `
+      <div class="space-y-4">
+        <select id="agent-election" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none">
+          ${elections.map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+        </select>
+        <div class="flex gap-2 flex-wrap">
+          <select id="agent-station" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none flex-1"></select>
+          <input id="agent-userid" placeholder="User ID" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none w-40">
+          <input id="agent-username" placeholder="Username" class="px-3 py-1.5 rounded bg-zinc-800 border border-zinc-700 text-sm outline-none w-36">
+          <button id="agent-assign" class="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium">Assign</button>
+        </div>
+        <p id="agent-status" class="text-sm text-zinc-400"></p>
+        <div id="agents-list"></div>
+      </div>`;
+
+    document.getElementById('agent-election')?.addEventListener('change', (e) => { selElId = e.target.value; loadStationsForAgents(); });
+    document.getElementById('agent-assign')?.addEventListener('click', async () => {
+      const statusEl = document.getElementById('agent-status');
+      const stId = document.getElementById('agent-station')?.value;
+      const userId = document.getElementById('agent-userid')?.value.trim();
+      const username = document.getElementById('agent-username')?.value.trim();
+      if (!stId || !userId || !username) { statusEl.textContent = 'All fields required'; return; }
+      try {
+        await apiFetch(`/api/stations/${stId}/agents`, { method: 'POST', body: JSON.stringify({ userId, username }) });
+        statusEl.textContent = 'Agent assigned!';
+        await loadStationsForAgents();
+      } catch (e) { statusEl.textContent = 'Error: ' + e.message; }
+    });
+    await loadStationsForAgents();
+  }
+
+  async function renderAdminAudit(el) {
+    const { submissions } = await apiFetch('/api/audit');
+    el.innerHTML = `
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left">
+            <th class="py-2 pr-3 font-medium text-zinc-400">Tx Hash</th>
+            <th class="py-2 pr-3 font-medium text-zinc-400">Station</th>
+            <th class="py-2 pr-3 font-medium text-zinc-400">Submitter</th>
+            <th class="py-2 pr-3 font-medium text-zinc-400">Block</th>
+            <th class="py-2 font-medium text-zinc-400">Indexed</th>
+          </tr></thead>
+          <tbody>${submissions.map((s) => `<tr class="border-t border-zinc-800">
+            <td class="py-2 pr-3 font-mono text-xs text-zinc-400 max-w-xs truncate">${esc(s.txHash)}</td>
+            <td class="py-2 pr-3 text-sm">${esc(s.stationName)}</td>
+            <td class="py-2 pr-3 text-sm text-zinc-400">${esc(s.submitterUsername || s.submitterPubkey)}</td>
+            <td class="py-2 pr-3 font-mono">${s.blockHeight}</td>
+            <td class="py-2 text-xs text-zinc-500">${timeAgo(s.indexedAt)}</td>
+          </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-zinc-500">No submissions yet</td></tr>'}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // ── App init ───────────────────────────────────────────────────────────────
+  async function init() {
+    const root = document.getElementById('root');
+    root.innerHTML = '<div id="nav"></div><main id="content" class="min-h-screen"></main>';
+
+    if (TOKEN) {
+      try {
+        CURRENT_USER = await apiFetch('/api/me');
+        ROLE = CURRENT_USER.role || 'observer';
+      } catch {
+        CURRENT_USER = null;
+        ROLE = 'observer';
+      }
+    }
+
+    rerenderNav();
+    await renderScreen(currentScreen());
+
+    // Auto-refresh dashboard every 10s
+    setInterval(() => {
+      if (currentScreen() === 'dashboard') {
+        const content = document.getElementById('content');
+        if (content) renderDashboard(content).catch(() => {});
+      }
+    }, 10000);
+  }
+
+  init().catch((e) => {
+    document.getElementById('root').innerHTML = `<div class="p-6 text-rose-400">App failed to start: ${esc(e.message)}</div>`;
+  });
   </script>
 </body>
 </html>
