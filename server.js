@@ -25,7 +25,9 @@ const jwt = require('jsonwebtoken');
 const { normalizeTx, QuickCountIndexer } = require('./lib/indexer');
 const memo = require('./lib/memo');
 const mock = require('./lib/mockledger');
-const { makeSource } = require('./lib/txsource');
+const { makeSource, getTransaction } = require('./lib/txsource');
+const { verifyPayment } = require('./lib/unlock');
+const { isKind, validateImageUpload } = require('./lib/attach');
 
 let Pool = null;
 try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
@@ -115,7 +117,7 @@ function buildDemoTxs() {
   let t = Date.parse('2026-06-19T08:00:00.000Z');
   const at = () => new Date(t += 60000).toISOString();
   const mk = (txId, from, to, amount, env) => ({ txId, from, to, amount, memo: memo.encode(env), createdAt: at() });
-  const eid = 'demo_el_general';
+  const eid = 'demo-election';
   const ev1 = evHash('Staging demo — tally sheet station 1');
   const ev2 = evHash('Staging demo — tally sheet station 3');
 
@@ -184,13 +186,15 @@ if (LOCAL_DEV) {
   app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
 }
 
-// Platform-compatible auth gate: verify a JWT if present and deny-by-default for
-// non-GET / /api/* routes. The Quick Count read endpoints live under
-// /__quickcount/* (GET) and are intentionally public — the server is read-only
-// and the chain is already public.
+// ── Pay-to-unlock config ─────────────────────────────────────────────────────
+const UNLOCK_RECIPIENT = process.env.UNLOCK_RECIPIENT_ADDRESS || '';
+const UNLOCK_PRICE = Math.max(0, parseInt(process.env.UNLOCK_PRICE_TOKENS || '0', 10) || 0);
+const UNLOCK_ENABLED = !!UNLOCK_RECIPIENT;
+
+// Paths that stay open without authentication.
 const JWT_SECRET = process.env.JWT_SECRET;
 const PUBLIC_API_PATHS = new Set(['/health']);
-const PUBLIC_PREFIXES = ['/__quickcount/', '/__mock/', '/explorer-api/'];
+const PUBLIC_PREFIXES = ['/__quickcount/', '/__mock/', '/explorer-api/', '/api/public/'];
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
   if (token && JWT_SECRET) { try { req.user = jwt.verify(token, JWT_SECRET); } catch { /* ignore */ } }
@@ -202,7 +206,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Public config for the frontend.
+// Public config for the frontend (SPA).
 app.get('/__quickcount/config', (_req, res) => {
   const personas = LOCAL_DEV ? [
     { label: 'Org — Citizens Count', addr: DEMO.orgA },
@@ -215,6 +219,26 @@ app.get('/__quickcount/config', (_req, res) => {
     localDev: LOCAL_DEV, staging: IS_STAGING, demo: IS_DEMO,
     treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
     methods: require('./lib/aggregate').METHODS, personas,
+  });
+});
+
+// Has this wallet paid to unlock? Unlock is global per wallet and permanent.
+async function walletUnlocked(pubkey) {
+  if (!pubkey || !pool) return false;
+  const { rows } = await pool.query('SELECT 1 FROM unlocks WHERE usernode_pubkey = $1', [pubkey]);
+  return rows.length > 0;
+}
+
+// Public config (staging banner, unlock pricing). Public so the
+// dashboard can read it before the viewer authenticates.
+app.get('/api/public/config', (_req, res) => {
+  res.json({
+    staging: IS_STAGING,
+    unlock: {
+      enabled: UNLOCK_ENABLED,
+      recipient: UNLOCK_RECIPIENT || null,
+      price: UNLOCK_PRICE,
+    },
   });
 });
 
@@ -255,6 +279,192 @@ app.get('/__quickcount/admin', (req, res) => {
   });
 });
 
+// ── Off-chain image attachments ──────────────────────────────────────────────
+// Candidate avatars and station C1-form scans. NON-CONSENSUS off-chain data:
+// not signed, not on-chain, never rebuilt by the indexer. Keyed by the same
+// logical ids the chain uses so uploads don't depend on indexing lag.
+
+// Authenticated: upload (or replace) an attachment. Route-scoped JSON parser
+// with a raised limit — the global express.json() caps bodies at 100 KB.
+const uploadJson = express.json({ limit: '4mb' });
+app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, res) => {
+  try {
+    const { eid, kind } = req.params;
+    const refId = Number(req.params.refId);
+    if (!isKind(kind)) return res.status(400).json({ error: 'unknown attachment kind' });
+    if (!Number.isInteger(refId) || refId <= 0) return res.status(400).json({ error: 'bad ref id' });
+
+    const { mime, data_base64 } = req.body || {};
+    if (typeof data_base64 !== 'string' || !data_base64) {
+      return res.status(400).json({ error: 'data_base64 required' });
+    }
+    let buf;
+    try { buf = Buffer.from(data_base64, 'base64'); } catch { buf = null; }
+    const check = validateImageUpload(mime, buf);
+    if (!check.ok) return res.status(check.status || 400).json({ error: check.error });
+
+    await pool.query(
+      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       ON CONFLICT (eid, kind, ref_id)
+       DO UPDATE SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
+                     byte_size = EXCLUDED.byte_size, uploader_pubkey = EXCLUDED.uploader_pubkey,
+                     updated_at = NOW()`,
+      [eid, kind, refId, mime, buf, buf.length, (req.user && req.user.usernode_pubkey) || null]
+    );
+    res.json({ ok: true, eid, kind, ref_id: refId, byte_size: buf.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: serve an attachment's bytes so the logged-out dashboard can load it.
+app.get('/api/public/elections/:eid/attachments/:kind/:refId', async (req, res) => {
+  try {
+    const { eid, kind } = req.params;
+    const refId = Number(req.params.refId);
+    if (!isKind(kind) || !Number.isInteger(refId) || refId <= 0) {
+      return res.status(404).json({ error: 'not found' });
+    }
+    const { rows } = await pool.query(
+      'SELECT mime, bytes FROM attachments WHERE eid = $1 AND kind = $2 AND ref_id = $3',
+      [eid, kind, refId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.set('Content-Type', rows[0].mime);
+    res.set('Cache-Control', 'public, max-age=60');
+    res.send(rows[0].bytes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: list elections with counts (backed by in-memory indexer).
+app.get('/api/public/elections', (_req, res) => {
+  try {
+    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    res.json({
+      elections: visible.map((el) => {
+        const s = indexer.electionSummary(el);
+        return {
+          eid: s.eid,
+          name: s.name,
+          candidate_count: s.candidateCount,
+          station_count: s.stationCount,
+          reported_count: s.reportedCount,
+        };
+      }),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: election detail with pay-to-unlock gate (backed by in-memory indexer).
+app.get('/api/public/elections/:eid', async (req, res) => {
+  try {
+    const eid = req.params.eid;
+    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    if (!visible.some((el) => el.eid === eid)) return res.status(404).json({ error: 'not found' });
+    const d = indexer.electionDetail(eid, 'latest');
+    if (!d) return res.status(404).json({ error: 'not found' });
+
+    // Resolve avatar and C1 attachment URLs from the off-chain attachments table.
+    let hasAvatar = new Set(), hasC1 = new Set();
+    if (pool) {
+      const att = (await pool.query('SELECT kind, ref_id FROM attachments WHERE eid = $1', [eid])).rows;
+      hasAvatar = new Set(att.filter((a) => a.kind === 'cand_avatar').map((a) => Number(a.ref_id)));
+      hasC1 = new Set(att.filter((a) => a.kind === 'station_c1').map((a) => Number(a.ref_id)));
+    }
+    const avatarUrl = (cid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/cand_avatar/${cid}`;
+    const c1Url = (sid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/station_c1/${sid}`;
+
+    const candidates = d.candidates.map((c) => ({
+      cid: c.cid, name: c.name,
+      avatar: hasAvatar.has(Number(c.cid)) ? avatarUrl(Number(c.cid)) : null,
+    }));
+
+    // Pay-to-unlock gate. The auth middleware has already populated req.user
+    // from any token, even on this public path, so one endpoint serves both
+    // locked (anonymous / unpaid) and unlocked (paid wallet) viewers.
+    const unlocked = await walletUnlocked(req.user && req.user.usernode_pubkey);
+
+    const base = {
+      election: { eid: d.election.eid, name: d.election.name, root_pubkey: d.election.orgAddr },
+      candidates,
+      reporting: d.reporting,
+      lastUpdated: d.lastUpdated,
+      locked: !unlocked,
+    };
+
+    if (unlocked) {
+      const stations = d.stations.map((s) => ({
+        sid: s.sid, name: s.name, reported: s.reported,
+        votes: s.votes, tot: s.tot, inv: s.inv, at: s.at,
+        c1: hasC1.has(s.sid) ? c1Url(s.sid) : null,
+      }));
+      return res.json(Object.assign(base, { stations, tally: d.tally }));
+    }
+
+    // Locked: withhold vote figures so the blur cannot be defeated in dev-tools.
+    // Keep structure (names, reported flag, reporting counts) for the placeholder UI.
+    const lockedStations = d.stations.map((s) => ({
+      sid: s.sid, name: s.name, reported: s.reported,
+      votes: null, tot: null, inv: null, at: null,
+    }));
+    return res.json(Object.assign(base, { stations: lockedStations, tally: null }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Authenticated: verify an on-chain unlock payment and record a permanent
+// per-wallet unlock. NOT in PUBLIC_API_PATHS — stays behind the JWT gate.
+app.post('/api/unlock/verify', async (req, res) => {
+  try {
+    const pubkey = req.user && req.user.usernode_pubkey;
+    if (!pubkey) return res.status(400).json({ error: 'Link a Usernode wallet first' });
+    if (!UNLOCK_ENABLED) return res.status(503).json({ error: 'Unlocking is not configured' });
+
+    // Already paid → idempotent success (never charge twice).
+    if (await walletUnlocked(pubkey)) return res.json({ unlocked: true });
+
+    if (IS_STAGING) {
+      // No live chain in staging — record a clearly-labelled demo unlock so the
+      // unlocked view is reviewable without a real payment.
+      await pool.query(
+        `INSERT INTO unlocks (usernode_pubkey, tx_id, amount, recipient, created_at)
+         VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
+        [pubkey, 'staging-demo-' + pubkey, UNLOCK_PRICE, UNLOCK_RECIPIENT]
+      );
+      return res.json({ unlocked: true, demo: true });
+    }
+
+    const { tx_id } = req.body || {};
+    if (!tx_id) return res.status(400).json({ error: 'tx_id required' });
+
+    // Independently fetch + verify the payment against the chain.
+    const raw = await getTransaction({ txId: tx_id, recipient: UNLOCK_RECIPIENT });
+    const tx = normalizeTx(raw || {});
+    const v = verifyPayment(tx, { recipient: UNLOCK_RECIPIENT, price: UNLOCK_PRICE, sender: pubkey });
+    if (!v.ok) return res.status(400).json({ error: 'Payment could not be verified', reason: v.reason });
+
+    try {
+      await pool.query(
+        `INSERT INTO unlocks (usernode_pubkey, tx_id, amount, recipient, created_at)
+         VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
+        [pubkey, tx.txId, Number(tx.amount) || UNLOCK_PRICE, UNLOCK_RECIPIENT]
+      );
+    } catch (e) {
+      // tx_id UNIQUE violation → this payment was already claimed by a wallet.
+      return res.status(400).json({ error: 'This payment has already been used' });
+    }
+    res.json({ unlocked: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // SPA shell. The public dashboard works without a wallet, so serve index.html
@@ -274,6 +484,34 @@ async function migrate() {
       created_at TIMESTAMPTZ,
       seen_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+  // Permanent per-wallet unlock records (pay-to-unlock). Keyed on the payer's
+  // wallet; tx_id UNIQUE prevents one payment being replayed by another wallet.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS unlocks (
+      usernode_pubkey TEXT PRIMARY KEY,
+      tx_id TEXT UNIQUE,
+      amount INTEGER,
+      recipient TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  // Payment + wallet data — private, so staging gets schema only (no rows).
+  await pool.query(`COMMENT ON TABLE unlocks IS 'staging:private'`);
+  // Off-chain image attachments (candidate avatars + station C1 scans).
+  // PUBLIC table: these images are shown on the public dashboard, so a stranger
+  // seeing every row is by design. No FK to candidates/stations on purpose —
+  // rows may not be indexed yet when an organizer uploads at create time.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS attachments (
+      eid TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      ref_id INTEGER NOT NULL,
+      mime TEXT NOT NULL,
+      bytes BYTEA NOT NULL,
+      byte_size INTEGER NOT NULL,
+      uploader_pubkey TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (eid, kind, ref_id)
+    )`);
 }
 
 async function loadFromDb() {
@@ -290,10 +528,36 @@ async function loadFromDb() {
   }
 }
 
+// Staging-only demo image attachments so the avatar/C1 UI is visible in PR previews.
+// Election data is seeded into the in-memory indexer by seedDemo(); only the
+// off-chain attachments table needs direct DB rows here.
+async function seedStaging() {
+  if (!IS_STAGING || !pool) return;
+  const root = 'ut1demo00000000000000000000000000000000';
+  const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6aGFTEMLQkAF/tKAS/fz4YAAAAASUVORK5CYII=';
+  const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQTX6NFTEMLQkADGRcwcht3uAAAAAASUVORK5CYII=';
+  const GRAY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGMoLKzCihiGlgQA/HdXAZV6UO0AAAAASUVORK5CYII=';
+  const demoAtt = [
+    ['cand_avatar', 1, RED_PNG],
+    ['cand_avatar', 2, BLUE_PNG],
+    ['station_c1', 1, GRAY_PNG],
+  ];
+  for (const [kind, refId, b64] of demoAtt) {
+    const buf = Buffer.from(b64, 'base64');
+    await pool.query(
+      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
+       VALUES ('demo-election', $1, $2, 'image/png', $3, $4, $5, NOW())
+       ON CONFLICT (eid, kind, ref_id) DO NOTHING`,
+      [kind, refId, buf, buf.length, root]
+    );
+  }
+}
+
 async function start() {
   await migrate();
   await loadFromDb();
   seedDemo();
+  await seedStaging();
   await pollOnce();
   const interval = LOCAL_DEV ? 2000 : 4000;
   setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), interval);
