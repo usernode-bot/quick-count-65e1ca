@@ -6,11 +6,12 @@ const multer = require('multer');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 
-const { pollOnce, makePrismaStore } = require('./lib/indexer');
-const { aggregate } = require('./lib/aggregate');
+const { pollOnce, makePrismaStore, normalizeTx, applyTx } = require('./lib/indexer');
+const { aggregate, computeTally, reporting } = require('./lib/aggregate');
 const blockchain = require('./lib/blockchain');
 const storage = require('./lib/storage');
 const memo = require('./lib/memo');
+const { isKind, validateImageUpload } = require('./lib/attach');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -138,6 +139,62 @@ app.get('/api/public/elections/:txHash', async (req, res) => {
     const agg = aggregate(el.aggregation, submissions, el.candidates, el.stations, el.manualTally);
     res.json({ election: el, ...agg });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Off-chain image attachments ──────────────────────────────────────────────
+// Candidate avatars and station C1-form scans stored in the `attachments` table.
+// Keyed by eid (election txHash) + kind + ref_id so uploads work before indexing.
+
+const uploadJson = express.json({ limit: '4mb' });
+app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, res) => {
+  try {
+    const { eid, kind } = req.params;
+    const refId = Number(req.params.refId);
+    if (!isKind(kind)) return res.status(400).json({ error: 'unknown attachment kind' });
+    if (!Number.isInteger(refId) || refId <= 0) return res.status(400).json({ error: 'bad ref id' });
+
+    const { mime, data_base64 } = req.body || {};
+    if (typeof data_base64 !== 'string' || !data_base64) {
+      return res.status(400).json({ error: 'data_base64 required' });
+    }
+    let buf;
+    try { buf = Buffer.from(data_base64, 'base64'); } catch { buf = null; }
+    const check = validateImageUpload(mime, buf);
+    if (!check.ok) return res.status(check.status || 400).json({ error: check.error });
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       ON CONFLICT (eid, kind, ref_id)
+       DO UPDATE SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
+                     byte_size = EXCLUDED.byte_size, uploader_pubkey = EXCLUDED.uploader_pubkey,
+                     updated_at = NOW()`,
+      eid, kind, refId, mime, buf, buf.length, (req.user && req.user.usernode_pubkey) || null
+    );
+    res.json({ ok: true, eid, kind, ref_id: refId, byte_size: buf.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/public/elections/:eid/attachments/:kind/:refId', async (req, res) => {
+  try {
+    const { eid, kind } = req.params;
+    const refId = Number(req.params.refId);
+    if (!isKind(kind) || !Number.isInteger(refId) || refId <= 0) {
+      return res.status(404).json({ error: 'not found' });
+    }
+    const rows = await prisma.$queryRawUnsafe(
+      'SELECT mime, bytes FROM attachments WHERE eid = $1 AND kind = $2 AND ref_id = $3',
+      eid, kind, refId
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.set('Content-Type', rows[0].mime);
+    res.set('Cache-Control', 'public, max-age=60');
+    res.send(rows[0].bytes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/public/orgs', async (req, res) => {
@@ -550,6 +607,23 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+async function migrate() {
+  // Off-chain image attachments — PUBLIC table (candidate avatars + station C1 scans).
+  // No FK to elections/candidates/stations so uploads work before indexing.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS attachments (
+      eid TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      ref_id INTEGER NOT NULL,
+      mime TEXT NOT NULL,
+      bytes BYTEA NOT NULL,
+      byte_size INTEGER NOT NULL,
+      uploader_pubkey TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (eid, kind, ref_id)
+    )`);
+}
+
 // ── Staging seed ─────────────────────────────────────────────────────────────
 
 async function seedStaging() {
@@ -607,12 +681,27 @@ async function seedStaging() {
     await prisma.$executeRawUnsafe(`SELECT setval('"${table}_id_seq"', COALESCE((SELECT MAX(id) FROM "${table}"), 0) + 1, false)`);
   }
 
+  // Demo image attachments for the avatar/C1 UI: solid-colour 8×8 PNGs.
+  const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6aGFTEMLQkAF/tKAS/fz4YAAAAASUVORK5CYII=';
+  const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQTX6NFTEMLQkADGRcwcht3uAAAAAASUVORK5CYII=';
+  const GRAY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGMoLKzCihiGlgQA/HdXAZV6UO0AAAAASUVORK5CYII=';
+  for (const [kind, refId, b64] of [['cand_avatar', 1, RED_PNG], ['cand_avatar', 2, BLUE_PNG], ['station_c1', 1, GRAY_PNG]]) {
+    const buf = Buffer.from(b64, 'base64');
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
+       VALUES ('demo-election', $1, $2, 'image/png', $3, $4, $5, NOW())
+       ON CONFLICT (eid, kind, ref_id) DO NOTHING`,
+      kind, refId, buf, buf.length, 'seed-pubkey-admin'
+    );
+  }
+
   console.log('[seed] staging data inserted');
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  await migrate();
   await seedStaging();
 
   // Indexer loop

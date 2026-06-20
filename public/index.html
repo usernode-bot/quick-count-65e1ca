@@ -188,6 +188,7 @@ async function renderScreen(screen) {
   if (screen === 'evidence') return renderEvidence();
   if (screen === 'disputes') return renderDisputes();
   if (screen === 'submit') return renderSubmit();
+  if (screen === 'create') return renderCreate();
   if (screen === 'admin') return renderAdmin();
   return renderDashboard();
 }
@@ -600,6 +601,171 @@ async function submitEvidence() {
     document.getElementById('ev-submission').value = '';
     document.getElementById('ev-file').value = '';
   } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+}
+
+// ── Create Election (wallet-based) ─────────────────────────────────────────
+async function renderCreate() {
+  if (!TOKEN) { setContent('<p class="text-zinc-400 text-sm">Login required to create elections.</p>'); return; }
+
+  async function bridgeReady() {
+    return typeof window.sendTransaction === 'function';
+  }
+
+  const ALLOWED_IMG = ['image/png', 'image/jpeg', 'image/webp'];
+  const MAX_IMG_BYTES = 2 * 1024 * 1024;
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+      fr.onerror = () => reject(new Error('read failed'));
+      fr.readAsDataURL(file);
+    });
+  }
+
+  async function uploadRowImage(eid, kind, refId, file) {
+    if (!file) return true;
+    try {
+      const data_base64 = await fileToBase64(file);
+      const r = await fetch('/api/elections/' + encodeURIComponent(eid) + '/attachments/' + kind + '/' + refId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-usernode-token': TOKEN },
+        body: JSON.stringify({ mime: file.type, data_base64 }),
+      });
+      return r.ok;
+    } catch { return false; }
+  }
+
+  setContent(`
+    <div>
+      <h2 class="text-base font-semibold mb-4">Create Election</h2>
+      <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5 space-y-4">
+        <div>
+          <label class="text-xs text-zinc-400 block mb-1">Election Name</label>
+          <input id="el-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="My Election">
+        </div>
+        <div>
+          <label class="text-xs text-zinc-400 block mb-2">Candidates</label>
+          <div id="candidates" class="space-y-2 mb-2"></div>
+          <button id="add-candidate" class="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded">+ Add Candidate</button>
+        </div>
+        <div>
+          <label class="text-xs text-zinc-400 block mb-2">Stations</label>
+          <div id="stations" class="space-y-2 mb-2"></div>
+          <button id="add-station" class="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded">+ Add Station</button>
+        </div>
+        <p id="create-status" class="text-xs text-zinc-400"></p>
+        <button id="create-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded">Publish on Chain</button>
+        <div id="create-done" class="hidden text-sm text-green-400">
+          Election published! Dashboard: <a id="dash-link" href="#" class="underline text-indigo-400" target="_blank"></a>
+        </div>
+      </div>
+    </div>`);
+
+  function addRow(containerId, placeholder, imgKind, imgLabel) {
+    const wrap = document.createElement('div');
+    wrap.dataset.imgKind = imgKind;
+    wrap._imgFile = null;
+    wrap.innerHTML =
+      '<div class="flex gap-2 items-center">'
+      + '<label class="img-pick relative shrink-0 h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-violet-500 cursor-pointer flex items-center justify-center overflow-hidden" title="' + imgLabel + '">'
+      + '<span class="img-ph text-zinc-500 text-lg leading-none">+</span>'
+      + '<img class="img-prev hidden absolute inset-0 h-full w-full object-cover" alt="">'
+      + '<input type="file" accept="image/png,image/jpeg,image/webp" class="img-input hidden">'
+      + '</label>'
+      + '<input placeholder="' + placeholder + '" class="row-input flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">'
+      + '<button class="row-del px-3 self-stretch rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">\xd7</button>'
+      + '</div>'
+      + '<p class="img-err hidden text-xs text-rose-400 mt-1 ml-12"></p>';
+    wrap.querySelector('.row-del').addEventListener('click', () => wrap.remove());
+
+    const input = wrap.querySelector('.img-input');
+    const prev = wrap.querySelector('.img-prev');
+    const ph = wrap.querySelector('.img-ph');
+    const err = wrap.querySelector('.img-err');
+    input.addEventListener('change', () => {
+      err.classList.add('hidden'); err.textContent = '';
+      const f = input.files && input.files[0];
+      if (!f) return;
+      if (!ALLOWED_IMG.includes(f.type)) {
+        input.value = ''; wrap._imgFile = null;
+        err.textContent = 'Unsupported image type (PNG, JPEG or WebP).'; err.classList.remove('hidden');
+        return;
+      }
+      if (f.size > MAX_IMG_BYTES) {
+        input.value = ''; wrap._imgFile = null;
+        err.textContent = 'Image too large (max 2 MB).'; err.classList.remove('hidden');
+        return;
+      }
+      wrap._imgFile = f;
+      prev.src = URL.createObjectURL(f);
+      prev.classList.remove('hidden'); ph.classList.add('hidden');
+    });
+    document.getElementById(containerId).appendChild(wrap);
+  }
+
+  document.getElementById('add-candidate').addEventListener('click', () => addRow('candidates', 'Candidate name', 'cand_avatar', 'Candidate photo'));
+  document.getElementById('add-station').addEventListener('click', () => addRow('stations', 'Station name / label', 'station_c1', 'Scan C1 Form'));
+  addRow('candidates', 'Candidate name', 'cand_avatar', 'Candidate photo');
+  addRow('candidates', 'Candidate name', 'cand_avatar', 'Candidate photo');
+  addRow('stations', 'Station name / label', 'station_c1', 'Scan C1 Form');
+
+  function rowEntries(containerId) {
+    return Array.from(document.querySelectorAll('#' + containerId + ' > div[data-img-kind]'))
+      .map((wrap) => ({ name: wrap.querySelector('.row-input').value.trim(), file: wrap._imgFile, kind: wrap.dataset.imgKind }))
+      .filter((e) => e.name);
+  }
+
+  document.getElementById('create-btn').addEventListener('click', async () => {
+    const name = document.getElementById('el-name').value.trim();
+    const candEntries = rowEntries('candidates');
+    const stnEntries = rowEntries('stations');
+    const cands = candEntries.map((e) => e.name);
+    const stns = stnEntries.map((e) => e.name);
+    const status = document.getElementById('create-status');
+    if (!name || !cands.length || !stns.length) {
+      status.textContent = 'Add an election name, at least one candidate and one station.';
+      return;
+    }
+    const ready = await bridgeReady();
+    if (!ready) { status.textContent = 'Wallet bridge unavailable — open this app inside Usernode.'; return; }
+    const btn = document.getElementById('create-btn');
+    btn.disabled = true;
+    try {
+      const addr = document.querySelector('meta[name="app-pubkey"]')?.content || '';
+      const total = 1 + cands.length + stns.length;
+      let done = 0;
+      const tick = (msg) => { done++; status.textContent = '(' + done + '/' + total + ') ' + msg; };
+      const elMemo = JSON.stringify({ app: 'quickcount', type: 'election_create', name });
+      tick('Creating election…');
+      const elTx = await window.sendTransaction(addr, 0, elMemo);
+      const eid = elTx && (elTx.txHash || elTx.hash) ? (elTx.txHash || elTx.hash) : '';
+      const candMemo = (e, i, n) => JSON.stringify({ app: 'quickcount', type: 'candidate_add', eid: e, idx: i, name: n });
+      const stnMemo = (e, i, n) => JSON.stringify({ app: 'quickcount', type: 'station_add', eid: e, idx: i, name: n });
+      let imgFailures = 0;
+      for (let i = 0; i < cands.length; i++) {
+        await window.sendTransaction(addr, 0, candMemo(eid, i + 1, cands[i]));
+        if (candEntries[i].file && !(await uploadRowImage(eid, 'cand_avatar', i + 1, candEntries[i].file))) imgFailures++;
+        tick('Added candidate "' + cands[i] + '"');
+      }
+      for (let j = 0; j < stns.length; j++) {
+        await window.sendTransaction(addr, 0, stnMemo(eid, j + 1, stns[j]));
+        if (stnEntries[j].file && !(await uploadRowImage(eid, 'station_c1', j + 1, stnEntries[j].file))) imgFailures++;
+        tick('Added station "' + stns[j] + '"');
+      }
+
+      const url = location.origin + '/dashboard.html?eid=' + encodeURIComponent(eid);
+      const link = document.getElementById('dash-link');
+      link.href = url; link.textContent = url;
+      document.getElementById('create-done').classList.remove('hidden');
+      status.textContent = 'All ' + total + ' transactions confirmed.'
+        + (imgFailures ? '  (' + imgFailures + ' image upload' + (imgFailures > 1 ? 's' : '') + ' failed — the election still published.)' : '');
+    } catch (e) {
+      status.textContent = 'Failed: ' + (e.message || e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 // ── Disputes ───────────────────────────────────────────────────────────────
