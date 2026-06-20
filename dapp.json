@@ -18,6 +18,10 @@
       "name": "Demo election shows latest-submission tally",
       "path": "/dashboard.html?eid=demo-election",
       "expectText": "stations reported"
+    },
+    {
+      "name": "Seeded candidate avatar serves an image",
+      "path": "/api/public/elections/demo-election/attachments/cand_avatar/1"
     }
   ]
 }

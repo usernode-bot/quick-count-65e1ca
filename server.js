@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const txsource = require('./lib/txsource');
 const { normalizeTx, applyTx } = require('./lib/indexer');
 const { latestPerStation, computeTally, reporting } = require('./lib/aggregate');
+const { isKind, validateImageUpload } = require('./lib/attach');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -135,6 +136,69 @@ app.post('/api/elections/track', async (req, res) => {
   }
 });
 
+// ── Off-chain image attachments ──────────────────────────────────────────────
+// Candidate avatars and station C1-form scans. These are NON-CONSENSUS,
+// off-chain data: not signed, not on-chain, never rebuilt by the indexer. They
+// live in their own table keyed by the same logical ids the chain uses
+// (eid + cid / eid + sid) so uploads don't depend on the election being indexed
+// yet (production indexing lag; staging has no chain at all).
+
+// Authenticated: upload (or replace) an attachment. Route-scoped JSON parser
+// with a raised limit — the global express.json() caps bodies at 100 KB, which
+// a 2 MB base64 image would blow past before reaching this handler.
+const uploadJson = express.json({ limit: '4mb' });
+app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, res) => {
+  try {
+    const { eid, kind } = req.params;
+    const refId = Number(req.params.refId);
+    if (!isKind(kind)) return res.status(400).json({ error: 'unknown attachment kind' });
+    if (!Number.isInteger(refId) || refId <= 0) return res.status(400).json({ error: 'bad ref id' });
+
+    const { mime, data_base64 } = req.body || {};
+    if (typeof data_base64 !== 'string' || !data_base64) {
+      return res.status(400).json({ error: 'data_base64 required' });
+    }
+    let buf;
+    try { buf = Buffer.from(data_base64, 'base64'); } catch { buf = null; }
+    const check = validateImageUpload(mime, buf);
+    if (!check.ok) return res.status(check.status || 400).json({ error: check.error });
+
+    await pool.query(
+      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       ON CONFLICT (eid, kind, ref_id)
+       DO UPDATE SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
+                     byte_size = EXCLUDED.byte_size, uploader_pubkey = EXCLUDED.uploader_pubkey,
+                     updated_at = NOW()`,
+      [eid, kind, refId, mime, buf, buf.length, (req.user && req.user.usernode_pubkey) || null]
+    );
+    res.json({ ok: true, eid, kind, ref_id: refId, byte_size: buf.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: serve an attachment's bytes so the logged-out dashboard can load it.
+app.get('/api/public/elections/:eid/attachments/:kind/:refId', async (req, res) => {
+  try {
+    const { eid, kind } = req.params;
+    const refId = Number(req.params.refId);
+    if (!isKind(kind) || !Number.isInteger(refId) || refId <= 0) {
+      return res.status(404).json({ error: 'not found' });
+    }
+    const { rows } = await pool.query(
+      'SELECT mime, bytes FROM attachments WHERE eid = $1 AND kind = $2 AND ref_id = $3',
+      [eid, kind, refId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.set('Content-Type', rows[0].mime);
+    res.set('Cache-Control', 'public, max-age=60');
+    res.send(rows[0].bytes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Public: list elections with counts.
 app.get('/api/public/elections', async (_req, res) => {
   try {
@@ -167,8 +231,15 @@ app.get('/api/public/elections/:eid', async (req, res) => {
     const el = (await pool.query('SELECT eid, name, root_pubkey, created_at FROM elections WHERE eid = $1', [eid])).rows[0];
     if (!el) return res.status(404).json({ error: 'not found' });
 
+    // Which candidates/stations have an off-chain image attachment.
+    const att = (await pool.query('SELECT kind, ref_id FROM attachments WHERE eid = $1', [eid])).rows;
+    const hasAvatar = new Set(att.filter((a) => a.kind === 'cand_avatar').map((a) => Number(a.ref_id)));
+    const hasC1 = new Set(att.filter((a) => a.kind === 'station_c1').map((a) => Number(a.ref_id)));
+    const avatarUrl = (cid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/cand_avatar/${cid}`;
+    const c1Url = (sid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/station_c1/${sid}`;
+
     const candidates = (await pool.query('SELECT cid, name FROM candidates WHERE eid = $1 ORDER BY cid', [eid])).rows
-      .map((c) => ({ cid: Number(c.cid), name: c.name }));
+      .map((c) => ({ cid: Number(c.cid), name: c.name, avatar: hasAvatar.has(Number(c.cid)) ? avatarUrl(Number(c.cid)) : null }));
     const stations = (await pool.query('SELECT sid, name FROM stations WHERE eid = $1 ORDER BY sid', [eid])).rows
       .map((s) => ({ sid: Number(s.sid), name: s.name }));
     const results = (await pool.query(
@@ -197,6 +268,7 @@ app.get('/api/public/elections/:eid', async (req, res) => {
         inv: r ? r.inv : null,
         at: r ? r.created_at : null,
         submitter: r ? r.submitter_pubkey : null,
+        c1: hasC1.has(s.sid) ? c1Url(s.sid) : null,
       };
     });
     let lastUpdated = null;
@@ -278,6 +350,22 @@ async function migrate() {
       cursor TEXT,
       added_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+  // Off-chain image attachments (candidate avatars + station C1 scans).
+  // PUBLIC table: these images are shown on the public dashboard, so a stranger
+  // seeing every row is by design. No FK to candidates/stations on purpose —
+  // rows may not be indexed yet when an organizer uploads at create time.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS attachments (
+      eid TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      ref_id INTEGER NOT NULL,
+      mime TEXT NOT NULL,
+      bytes BYTEA NOT NULL,
+      byte_size INTEGER NOT NULL,
+      uploader_pubkey TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (eid, kind, ref_id)
+    )`);
 }
 
 // Staging-only demo data so the public dashboard isn't empty in PR previews.
@@ -313,6 +401,27 @@ async function seedStaging() {
        ('demo-r2', 'demo-election', 1, $1, '{"1":52,"2":71}'::jsonb, 128, 5, NOW() - INTERVAL '2 minutes'),
        ('demo-r3', 'demo-election', 2, $1, '{"1":80,"2":35}'::jsonb, 120, 5, NOW() - INTERVAL '10 minutes')
      ON CONFLICT (tx_id) DO NOTHING`, [root]);
+
+  // Obviously-fake demo image attachments so the new avatar/C1 UI is visible in
+  // PR previews: solid red/blue 8×8 PNG avatars for the two demo candidates and
+  // a gray placeholder "C1 scan" for Demo Station A.
+  const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6aGFTEMLQkAF/tKAS/fz4YAAAAASUVORK5CYII=';
+  const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQTX6NFTEMLQkADGRcwcht3uAAAAAASUVORK5CYII=';
+  const GRAY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGMoLKzCihiGlgQA/HdXAZV6UO0AAAAASUVORK5CYII=';
+  const demoAtt = [
+    ['cand_avatar', 1, RED_PNG],
+    ['cand_avatar', 2, BLUE_PNG],
+    ['station_c1', 1, GRAY_PNG],
+  ];
+  for (const [kind, refId, b64] of demoAtt) {
+    const buf = Buffer.from(b64, 'base64');
+    await pool.query(
+      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
+       VALUES ('demo-election', $1, $2, 'image/png', $3, $4, $5, NOW())
+       ON CONFLICT (eid, kind, ref_id) DO NOTHING`,
+      [kind, refId, buf, buf.length, root]
+    );
+  }
 }
 
 async function start() {
