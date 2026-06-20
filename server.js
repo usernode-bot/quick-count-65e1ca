@@ -7,6 +7,10 @@ const { uploadToIPFS } = require('./lib/ipfs');
 const { getBalance, getTransaction } = require('./lib/blockchain');
 const { startIndexer, reindexAll, decodeMemo, indexTransaction } = require('./lib/indexer');
 
+const txsource = require('./lib/txsource');
+const { normalizeTx, applyTx } = require('./lib/indexer');
+const { latestPerStation, computeTally, reporting } = require('./lib/aggregate');
+
 const app = express();
 const port = process.env.PORT || 3000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -15,8 +19,12 @@ const APP_PUBKEY = process.env.APP_PUBKEY || '';
 const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 
+// Paths that stay open without authentication.
 const PUBLIC_API_PATHS = new Set(['/health', '/api/config']);
-const PUBLIC_PREFIXES = ['/explorer-api/'];
+// Public path prefixes that bypass the JWT gate. `/explorer-api/*` is the
+// platform's transparent explorer proxy. `/api/public/*` serves the public
+// live dashboard, which logged-out visitors must be able to read.
+const PUBLIC_PREFIXES = ['/explorer-api/', '/api/public/'];
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -24,6 +32,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 app.use('/explorer-api', express.raw({ type: '*/*', limit: '2mb' }));
 app.use(express.json());
 
+// Verify platform-issued JWT if present, then enforce auth on anything not
+// explicitly marked public.
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
   if (token && JWT_SECRET) {
@@ -31,7 +41,7 @@ app.use((req, res, next) => {
   }
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
-    if (PUBLIC_PREFIXES.some(p => req.path.startsWith(p))) return next();
+    if (PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
     if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
@@ -82,10 +92,184 @@ app.use('/explorer-api', async (req, res) => {
   } catch (err) { res.status(502).json({ error: 'Upstream error: ' + err.message }); }
 });
 
+// ── Read-model store (PgStore) used by the chain indexer ────────────────────
+// All writes are insert-if-absent so replaying a tx_id is a no-op.
+const store = {
+  async getElection(eid) {
+    const { rows } = await pool.query('SELECT eid, name, root_pubkey, creator_pubkey FROM elections WHERE eid = $1', [eid]);
+    return rows[0] || null;
+  },
+  async putElection(r) {
+    await pool.query(
+      `INSERT INTO elections (eid, name, root_pubkey, creator_pubkey, tx_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, NOW()))
+       ON CONFLICT (eid) DO NOTHING`,
+      [r.eid, r.name, r.root_pubkey, r.creator_pubkey, r.tx_id, r.created_at]
+    );
+  },
+  async putCandidate(r) {
+    await pool.query(
+      `INSERT INTO candidates (eid, cid, name, tx_id) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (eid, cid) DO NOTHING`,
+      [r.eid, r.cid, r.name, r.tx_id]
+    );
+  },
+  async putStation(r) {
+    await pool.query(
+      `INSERT INTO stations (eid, sid, name, tx_id) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (eid, sid) DO NOTHING`,
+      [r.eid, r.sid, r.name, r.tx_id]
+    );
+  },
+  async putResult(r) {
+    await pool.query(
+      `INSERT INTO results (tx_id, eid, sid, submitter_pubkey, votes, tot, inv, created_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, COALESCE($8::timestamptz, NOW()))
+       ON CONFLICT (tx_id) DO NOTHING`,
+      [r.tx_id, r.eid, r.sid, r.submitter_pubkey, JSON.stringify(r.votes || {}), r.tot, r.inv, r.created_at]
+    );
+  },
+};
+
+// ── Chain indexer poll loop ──────────────────────────────────────────────────
+async function pollOnce() {
+  const ws = (await pool.query('SELECT address, cursor FROM watched_addresses')).rows;
+  for (const w of ws) {
+    let txs = [];
+    try {
+      txs = await txsource.listTransactions({ account: w.address, sinceCursor: w.cursor });
+    } catch { continue; }
+    if (!Array.isArray(txs) || !txs.length) continue;
+    const norm = txs.map(normalizeTx).filter((t) => t.txId);
+    // Apply oldest-first so an election is indexed before its children.
+    norm.sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    let cursor = w.cursor;
+    for (const t of norm) {
+      try { await applyTx(store, t); } catch (e) { console.error('applyTx failed:', e.message); }
+      if (t.createdAt && (!cursor || t.createdAt > cursor)) cursor = t.createdAt;
+    }
+    if (cursor && cursor !== w.cursor) {
+      await pool.query('UPDATE watched_addresses SET cursor = $2 WHERE address = $1', [w.address, cursor]);
+    }
+  }
+}
+
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/api/config', (_req, res) => res.json({ isStaging: IS_STAGING, appPubkey: APP_PUBKEY }));
 
-// --- Elections ---
+// Public config (staging banner). Public so the dashboard can read it without auth.
+app.get('/api/public/config', (_req, res) => {
+  res.json({ staging: IS_STAGING });
+});
+
+// Authenticated: who am I (header / wallet hint for the app shell).
+app.get('/api/me', (req, res) => {
+  res.json({ username: req.user.username, usernode_pubkey: req.user.usernode_pubkey || null, staging: IS_STAGING });
+});
+
+// Authenticated: register a newly-created election's root address so the
+// indexer starts watching it. Carries NO election content — the chain remains
+// the source of truth.
+app.post('/api/elections/track', async (req, res) => {
+  try {
+    const { root_pubkey, tx_id } = req.body || {};
+    if (!root_pubkey) return res.status(400).json({ error: 'root_pubkey required' });
+    if (req.user.usernode_pubkey && req.user.usernode_pubkey !== root_pubkey) {
+      return res.status(403).json({ error: 'root_pubkey does not match your linked wallet' });
+    }
+    await pool.query(
+      `INSERT INTO watched_addresses (address, cursor, added_at) VALUES ($1, NULL, NOW())
+       ON CONFLICT (address) DO NOTHING`,
+      [root_pubkey]
+    );
+    pollOnce().catch(() => {}); // kick an immediate index pass
+    res.json({ ok: true, tx_id: tx_id || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: list elections with counts (chain-indexed read model).
+app.get('/api/public/elections', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT e.eid, e.name, e.created_at,
+        (SELECT COUNT(*) FROM candidates c WHERE c.eid = e.eid) AS candidate_count,
+        (SELECT COUNT(*) FROM stations s WHERE s.eid = e.eid) AS station_count,
+        (SELECT COUNT(DISTINCT r.sid) FROM results r WHERE r.eid = e.eid) AS reported_count
+      FROM elections e WHERE e.eid IS NOT NULL
+      ORDER BY e.created_at DESC NULLS LAST, e.eid
+    `);
+    res.json({
+      elections: rows.map((r) => ({
+        eid: r.eid,
+        name: r.name,
+        candidate_count: Number(r.candidate_count),
+        station_count: Number(r.station_count),
+        reported_count: Number(r.reported_count),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: election detail with Latest-Submission aggregation.
+app.get('/api/public/elections/:eid', async (req, res) => {
+  try {
+    const eid = req.params.eid;
+    const el = (await pool.query('SELECT eid, name, root_pubkey, created_at FROM elections WHERE eid = $1', [eid])).rows[0];
+    if (!el) return res.status(404).json({ error: 'not found' });
+
+    const candidates = (await pool.query('SELECT cid, name FROM candidates WHERE eid = $1 ORDER BY cid', [eid])).rows
+      .map((c) => ({ cid: Number(c.cid), name: c.name }));
+    const stations = (await pool.query('SELECT sid, name FROM stations WHERE eid = $1 ORDER BY sid', [eid])).rows
+      .map((s) => ({ sid: Number(s.sid), name: s.name }));
+    const results = (await pool.query(
+      'SELECT sid, tx_id, submitter_pubkey, votes, tot, inv, created_at FROM results WHERE eid = $1', [eid]
+    )).rows.map((r) => ({
+      sid: Number(r.sid),
+      tx_id: r.tx_id,
+      submitter_pubkey: r.submitter_pubkey,
+      votes: r.votes || {},
+      tot: r.tot,
+      inv: r.inv,
+      created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    }));
+
+    const latest = latestPerStation(results);
+    const tally = computeTally(candidates, latest);
+    const prog = reporting(stations, latest);
+    const perStation = stations.map((s) => {
+      const r = latest.get(s.sid);
+      return {
+        sid: s.sid,
+        name: s.name,
+        reported: !!r,
+        votes: r ? r.votes : null,
+        tot: r ? r.tot : null,
+        inv: r ? r.inv : null,
+        at: r ? r.created_at : null,
+        submitter: r ? r.submitter_pubkey : null,
+      };
+    });
+    let lastUpdated = null;
+    for (const r of results) if (r.created_at && (!lastUpdated || r.created_at > lastUpdated)) lastUpdated = r.created_at;
+
+    res.json({
+      election: { eid: el.eid, name: el.name, root_pubkey: el.root_pubkey },
+      candidates,
+      stations: perStation,
+      tally,
+      reporting: prog,
+      lastUpdated,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Elections (management API) ---
 app.get('/api/elections', async (req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -448,13 +632,16 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// HTML shell: serve the app if authenticated, otherwise an "open in Usernode"
+// landing page. The public dashboard lives at /dashboard.html and is served
+// by express.static above (a GET, non-/api path) without auth.
 app.get('*', (req, res) => {
   if (!req.user) {
     return res.status(401).send(`<!doctype html><meta charset=utf-8><title>Open in Usernode</title>
 <body style="font-family:system-ui;background:#09090b;color:#e4e4e7;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
   <div style="max-width:24rem;padding:2rem;text-align:center">
     <h1 style="font-size:1.25rem;margin:0 0 0.5rem">Open this app inside Usernode</h1>
-    <p style="color:#a1a1aa;font-size:0.9rem;margin:0 0 1.25rem">This page is served via the platform; direct visits aren't authenticated.</p>
+    <p style="color:#a1a1aa;font-size:0.9rem;margin:0 0 1.25rem">This page is served via the platform; direct visits aren't authenticated. The public live dashboard is at <code>/dashboard.html</code>.</p>
     <a href="https://social-vibecoding.usernodelabs.org" style="display:inline-block;padding:0.5rem 1rem;background:#7c3aed;color:white;border-radius:0.5rem;text-decoration:none;font-size:0.9rem">Go to Usernode</a>
   </div>
 </body>`);
@@ -462,76 +649,130 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-async function start() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS organizations (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS elections (
-      id SERIAL PRIMARY KEY,
-      organization_id INTEGER NOT NULL REFERENCES organizations(id),
-      name VARCHAR(255) NOT NULL,
-      status VARCHAR(50) DEFAULT 'active',
-      gps_required BOOLEAN DEFAULT false,
-      gps_radius_meters INTEGER DEFAULT 500,
-      qr_required BOOLEAN DEFAULT false,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS candidates (
-      id SERIAL PRIMARY KEY,
-      election_id INTEGER NOT NULL REFERENCES elections(id),
-      name VARCHAR(255) NOT NULL,
-      sort_order INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS regions (
-      id SERIAL PRIMARY KEY,
-      election_id INTEGER NOT NULL REFERENCES elections(id),
-      name VARCHAR(255) NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS polling_stations (
-      id SERIAL PRIMARY KEY,
-      election_id INTEGER NOT NULL REFERENCES elections(id),
-      region_id INTEGER REFERENCES regions(id),
-      name VARCHAR(255) NOT NULL,
-      code VARCHAR(100),
-      latitude DOUBLE PRECISION,
-      longitude DOUBLE PRECISION,
-      total_registered_voters INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS station_agents (
-      id SERIAL PRIMARY KEY,
-      station_id INTEGER NOT NULL REFERENCES polling_stations(id),
-      user_id INTEGER NOT NULL DEFAULT 0,
-      username VARCHAR(255) NOT NULL DEFAULT ''
-    );
-    CREATE TABLE IF NOT EXISTS user_roles (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL UNIQUE,
-      username VARCHAR(255) NOT NULL,
-      role VARCHAR(50) NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS cached_submissions (
-      id SERIAL PRIMARY KEY,
-      tx_hash VARCHAR(255) UNIQUE NOT NULL,
-      station_id INTEGER NOT NULL REFERENCES polling_stations(id),
-      election_id INTEGER NOT NULL REFERENCES elections(id),
-      submitter_user_id INTEGER,
-      submitter_username VARCHAR(255) NOT NULL DEFAULT '',
-      submitter_pubkey VARCHAR(255) NOT NULL DEFAULT '',
-      votes JSONB NOT NULL DEFAULT '{}',
-      cid VARCHAR(255),
-      block_height INTEGER,
-      chain_timestamp TIMESTAMPTZ,
-      indexed_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS indexer_state (
-      id INTEGER PRIMARY KEY DEFAULT 1,
-      last_indexed_block INTEGER DEFAULT 0,
-      last_indexed_at TIMESTAMPTZ
-    );
-  `);
+async function migrate() {
+  // Organizations (used by the management UI)
+  await pool.query(`CREATE TABLE IF NOT EXISTS organizations (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+
+  // Elections: unified schema — HEAD routes use elections.id (integer PK);
+  // chain indexer routes use elections.eid (TEXT UNIQUE). Both coexist.
+  await pool.query(`CREATE TABLE IF NOT EXISTS elections (
+    id SERIAL PRIMARY KEY,
+    eid TEXT UNIQUE,
+    organization_id INTEGER REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    root_pubkey TEXT,
+    creator_pubkey TEXT,
+    tx_id TEXT,
+    status VARCHAR(50) DEFAULT 'active',
+    gps_required BOOLEAN DEFAULT false,
+    gps_radius_meters INTEGER DEFAULT 500,
+    qr_required BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+
+  // Candidates: unified — HEAD uses (election_id INTEGER, sort_order);
+  // chain indexer uses (eid TEXT, cid INTEGER) with a unique constraint.
+  await pool.query(`CREATE TABLE IF NOT EXISTS candidates (
+    id SERIAL PRIMARY KEY,
+    eid TEXT,
+    cid INTEGER,
+    election_id INTEGER REFERENCES elections(id),
+    name TEXT NOT NULL,
+    tx_id TEXT,
+    sort_order INTEGER DEFAULT 0
+  )`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS candidates_eid_cid_idx ON candidates(eid, cid)`);
+
+  // Regions (management UI)
+  await pool.query(`CREATE TABLE IF NOT EXISTS regions (
+    id SERIAL PRIMARY KEY,
+    election_id INTEGER NOT NULL REFERENCES elections(id),
+    name VARCHAR(255) NOT NULL
+  )`);
+
+  // Polling stations (management UI — distinct from chain-indexed "stations" table)
+  await pool.query(`CREATE TABLE IF NOT EXISTS polling_stations (
+    id SERIAL PRIMARY KEY,
+    election_id INTEGER NOT NULL REFERENCES elections(id),
+    region_id INTEGER REFERENCES regions(id),
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(100),
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    total_registered_voters INTEGER
+  )`);
+
+  // Stations (chain-indexed — distinct from polling_stations)
+  await pool.query(`CREATE TABLE IF NOT EXISTS stations (
+    eid TEXT NOT NULL,
+    sid INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    tx_id TEXT,
+    PRIMARY KEY (eid, sid)
+  )`);
+
+  // Station agents (management UI)
+  await pool.query(`CREATE TABLE IF NOT EXISTS station_agents (
+    id SERIAL PRIMARY KEY,
+    station_id INTEGER NOT NULL REFERENCES polling_stations(id),
+    user_id INTEGER NOT NULL DEFAULT 0,
+    username VARCHAR(255) NOT NULL DEFAULT ''
+  )`);
+
+  // User roles (management UI)
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_roles (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE,
+    username VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL
+  )`);
+
+  // Cached submissions (populated by legacy indexer via polling APP_PUBKEY)
+  await pool.query(`CREATE TABLE IF NOT EXISTS cached_submissions (
+    id SERIAL PRIMARY KEY,
+    tx_hash VARCHAR(255) UNIQUE NOT NULL,
+    station_id INTEGER NOT NULL REFERENCES polling_stations(id),
+    election_id INTEGER NOT NULL REFERENCES elections(id),
+    submitter_user_id INTEGER,
+    submitter_username VARCHAR(255) NOT NULL DEFAULT '',
+    submitter_pubkey VARCHAR(255) NOT NULL DEFAULT '',
+    votes JSONB NOT NULL DEFAULT '{}',
+    cid VARCHAR(255),
+    block_height INTEGER,
+    chain_timestamp TIMESTAMPTZ,
+    indexed_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+
+  // Results (populated by chain indexer via applyTx)
+  await pool.query(`CREATE TABLE IF NOT EXISTS results (
+    tx_id TEXT PRIMARY KEY,
+    eid TEXT NOT NULL,
+    sid INTEGER NOT NULL,
+    submitter_pubkey TEXT,
+    votes JSONB NOT NULL DEFAULT '{}'::jsonb,
+    tot INTEGER,
+    inv INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS results_eid_sid_idx ON results (eid, sid)`);
+
+  // Watched addresses (chain indexer — which addresses to poll)
+  await pool.query(`CREATE TABLE IF NOT EXISTS watched_addresses (
+    address TEXT PRIMARY KEY,
+    cursor TEXT,
+    added_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+
+  // Indexer state (legacy indexer — tracks last polled block height)
+  await pool.query(`CREATE TABLE IF NOT EXISTS indexer_state (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    last_indexed_block INTEGER DEFAULT 0,
+    last_indexed_at TIMESTAMPTZ
+  )`);
 
   // Apply staging:private comments
   await pool.query(`
@@ -540,15 +781,19 @@ async function start() {
     COMMENT ON TABLE candidates IS 'staging:private';
     COMMENT ON TABLE regions IS 'staging:private';
     COMMENT ON TABLE polling_stations IS 'staging:private';
+    COMMENT ON TABLE stations IS 'staging:private';
     COMMENT ON TABLE station_agents IS 'staging:private';
     COMMENT ON TABLE user_roles IS 'staging:private';
     COMMENT ON TABLE cached_submissions IS 'staging:private';
+    COMMENT ON TABLE results IS 'staging:private';
+    COMMENT ON TABLE watched_addresses IS 'staging:private';
     COMMENT ON TABLE indexer_state IS 'staging:private';
   `);
 
   await pool.query(`ALTER TABLE station_agents ADD COLUMN IF NOT EXISTS username VARCHAR(255) NOT NULL DEFAULT ''`);
 
   if (IS_STAGING) {
+    // Seed data for the management UI tables
     await pool.query(`INSERT INTO organizations (id, name) VALUES (1,'Staging Demo Electoral Commission') ON CONFLICT (id) DO NOTHING`);
     await pool.query(`INSERT INTO elections (id,organization_id,name,status,gps_required,qr_required) VALUES (1,1,'Staging Demo General Election 2026','active',false,false) ON CONFLICT (id) DO NOTHING`);
     await pool.query(`
@@ -564,7 +809,7 @@ async function start() {
         (2,1,'Staging Demo Southern Region')
       ON CONFLICT (id) DO NOTHING
     `);
-    const stations = [
+    const mgmtStations = [
       [1,1,1,'Staging Demo Station N-1','QR-N1',40.7128,-74.0060],
       [2,1,1,'Staging Demo Station N-2','QR-N2',40.7148,-74.0080],
       [3,1,1,'Staging Demo Station N-3','QR-N3',40.7108,-74.0040],
@@ -576,7 +821,7 @@ async function start() {
       [9,1,2,'Staging Demo Station S-4','QR-S4',40.6968,-74.0200],
       [10,1,2,'Staging Demo Station S-5','QR-S5',40.6888,-74.0120],
     ];
-    for (const [id,eid,rid,name,code,lat,lng] of stations) {
+    for (const [id,eid,rid,name,code,lat,lng] of mgmtStations) {
       await pool.query(`INSERT INTO polling_stations (id,election_id,region_id,name,code,latitude,longitude) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`, [id,eid,rid,name,code,lat,lng]);
     }
     await pool.query(`INSERT INTO user_roles (id,user_id,username,role) VALUES (1,1,'staging-demo-user','admin') ON CONFLICT (id) DO NOTHING`);
@@ -601,7 +846,48 @@ async function start() {
   }
 
   startIndexer(pool);
+}
+
+// Staging-only demo data for the chain-indexed read model (main).
+// Writes directly into elections/candidates/stations/results so the public
+// dashboard isn't empty in PR previews. Strict no-op outside staging.
+async function seedStaging() {
+  if (!IS_STAGING) return;
+  const root = 'ut1demo00000000000000000000000000000000';
+  await pool.query(
+    `INSERT INTO elections (eid, name, root_pubkey, creator_pubkey, tx_id, created_at)
+     VALUES ('demo-election', 'Staging demo — General Election', $1, $1, 'demo-election', NOW())
+     ON CONFLICT (eid) DO NOTHING`, [root]);
+  await pool.query(
+    `INSERT INTO watched_addresses (address, cursor, added_at) VALUES ($1, NULL, NOW())
+     ON CONFLICT (address) DO NOTHING`, [root]);
+  await pool.query(
+    `INSERT INTO candidates (eid, cid, name, tx_id) VALUES
+       ('demo-election', 1, 'Demo Candidate Red', 'demo-c1'),
+       ('demo-election', 2, 'Demo Candidate Blue', 'demo-c2')
+     ON CONFLICT (eid, cid) DO NOTHING`);
+  await pool.query(
+    `INSERT INTO stations (eid, sid, name, tx_id) VALUES
+       ('demo-election', 1, 'Demo Station A', 'demo-s1'),
+       ('demo-election', 2, 'Demo Station B', 'demo-s2'),
+       ('demo-election', 3, 'Demo Station C', 'demo-s3')
+     ON CONFLICT (eid, sid) DO NOTHING`);
+  // Station A has TWO submissions (the later one wins). Station B has one.
+  // Station C is unreported → "2 of 3 stations reported".
+  await pool.query(
+    `INSERT INTO results (tx_id, eid, sid, submitter_pubkey, votes, tot, inv, created_at) VALUES
+       ('demo-r1', 'demo-election', 1, $1, '{"1":40,"2":60}'::jsonb, 105, 5, NOW() - INTERVAL '20 minutes'),
+       ('demo-r2', 'demo-election', 1, $1, '{"1":52,"2":71}'::jsonb, 128, 5, NOW() - INTERVAL '2 minutes'),
+       ('demo-r3', 'demo-election', 2, $1, '{"1":80,"2":35}'::jsonb, 120, 5, NOW() - INTERVAL '10 minutes')
+     ON CONFLICT (tx_id) DO NOTHING`, [root]);
+}
+
+async function start() {
+  await migrate();
+  await seedStaging();
+  // Continuous chain indexer: rebuild the read model from on-chain transactions.
+  setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), 4000);
   app.listen(port, () => console.log(`Listening on :${port}`));
 }
 
-start().catch(err => { console.error(err); process.exit(1); });
+start().catch((err) => { console.error(err); process.exit(1); });

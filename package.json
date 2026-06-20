@@ -5,7 +5,8 @@
   "description": "Quick Count — blockchain-first election results reporting platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "express": "^4.21.0",

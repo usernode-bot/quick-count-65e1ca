@@ -20,12 +20,28 @@
       "required": true,
       "private": true,
       "staging_default": "staging-test-key"
+    },
+    {
+      "key": "NODE_RPC_URL",
+      "description": "Base URL of the Usernode node the indexer polls for on-chain transactions. Platform-managed in-network; optional for standalone deploys (the indexer no-ops when unset).",
+      "required": false,
+      "private": false
     }
   ],
   "tests": [
     { "name": "App shell loads", "path": "/", "expectSelector": "h1" },
     { "name": "Dashboard renders", "path": "/", "expectSelector": "#dashboard" },
     { "name": "Stations table renders", "path": "/", "expectSelector": "#stations-table" },
-    { "name": "Explorer renders", "path": "/explorer", "expectSelector": "#tx-list" }
+    { "name": "Explorer renders", "path": "/explorer", "expectSelector": "#tx-list" },
+    {
+      "name": "Live dashboard renders demo election",
+      "path": "/dashboard.html",
+      "expectText": "Staging demo"
+    },
+    {
+      "name": "Demo election shows latest-submission tally",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectText": "stations reported"
+    }
   ]
 }
