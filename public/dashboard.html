@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <script>
+  // usernode-dev-console@1
+  (function () {
+    if (window.__usernodeDevConsole) return;
+    window.__usernodeDevConsole = true;
+    var S = '__usernodeDevConsole';
+    function serialize(v, depth) {
+      depth = depth || 0;
+      try {
+        if (v === undefined) return 'undefined';
+        if (v === null) return 'null';
+        if (typeof v === 'string') return v;
+        if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+        if (typeof v === 'function') return '[Function ' + (v.name || 'anonymous') + ']';
+        if (v instanceof Error) return (v.stack || (v.name + ': ' + v.message));
+        if (depth > 3) return '[…]';
+        var seen = new WeakSet();
+        return JSON.stringify(v, function (k, val) {
+          if (typeof val === 'object' && val !== null) {
+            if (seen.has(val)) return '[Circular]';
+            seen.add(val);
+          }
+          if (typeof val === 'function') return '[Function ' + (val.name || 'anonymous') + ']';
+          if (val instanceof Error) return val.stack || (val.name + ': ' + val.message);
+          return val;
+        });
+      } catch (e) { try { return String(v); } catch (_) { return '[unserializable]'; } }
+    }
+    function post(level, args, meta) {
+      try {
+        var payload = { sentinel: S, level: level, args: Array.prototype.slice.call(args).map(function (a) { return serialize(a); }), ts: Date.now(), url: location.href };
+        if (meta) for (var k in meta) payload[k] = meta[k];
+        if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
+      } catch (_) {}
+    }
+    ['log','info','warn','error','debug'].forEach(function (level) {
+      var orig = console[level] ? console[level].bind(console) : function () {};
+      console[level] = function () { post(level, arguments); orig.apply(null, arguments); };
+    });
+    window.addEventListener('error', function (e) {
+      var msg = (e.error && (e.error.stack || e.error.message)) || e.message || 'Error';
+      post('error', [msg], { source: e.filename || '', line: e.lineno || 0, col: e.colno || 0, kind: 'error' });
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var r = e.reason; var msg = (r && (r.stack || r.message)) || String(r);
+      post('error', [msg], { kind: 'unhandledrejection' });
+    });
+  })();
+  </script>
+  <title>Quick Count — Live</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+  <div class="max-w-3xl mx-auto p-4 sm:p-6">
+    <header class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div class="flex items-center gap-3">
+        <h1 class="text-xl font-bold">Quick Count — Live</h1>
+        <span id="staging-badge" class="hidden text-xs font-medium px-2 py-1 rounded bg-amber-500/20 text-amber-300">staging</span>
+      </div>
+      <select id="election-select" class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-sm"></select>
+    </header>
+
+    <div id="content">
+      <p class="text-zinc-500 text-sm">Loading…</p>
+    </div>
+
+    <p id="updated" class="mt-6 text-xs text-zinc-600"></p>
+  </div>
+
+  <script>
+    const COLORS = ['bg-rose-500', 'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500', 'bg-pink-500', 'bg-teal-500'];
+    const qs = new URLSearchParams(location.search);
+    let currentEid = qs.get('eid') || '';
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function timeAgo(iso) {
+      if (!iso) return '';
+      const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+      if (secs < 60) return secs + 's ago';
+      const mins = Math.round(secs / 60);
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.round(mins / 60);
+      return hrs + 'h ago';
+    }
+
+    async function loadElectionsList() {
+      try {
+        const r = await fetch('/api/public/elections');
+        const { elections } = await r.json();
+        const sel = document.getElementById('election-select');
+        if (!elections.length) {
+          sel.innerHTML = '<option value="">No elections yet</option>';
+          document.getElementById('content').innerHTML = '<p class="text-zinc-500 text-sm">No elections have been published yet.</p>';
+          return;
+        }
+        sel.innerHTML = elections.map((e) => '<option value="' + e.eid + '">' + escapeHtml(e.name) + '</option>').join('');
+        if (!currentEid || !elections.some((e) => e.eid === currentEid)) currentEid = elections[0].eid;
+        sel.value = currentEid;
+        sel.onchange = () => { currentEid = sel.value; render(); };
+      } catch (e) {
+        document.getElementById('content').innerHTML = '<p class="text-rose-400 text-sm">Failed to load elections.</p>';
+      }
+    }
+
+    async function render() {
+      if (!currentEid) return;
+      let d;
+      try {
+        const r = await fetch('/api/public/elections/' + encodeURIComponent(currentEid));
+        if (!r.ok) throw new Error('not found');
+        d = await r.json();
+      } catch (e) {
+        document.getElementById('content').innerHTML = '<p class="text-rose-400 text-sm">Could not load this election.</p>';
+        return;
+      }
+
+      const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0) || 1;
+      const candById = {};
+      d.candidates.forEach((c) => { candById[c.cid] = c.name; });
+
+      const tallyRows = d.candidates
+        .map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
+        .sort((a, b) => b.votes - a.votes)
+        .map(({ c, i, votes }) => {
+          const pct = Math.round((votes / totalVotes) * 100);
+          return '<div class="mb-3">'
+            + '<div class="flex justify-between text-sm mb-1"><span>' + escapeHtml(c.name) + '</span>'
+            + '<span class="font-mono text-zinc-300">' + votes.toLocaleString() + ' <span class="text-zinc-500">(' + pct + '%)</span></span></div>'
+            + '<div class="h-3 rounded bg-zinc-800 overflow-hidden"><div class="h-full ' + COLORS[i % COLORS.length] + '" style="width:' + pct + '%"></div></div>'
+            + '</div>';
+        }).join('');
+
+      const stationRows = d.stations.map((s) => {
+        if (!s.reported) {
+          return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
+            + '<td class="py-2 text-zinc-500" colspan="' + (d.candidates.length + 1) + '">Awaiting result</td></tr>';
+        }
+        const cells = d.candidates.map((c) => '<td class="py-2 px-2 text-right font-mono">' + (Number(s.votes[c.cid] || 0)).toLocaleString() + '</td>').join('');
+        return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
+          + cells
+          + '<td class="py-2 pl-2 text-right text-xs text-zinc-500 whitespace-nowrap">' + timeAgo(s.at) + '</td></tr>';
+      }).join('');
+
+      const headCells = d.candidates.map((c) => '<th class="py-2 px-2 text-right font-medium text-zinc-400">' + escapeHtml(c.name) + '</th>').join('');
+
+      document.getElementById('content').innerHTML =
+        '<h2 class="text-lg font-semibold mb-1">' + escapeHtml(d.election.name) + '</h2>'
+        + '<p class="text-sm text-zinc-400 mb-5">' + d.reporting.reported + ' of ' + d.reporting.total + ' stations reported'
+        + ' · ' + Object.values(d.tally).reduce((s, n) => s + n, 0).toLocaleString() + ' votes counted</p>'
+        + '<div class="mb-6">' + (tallyRows || '<p class="text-zinc-500 text-sm">No candidates.</p>') + '</div>'
+        + '<h3 class="text-sm font-medium text-zinc-400 mb-2">By station (latest submission)</h3>'
+        + '<div class="overflow-x-auto"><table class="w-full text-sm">'
+        + '<thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-zinc-400">Station</th>' + headCells + '<th class="py-2 pl-2 text-right font-medium text-zinc-400">Updated</th></tr></thead>'
+        + '<tbody>' + stationRows + '</tbody></table></div>';
+
+      document.getElementById('updated').textContent = d.lastUpdated
+        ? 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing'
+        : 'No submissions yet · auto-refreshing';
+    }
+
+    fetch('/api/public/config').then((r) => r.json()).then((c) => {
+      if (c && c.staging) document.getElementById('staging-badge').classList.remove('hidden');
+    }).catch(() => {});
+
+    (async function init() {
+      await loadElectionsList();
+      await render();
+      setInterval(render, 5000);
+    })();
+  </script>
+</body>
+</html>
