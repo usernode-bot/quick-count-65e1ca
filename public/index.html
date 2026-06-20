@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+
   <script>
   // usernode-dev-console@1
   (function () {
@@ -66,56 +66,277 @@
   <title>Quick Count</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-center gap-8 p-4">
-  <h1 class="text-2xl font-bold">Quick Count</h1>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+  <div class="max-w-2xl mx-auto p-4 sm:p-6">
+    <header class="flex items-center justify-between mb-6">
+      <h1 class="text-xl font-bold">Quick Count</h1>
+      <span id="staging-badge" class="hidden text-xs font-medium px-2 py-1 rounded bg-amber-500/20 text-amber-300">staging</span>
+    </header>
 
-  <button id="press-btn" class="w-32 h-32 rounded-full bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white text-xl font-bold shadow-lg shadow-violet-600/30">
-    Press!
-  </button>
+    <nav class="flex gap-2 mb-6">
+      <button data-tab="create" class="tab-btn flex-1 py-2 rounded-lg text-sm font-medium bg-violet-600 text-white">Create election</button>
+      <button data-tab="submit" class="tab-btn flex-1 py-2 rounded-lg text-sm font-medium bg-zinc-800 text-zinc-300">Submit result</button>
+    </nav>
 
-  <div id="count" class="text-lg text-zinc-400">0 total presses</div>
+    <!-- ── Create election ──────────────────────────────────────────── -->
+    <section id="tab-create">
+      <p class="text-sm text-zinc-400 mb-4">As an organizer, define the candidates and polling stations. Publishing signs one on-chain transaction per item with your Usernode wallet.</p>
 
-  <div class="w-full max-w-sm">
-    <h2 class="text-sm font-medium text-zinc-500 mb-2 text-center">Leaderboard</h2>
-    <div id="leaderboard" class="space-y-1"></div>
+      <label class="block text-sm mb-1 text-zinc-300">Election name</label>
+      <input id="el-name" placeholder="Springfield Mayoral 2026" class="w-full mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-violet-500 outline-none">
+
+      <div class="mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-sm text-zinc-300">Candidates</label>
+          <button id="add-candidate" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700">+ Add candidate</button>
+        </div>
+        <div id="candidates" class="space-y-2"></div>
+      </div>
+
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-sm text-zinc-300">Polling stations</label>
+          <button id="add-station" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700">+ Add station</button>
+        </div>
+        <div id="stations" class="space-y-2"></div>
+      </div>
+
+      <button id="create-btn" class="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold disabled:opacity-50">Create &amp; publish</button>
+      <div id="create-status" class="mt-3 text-sm text-zinc-400"></div>
+
+      <div id="create-done" class="hidden mt-5 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+        <p class="font-semibold text-emerald-400 mb-2">Election published ✓</p>
+        <p class="text-sm text-zinc-400 mb-2">Share the public live dashboard:</p>
+        <a id="dash-link" href="#" target="_blank" class="text-violet-400 underline text-sm break-all"></a>
+        <p class="text-sm text-zinc-400 mt-3">Polling agents report results from the <strong>Submit result</strong> tab.</p>
+      </div>
+    </section>
+
+    <!-- ── Submit result ────────────────────────────────────────────── -->
+    <section id="tab-submit" class="hidden">
+      <p class="text-sm text-zinc-400 mb-4">As a polling agent, report your station's count. Submitting signs one on-chain transaction. Re-submitting replaces your station's previous figure (latest wins).</p>
+
+      <label class="block text-sm mb-1 text-zinc-300">Election</label>
+      <select id="sub-election" class="w-full mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
+
+      <label class="block text-sm mb-1 text-zinc-300">Your polling station</label>
+      <select id="sub-station" class="w-full mb-4 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
+
+      <div id="sub-candidates" class="space-y-2 mb-4"></div>
+
+      <div class="grid grid-cols-2 gap-3 mb-6">
+        <div>
+          <label class="block text-xs mb-1 text-zinc-400">Total ballots (optional)</label>
+          <input id="sub-tot" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs mb-1 text-zinc-400">Invalid / blank (optional)</label>
+          <input id="sub-inv" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">
+        </div>
+      </div>
+
+      <button id="submit-btn" class="w-full py-3 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold disabled:opacity-50">Submit result</button>
+      <div id="submit-status" class="mt-3 text-sm text-zinc-400"></div>
+    </section>
   </div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token') || '';
-    const headers = token ? { 'x-usernode-token': token } : {};
+    const authHeaders = token ? { 'x-usernode-token': token } : {};
 
-    async function loadLeaderboard() {
-      const res = await fetch('/api/leaderboard', { headers });
-      if (!res.ok) return;
-      const { leaderboard } = await res.json();
-      const el = document.getElementById('leaderboard');
-      if (!leaderboard.length) {
-        el.innerHTML = '<p class="text-center text-zinc-600 text-sm">No presses yet</p>';
-        return;
-      }
-      el.innerHTML = leaderboard.map((r, i) =>
-        '<div class="flex justify-between px-3 py-1 rounded ' + (i === 0 ? 'bg-violet-600/20 text-violet-300' : 'text-zinc-400') + '">' +
-        '<span>' + (i + 1) + '. ' + r.username + '</span>' +
-        '<span class="font-mono">' + r.presses + '</span></div>'
-      ).join('');
-      const total = leaderboard.reduce((s, r) => s + parseInt(r.presses), 0);
-      document.getElementById('count').textContent = total + ' total presses';
+    // ── Memo envelopes (mirror lib/memo.js) ──────────────────────────
+    const V = 1;
+    const elMemo = (name) => JSON.stringify({ v: V, t: 'el', name: String(name).slice(0, 120) });
+    const candMemo = (eid, cid, name) => JSON.stringify({ v: V, t: 'cand', eid, cid, name: String(name).slice(0, 80) });
+    const stnMemo = (eid, sid, name) => JSON.stringify({ v: V, t: 'stn', eid, sid, name: String(name).slice(0, 80) });
+    function resMemo(eid, sid, votes, tot, inv) {
+      const m = { v: V, t: 'res', eid, sid, votes };
+      if (tot !== '' && tot != null) m.tot = Number(tot);
+      if (inv !== '' && inv != null) m.inv = Number(inv);
+      return JSON.stringify(m);
     }
 
-    document.getElementById('press-btn').addEventListener('click', async () => {
+    // Wait until the hosted bridge has defined its window API.
+    function bridgeReady() {
+      return new Promise((resolve) => {
+        let tries = 0;
+        (function poll() {
+          if (typeof window.sendTransaction === 'function' && typeof window.getNodeAddress === 'function') return resolve(true);
+          if (tries++ > 100) return resolve(false);
+          setTimeout(poll, 100);
+        })();
+      });
+    }
+
+    // Pull a transaction id out of whatever sendTransaction resolved with.
+    function extractTxId(res) {
+      if (!res) return null;
+      const cands = [];
+      const probe = (o) => {
+        if (!o || typeof o !== 'object') return;
+        for (const k of ['txId', 'tx_id', 'id', 'txid', 'hash', 'tx_hash', 'txHash']) {
+          if (typeof o[k] === 'string' && o[k].trim()) cands.push(o[k].trim());
+        }
+      };
+      probe(res); probe(res.matchedTx); probe(res.tx); probe(res.transaction);
+      return cands[0] || null;
+    }
+
+    // ── Tabs ─────────────────────────────────────────────────────────
+    document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => {
+      const tab = b.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach((x) => {
+        const on = x.dataset.tab === tab;
+        x.className = 'tab-btn flex-1 py-2 rounded-lg text-sm font-medium ' + (on ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-300');
+      });
+      document.getElementById('tab-create').classList.toggle('hidden', tab !== 'create');
+      document.getElementById('tab-submit').classList.toggle('hidden', tab !== 'submit');
+      if (tab === 'submit') loadElections();
+    }));
+
+    // ── Create: dynamic name rows ────────────────────────────────────
+    function addRow(containerId, placeholder) {
+      const wrap = document.createElement('div');
+      wrap.className = 'flex gap-2';
+      wrap.innerHTML = '<input placeholder="' + placeholder + '" class="row-input flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">'
+        + '<button class="px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">×</button>';
+      wrap.querySelector('button').addEventListener('click', () => wrap.remove());
+      document.getElementById(containerId).appendChild(wrap);
+    }
+    document.getElementById('add-candidate').addEventListener('click', () => addRow('candidates', 'Candidate name'));
+    document.getElementById('add-station').addEventListener('click', () => addRow('stations', 'Station name / label'));
+    addRow('candidates', 'Candidate name');
+    addRow('candidates', 'Candidate name');
+    addRow('stations', 'Station name / label');
+
+    function rowValues(containerId) {
+      return Array.from(document.querySelectorAll('#' + containerId + ' .row-input'))
+        .map((i) => i.value.trim()).filter(Boolean);
+    }
+
+    document.getElementById('create-btn').addEventListener('click', async () => {
+      const name = document.getElementById('el-name').value.trim();
+      const cands = rowValues('candidates');
+      const stns = rowValues('stations');
+      const status = document.getElementById('create-status');
+      if (!name || !cands.length || !stns.length) {
+        status.textContent = 'Add an election name, at least one candidate and one station.';
+        return;
+      }
+      const ready = await bridgeReady();
+      if (!ready) { status.textContent = 'Wallet bridge unavailable — open this app inside Usernode.'; return; }
+
+      const btn = document.getElementById('create-btn');
+      btn.disabled = true;
       try {
-        const res = await fetch('/api/press', {
+        const addr = await window.getNodeAddress();
+        if (!addr) throw new Error('No wallet address');
+        const total = 1 + cands.length + stns.length;
+        let done = 0;
+        const tick = (label) => { done++; status.textContent = label + '  (' + done + ' of ' + total + ' confirmed)'; };
+
+        status.textContent = 'Creating election… approve in your wallet';
+        const elRes = await window.sendTransaction(addr, 0, elMemo(name));
+        const eid = extractTxId(elRes);
+        if (!eid) throw new Error('Could not read election transaction id');
+        tick('Election created');
+
+        // Register the root address so the indexer starts watching it.
+        await fetch('/api/elections/track', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headers },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ root_pubkey: addr, tx_id: eid }),
         });
-        if (res.ok) loadLeaderboard();
-        else if (res.status === 401) document.getElementById('count').textContent = 'Sign in to press!';
-      } catch {}
+
+        for (let i = 0; i < cands.length; i++) {
+          await window.sendTransaction(addr, 0, candMemo(eid, i + 1, cands[i]));
+          tick('Added candidate "' + cands[i] + '"');
+        }
+        for (let j = 0; j < stns.length; j++) {
+          await window.sendTransaction(addr, 0, stnMemo(eid, j + 1, stns[j]));
+          tick('Added station "' + stns[j] + '"');
+        }
+
+        const url = location.origin + '/dashboard.html?eid=' + encodeURIComponent(eid);
+        const link = document.getElementById('dash-link');
+        link.href = url; link.textContent = url;
+        document.getElementById('create-done').classList.remove('hidden');
+        status.textContent = 'All ' + total + ' transactions confirmed.';
+      } catch (e) {
+        status.textContent = 'Failed: ' + (e.message || e);
+      } finally {
+        btn.disabled = false;
+      }
     });
 
-    loadLeaderboard();
+    // ── Submit: load elections / stations / candidates ───────────────
+    let subDetail = null;
+    async function loadElections() {
+      const sel = document.getElementById('sub-election');
+      try {
+        const r = await fetch('/api/public/elections', { headers: authHeaders });
+        const { elections } = await r.json();
+        sel.innerHTML = elections.length
+          ? elections.map((e) => '<option value="' + e.eid + '">' + escapeHtml(e.name) + '</option>').join('')
+          : '<option value="">No elections yet — create one first</option>';
+        if (elections.length) loadDetail(sel.value);
+      } catch { sel.innerHTML = '<option value="">Failed to load</option>'; }
+    }
+    document.getElementById('sub-election').addEventListener('change', (e) => loadDetail(e.target.value));
+
+    async function loadDetail(eid) {
+      if (!eid) return;
+      const r = await fetch('/api/public/elections/' + encodeURIComponent(eid), { headers: authHeaders });
+      subDetail = await r.json();
+      const ss = document.getElementById('sub-station');
+      ss.innerHTML = subDetail.stations.map((s) => '<option value="' + s.sid + '">' + escapeHtml(s.name) + '</option>').join('');
+      const cc = document.getElementById('sub-candidates');
+      cc.innerHTML = subDetail.candidates.map((c) =>
+        '<div class="flex items-center gap-2">'
+        + '<label class="flex-1 text-sm text-zinc-300">' + escapeHtml(c.name) + '</label>'
+        + '<input type="number" min="0" data-cid="' + c.cid + '" value="0" class="cand-vote w-28 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-right">'
+        + '</div>'
+      ).join('');
+    }
+
+    document.getElementById('submit-btn').addEventListener('click', async () => {
+      const status = document.getElementById('submit-status');
+      if (!subDetail || !subDetail.election) { status.textContent = 'Pick an election first.'; return; }
+      const sid = Number(document.getElementById('sub-station').value);
+      if (!sid) { status.textContent = 'Pick your polling station.'; return; }
+      const votes = {};
+      document.querySelectorAll('.cand-vote').forEach((i) => { votes[i.dataset.cid] = Number(i.value) || 0; });
+      const tot = document.getElementById('sub-tot').value;
+      const inv = document.getElementById('sub-inv').value;
+
+      const ready = await bridgeReady();
+      if (!ready) { status.textContent = 'Wallet bridge unavailable — open this app inside Usernode.'; return; }
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      try {
+        status.textContent = 'Submitting… approve in your wallet';
+        const memo = resMemo(subDetail.election.eid, sid, votes, tot, inv);
+        await window.sendTransaction(subDetail.election.root_pubkey, 0, memo);
+        const stationName = subDetail.stations.find((s) => s.sid === sid);
+        status.textContent = 'Result submitted for ' + (stationName ? stationName.name : ('station ' + sid)) + ' ✓ — the live dashboard will update shortly.';
+      } catch (e) {
+        status.textContent = 'Failed: ' + (e.message || e);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Staging badge.
+    fetch('/api/public/config').then((r) => r.json()).then((c) => {
+      if (c && c.staging) document.getElementById('staging-badge').classList.remove('hidden');
+    }).catch(() => {});
   </script>
 </body>
 </html>
