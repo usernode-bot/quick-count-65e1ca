@@ -3,20 +3,20 @@
   "secrets": [
     {
       "key": "NODE_RPC_URL",
-      "description": "Base URL of the Usernode node the indexer polls for on-chain transactions. Platform-managed in-network; optional for standalone deploys (the indexer no-ops when unset).",
+      "description": "Usernode node RPC base URL for indexer polling. Platform-managed in-network; optional for standalone deploys.",
       "required": false,
       "private": false
     },
     {
       "key": "APP_PUBKEY",
-      "description": "On-chain wallet address for receiving result submissions. Leave blank to enable LOCAL_DEV mode.",
+      "description": "Platform wallet address. org_register transactions must pay 1,000 tokens to this address.",
       "required": false,
       "private": false,
       "default": ""
     },
     {
       "key": "LOCAL_DEV",
-      "description": "Set to false in production to enable live chain calls. When true (default), all blockchain operations are stubbed.",
+      "description": "Set to false in production to enable live chain calls. Default true stubs all blockchain operations.",
       "required": false,
       "private": false,
       "default": "true"
@@ -24,24 +24,24 @@
   ],
   "tests": [
     {
-      "name": "Election dashboard loads",
+      "name": "Dashboard loads with app name",
+      "path": "/",
+      "expectText": "Quick Count"
+    },
+    {
+      "name": "Elections list renders",
+      "path": "/#elections",
+      "expectSelector": "#screen-elections"
+    },
+    {
+      "name": "Organizations screen renders",
+      "path": "/#orgs",
+      "expectSelector": "#screen-orgs"
+    },
+    {
+      "name": "Staging election visible on dashboard",
       "path": "/",
       "expectText": "Staging Demo General Election"
-    },
-    {
-      "name": "Dashboard shows station count",
-      "path": "/",
-      "expectText": "stations reported"
-    },
-    {
-      "name": "Transaction explorer renders",
-      "path": "/#explorer",
-      "expectSelector": "#screen-explorer"
-    },
-    {
-      "name": "Candidate tally visible",
-      "path": "/",
-      "expectText": "Alpha"
     }
   ]
 }

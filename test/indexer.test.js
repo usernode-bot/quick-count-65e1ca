@@ -2,93 +2,94 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-const memo = require('../lib/memo');
+const { encode, decode } = require('../lib/memo');
 const { normalizeTx, applyTx } = require('../lib/indexer');
-const { latestPerStation, computeTally, reporting } = require('../lib/aggregate');
 
-// Minimal in-memory store mirroring the new store interface (insert-if-absent
-// for elections/candidates/stations, upsert by txHash for submissions).
 function makeStore() {
+  const orgs = new Map();
+  const elections = new Map();
+  const submissions = new Map();
+  const members = new Map();
+  const candidates = new Map();
+  const stations = new Map();
+  const evidence = new Map();
+  const disputes = new Map();
   return {
-    elections: new Map(),
-    candidates: new Map(),
-    stations: new Map(),
-    submissions: new Map(),
-    async getElection(eid) { return this.elections.get(eid) || null; },
-    async putElection(r) { if (!this.elections.has(r.eid)) this.elections.set(r.eid, r); },
-    async putCandidate(r) { const k = r.eid + '/' + r.cid; if (!this.candidates.has(k)) this.candidates.set(k, r); },
-    async putStation(r) { const k = r.eid + '/' + r.sid; if (!this.stations.has(k)) this.stations.set(k, r); },
-    async upsertSubmission(r) { this.submissions.set(r.txHash, r); },
+    orgs, elections, submissions, members, candidates, stations, evidence, disputes,
+    async getOrg(txHash) { return orgs.get(txHash) || null; },
+    async getOrgById(id) { for (const o of orgs.values()) if (o.id === id) return o; return null; },
+    async getOrgByOwner(ownerPubkey) { for (const o of orgs.values()) if (o.ownerPubkey === ownerPubkey) return o; return null; },
+    async upsertOrg(r) { orgs.set(r.txHash, { id: orgs.size + 1, ...r }); },
+    async confirmOrgFee(txHash) { const o = orgs.get(txHash); if (o) o.feeConfirmed = true; },
+    async isOrgMember(orgId, pubkey) { return members.has(`${orgId}:${pubkey}`); },
+    async upsertOrgMember(r) { members.set(`${r.orgId}:${r.memberPubkey}`, r); },
+    async getElection(txHash) { return elections.get(txHash) || null; },
+    async upsertElection(r) { elections.set(r.txHash, { id: elections.size + 1, ...r }); },
+    async upsertCandidate(r) { candidates.set(r.txHash, r); },
+    async getStation(txHash) { return stations.get(txHash) || null; },
+    async upsertStation(r) { stations.set(r.txHash, { id: stations.size + 1, ...r }); },
+    async getSubmission(txHash) { return submissions.get(txHash) || null; },
+    async upsertSubmission(r) { submissions.set(r.txHash, r); },
+    async markSubmissionRevised(txHash) { const s = submissions.get(txHash); if (s) s.status = 'revised'; },
+    async markSubmissionDisputed(txHash) { const s = submissions.get(txHash); if (s) s.status = 'disputed'; },
+    async upsertEvidence(r) { evidence.set(r.txHash, r); return r; },
+    async updateEvidenceIpfsStatus(txHash, status) { const e = evidence.get(txHash); if (e) e.ipfsStatus = status; },
+    async getDispute(txHash) { return disputes.get(txHash) || null; },
+    async upsertDispute(r) { disputes.set(r.txHash, r); },
+    async resolveDispute(r) { const d = disputes.get(r.txHash); if (d) Object.assign(d, r); },
   };
 }
 
-test('memo envelopes round-trip for all four types', () => {
-  assert.deepStrictEqual(memo.decode(memo.encode(memo.electionMemo('E'))), { v: 1, t: 'el', name: 'E' });
-  assert.deepStrictEqual(memo.decode(memo.encode(memo.candidateMemo('e1', 2, 'Red'))), { v: 1, t: 'cand', eid: 'e1', cid: 2, name: 'Red' });
-  assert.deepStrictEqual(memo.decode(memo.encode(memo.stationMemo('e1', 3, 'A'))), { v: 1, t: 'stn', eid: 'e1', sid: 3, name: 'A' });
-  const r = memo.decode(memo.encode(memo.resultMemo('e1', 3, { 1: 10, 2: 5 }, 16, 1)));
-  assert.deepStrictEqual(r, { v: 1, t: 'res', eid: 'e1', sid: 3, votes: { 1: 10, 2: 5 }, tot: 16, inv: 1 });
+test('decode returns null for null memo', () => {
+  assert.strictEqual(decode(null), null);
 });
 
-test('decode rejects malformed / wrong-version / unknown-type memos', () => {
-  assert.strictEqual(memo.decode('not json'), null);
-  assert.strictEqual(memo.decode(JSON.stringify({ v: 2, t: 'el' })), null);
-  assert.strictEqual(memo.decode(JSON.stringify({ v: 1, t: 'nope' })), null);
-  assert.strictEqual(memo.decode(null), null);
+test('decode returns null for non-quickcount memo', () => {
+  assert.strictEqual(decode(JSON.stringify({ v: 1, t: 'el', name: 'old' })), null);
+  assert.strictEqual(decode(JSON.stringify({ app: 'other', type: 'org_register' })), null);
 });
 
-test('indexer applies election + children and is idempotent on replay', async () => {
+test('applyTx applies org_register', async () => {
   const store = makeStore();
-  const elTx = { txId: 'EL1', from: 'utA', to: 'utA', memo: memo.encode(memo.electionMemo('Town Vote')), createdAt: '2026-06-20T10:00:00.000Z' };
-  assert.strictEqual((await applyTx(store, elTx)).applied, true);
-  const candTx = { txId: 'C1', from: 'utA', to: 'utA', memo: memo.encode(memo.candidateMemo('EL1', 1, 'Red')), createdAt: '2026-06-20T10:01:00.000Z' };
-  assert.strictEqual((await applyTx(store, candTx)).applied, true);
+  const memo = encode({ app: 'quickcount', type: 'org_register', name: 'Test Org' });
+  const result = await applyTx(store, { txId: 'org-tx-1', memo, from: 'owner-pub', to: 'dest', amount: 0 });
+  assert.strictEqual(result.applied, true);
+  assert.strictEqual(result.kind, 'org_register');
+  assert.strictEqual(store.orgs.size, 1);
+  const org = store.orgs.get('org-tx-1');
+  assert.strictEqual(org.name, 'Test Org');
+  assert.strictEqual(org.ownerPubkey, 'owner-pub');
+  assert.strictEqual(org.status, 'pending');
+});
 
-  // Replay both — no duplicates.
-  await applyTx(store, elTx);
-  await applyTx(store, candTx);
+test('applyTx applies election_create for registered org', async () => {
+  const store = makeStore();
+  await store.upsertOrg({ txHash: 'org-1', ownerPubkey: 'owner-pub', name: 'My Org', status: 'registered', feeConfirmed: true });
+  const memo = encode({ app: 'quickcount', type: 'election_create', org_id: 'org-1', name: 'My Election', visibility: 'public', agg: 'first_report' });
+  const result = await applyTx(store, { txId: 'el-tx-1', memo, from: 'owner-pub', to: 'dest', amount: 0 });
+  assert.strictEqual(result.applied, true);
+  assert.strictEqual(result.kind, 'election_create');
   assert.strictEqual(store.elections.size, 1);
-  assert.strictEqual(store.candidates.size, 1);
 });
 
-test('structural tx from a non-creator pubkey is ignored; results accepted from anyone', async () => {
+test('applyTx rejects election_create from wrong pubkey', async () => {
   const store = makeStore();
-  await applyTx(store, { txId: 'EL1', from: 'utCreator', to: 'utCreator', memo: memo.encode(memo.electionMemo('E')), createdAt: '2026-06-20T10:00:00.000Z' });
+  await store.upsertOrg({ txHash: 'org-1', ownerPubkey: 'owner-pub', name: 'My Org', status: 'registered', feeConfirmed: true });
+  const memo = encode({ app: 'quickcount', type: 'election_create', org_id: 'org-1', name: 'Hack', visibility: 'public', agg: 'first_report' });
+  const result = await applyTx(store, { txId: 'el-bad', memo, from: 'not-owner', to: 'dest', amount: 0 });
+  assert.strictEqual(result.applied, false);
+  assert.strictEqual(result.reason, 'unauthorized');
+});
 
-  // Stranger tries to inject a candidate → rejected.
-  const bad = await applyTx(store, { txId: 'X', from: 'utStranger', to: 'utCreator', memo: memo.encode(memo.candidateMemo('EL1', 9, 'Fake')), createdAt: '2026-06-20T10:02:00.000Z' });
-  assert.strictEqual(bad.applied, false);
-  assert.strictEqual(bad.reason, 'unauthorized');
-  assert.strictEqual(store.candidates.size, 0);
-
-  // Anyone may submit a result.
-  const ok = await applyTx(store, { txId: 'R1', from: 'utAgent', to: 'utCreator', memo: memo.encode(memo.resultMemo('EL1', 1, { 1: 5 })), createdAt: '2026-06-20T10:03:00.000Z' });
-  assert.strictEqual(ok.applied, true);
+test('applyTx applies result_submit', async () => {
+  const store = makeStore();
+  await store.upsertOrg({ txHash: 'org-1', ownerPubkey: 'owner-pub', name: 'Org', status: 'registered', feeConfirmed: true });
+  await store.upsertElection({ txHash: 'el-1', orgId: 1, name: 'Election', visibility: 'public', aggregation: 'first_report', status: 'open' });
+  await store.upsertStation({ txHash: 'stn-1', electionId: 1, name: 'Station 1', region: '' });
+  const memo = encode({ app: 'quickcount', type: 'result_submit', election_id: 'el-1', station_id: 'stn-1', votes: { 'cand-1': 42 } });
+  const result = await applyTx(store, { txId: 'sub-1', memo, from: 'reporter-pub', to: 'dest', amount: 0, blockHeight: 100 });
+  assert.strictEqual(result.applied, true);
+  assert.strictEqual(result.kind, 'result_submit');
   assert.strictEqual(store.submissions.size, 1);
-});
-
-test('normalizeTx maps field-name variants', () => {
-  const t = normalizeTx({ hash: ' H ', sender: 'utA', to: 'utB', memo: 'm', created_at: '2026-06-20T10:00:00Z' });
-  assert.strictEqual(t.txId, 'H');
-  assert.strictEqual(t.from, 'utA');
-  assert.strictEqual(t.to, 'utB');
-  assert.strictEqual(t.createdAt, '2026-06-20T10:00:00.000Z');
-});
-
-test('latest-per-station picks the most recent submission', () => {
-  const results = [
-    { sid: 1, tx_id: 'a', votes: { 1: 40, 2: 60 }, created_at: '2026-06-20T10:00:00.000Z' },
-    { sid: 1, tx_id: 'b', votes: { 1: 52, 2: 71 }, created_at: '2026-06-20T10:20:00.000Z' },
-    { sid: 2, tx_id: 'c', votes: { 1: 80, 2: 35 }, created_at: '2026-06-20T10:10:00.000Z' },
-  ];
-  const latest = latestPerStation(results);
-  assert.strictEqual(latest.get(1).tx_id, 'b'); // later one wins
-  assert.strictEqual(latest.get(2).tx_id, 'c');
-
-  const candidates = [{ cid: 1 }, { cid: 2 }];
-  const tally = computeTally(candidates, latest);
-  assert.deepStrictEqual(tally, { 1: 52 + 80, 2: 71 + 35 });
-
-  const prog = reporting([{ sid: 1 }, { sid: 2 }, { sid: 3 }], latest);
-  assert.deepStrictEqual(prog, { reported: 2, total: 3 });
+  assert.deepStrictEqual(store.submissions.get('sub-1').votes, { 'cand-1': 42 });
 });

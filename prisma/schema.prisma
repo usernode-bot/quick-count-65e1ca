@@ -8,93 +8,133 @@ datasource db {
 }
 
 model Organization {
-  id        Int        @id @default(autoincrement())
-  name      String
-  createdAt DateTime   @default(now())
+  id           Int       @id @default(autoincrement())
+  txHash       String    @unique
+  ownerPubkey  String
+  name         String
+  description  String    @default("")
+  status       String    @default("pending")
+  feeConfirmed Boolean   @default(false)
+  registeredAt DateTime?
+  createdAt    DateTime  @default(now())
+
   elections Election[]
+  members   OrgMember[]
+}
+
+model OrgMember {
+  id           Int          @id @default(autoincrement())
+  orgId        Int
+  memberPubkey String
+  grantTxHash  String       @unique
+  grantedAt    DateTime     @default(now())
+  org          Organization @relation(fields: [orgId], references: [id])
 }
 
 model Election {
-  id              Int              @id @default(autoincrement())
-  organizationId  Int
-  organization    Organization     @relation(fields: [organizationId], references: [id])
-  name            String
-  status          String           @default("active")
-  gpsRequired     Boolean          @default(false)
-  gpsRadiusMeters Int?
-  qrRequired      Boolean          @default(false)
-  createdAt       DateTime         @default(now())
-  candidates      Candidate[]
-  regions         Region[]
-  stations        PollingStation[]
-  submissions     CachedSubmission[]
+  id          Int       @id @default(autoincrement())
+  txHash      String    @unique
+  orgId       Int
+  name        String
+  visibility  String    @default("public")
+  aggregation String    @default("first_report")
+  status      String    @default("open")
+  closedAt    DateTime?
+  manualTally Json?
+  createdAt   DateTime  @default(now())
+
+  org         Organization       @relation(fields: [orgId], references: [id])
+  candidates  Candidate[]
+  stations    Station[]
+  submissions CachedSubmission[]
+  evidence    EvidenceRecord[]
+  disputes    Dispute[]
 }
 
 model Candidate {
+  id           Int      @id @default(autoincrement())
+  txHash       String   @unique
+  electionId   Int
+  name         String
+  displayOrder Int      @default(0)
+  election     Election @relation(fields: [electionId], references: [id])
+}
+
+model Station {
   id         Int      @id @default(autoincrement())
+  txHash     String   @unique
   electionId Int
+  name       String
+  region     String   @default("")
   election   Election @relation(fields: [electionId], references: [id])
-  name       String
-  sortOrder  Int
-}
 
-model Region {
-  id         Int              @id @default(autoincrement())
-  electionId Int
-  election   Election         @relation(fields: [electionId], references: [id])
-  name       String
-  stations   PollingStation[]
-}
-
-model PollingStation {
-  id                    Int                @id @default(autoincrement())
-  electionId            Int
-  election              Election           @relation(fields: [electionId], references: [id])
-  regionId              Int
-  region                Region             @relation(fields: [regionId], references: [id])
-  name                  String
-  code                  String
-  latitude              Float?
-  longitude             Float?
-  totalRegisteredVoters Int?
-  agents                StationAgent[]
-  submissions           CachedSubmission[]
-}
-
-model StationAgent {
-  id        Int            @id @default(autoincrement())
-  stationId Int
-  station   PollingStation @relation(fields: [stationId], references: [id])
-  userId    String
-  username  String
-}
-
-model UserRole {
-  id       Int    @id @default(autoincrement())
-  userId   String @unique
-  username String
-  role     String
+  submissions CachedSubmission[]
 }
 
 model CachedSubmission {
-  id                Int            @id @default(autoincrement())
-  txHash            String         @unique
-  stationId         Int
-  station           PollingStation @relation(fields: [stationId], references: [id])
-  electionId        Int
-  election          Election       @relation(fields: [electionId], references: [id])
-  submitterUserId   String
-  submitterUsername String
-  submitterPubkey   String
-  votes             Json
-  photoFilename     String?
-  blockHeight       Int
-  chainTimestamp    DateTime
-  indexedAt         DateTime       @default(now())
+  id              Int      @id @default(autoincrement())
+  txHash          String   @unique
+  stationId       Int
+  electionId      Int
+  submitterPubkey String
+  votes           Json
+  totalVotes      Int?
+  invalidVotes    Int?
+  refTxHash       String?
+  blockHeight     Int      @default(0)
+  chainTimestamp  DateTime
+  indexedAt       DateTime @default(now())
+  status          String   @default("ok")
+
+  station  Station  @relation(fields: [stationId], references: [id])
+  election Election @relation(fields: [electionId], references: [id])
+
+  evidence EvidenceRecord[]
+  disputes Dispute[]
+}
+
+model EvidenceRecord {
+  id             Int      @id @default(autoincrement())
+  txHash         String   @unique
+  submissionId   Int
+  electionId     Int
+  uploaderPubkey String
+  sha256         String
+  ipfsCid        String   @default("")
+  ipfsStatus     String   @default("pending")
+  filePath       String   @default("")
+  createdAt      DateTime @default(now())
+
+  submission CachedSubmission @relation(fields: [submissionId], references: [id])
+  election   Election         @relation(fields: [electionId], references: [id])
+}
+
+model Dispute {
+  id            Int       @id @default(autoincrement())
+  txHash        String    @unique
+  submissionId  Int
+  electionId    Int
+  filerPubkey   String
+  reason        String
+  status        String    @default("open")
+  resolvedAt    DateTime?
+  resolvedBy    String    @default("")
+  resolution    String    @default("")
+  resolveTxHash String    @default("")
+  createdAt     DateTime  @default(now())
+
+  submission CachedSubmission @relation(fields: [submissionId], references: [id])
+  election   Election         @relation(fields: [electionId], references: [id])
+}
+
+model UserRole {
+  id     Int    @id @default(autoincrement())
+  userId String @unique
+  role   String
 }
 
 model IndexerState {
   id               Int      @id @default(1)
-  lastIndexedBlock Int
-  lastIndexedAt    DateTime
+  lastIndexedBlock Int      @default(0)
+  lastIndexedAt    DateTime @default(now())
 }
