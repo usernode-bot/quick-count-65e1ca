@@ -5,7 +5,8 @@
       "key": "APP_PUBKEY",
       "description": "The application's receiving wallet address on the Usernode blockchain network. All vote submission transactions are sent to this address.",
       "required": true,
-      "private": false
+      "private": false,
+      "default": "ut1placeholder000000000000000000000000000000000000000"
     },
     {
       "key": "IPFS_API_URL",
@@ -15,11 +16,19 @@
       "default": "https://api.pinata.cloud"
     },
     {
-      "key": "IPFS_API_KEY",
-      "description": "API key for the IPFS pinning service. Required to upload photo evidence files.",
+      "key": "PINATA_JWT",
+      "description": "Pinata JWT bearer token for IPFS pinning. Required to upload photo evidence files. Encrypted at rest; staging uses a dummy value that returns a placeholder CID.",
       "required": true,
       "private": true,
-      "staging_default": "staging-test-key"
+      "staging_default": "staging-dummy-jwt",
+      "default": "staging-dummy-jwt"
+    },
+    {
+      "key": "LOCAL_DEV",
+      "description": "Set to true to enable local dev mode — skips all real blockchain and IPFS calls, returns fake data",
+      "required": false,
+      "private": false,
+      "default": "true"
     },
     {
       "key": "NODE_RPC_URL",

@@ -18,6 +18,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const APP_PUBKEY = process.env.APP_PUBKEY || '';
 const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
+const IS_LOCAL_DEV = process.env.LOCAL_DEV === 'true';
 
 // Paths that stay open without authentication.
 const PUBLIC_API_PATHS = new Set(['/health', '/api/config']);
@@ -459,7 +460,7 @@ app.post('/api/prepare-submission', upload.single('photo'), requireAgent, async 
     const existingRes = await pool.query('SELECT tx_hash FROM cached_submissions WHERE station_id = $1 AND election_id = $2', [sid, eid]);
     if (existingRes.rows.length > 0) return res.status(409).json({ error: 'Submission already exists for this station', tx_hash: existingRes.rows[0].tx_hash });
 
-    if (station.gps_required) {
+    if (station.gps_required && !IS_LOCAL_DEV) {
       let gps; try { gps = JSON.parse(gpsStr || 'null'); } catch {}
       if (!gps || typeof gps.lat !== 'number' || typeof gps.lng !== 'number') return res.status(400).json({ error: 'GPS coordinates required' });
       if (station.latitude && station.longitude) {
@@ -468,7 +469,7 @@ app.post('/api/prepare-submission', upload.single('photo'), requireAgent, async 
       }
     }
 
-    if (station.qr_required && station.code && (qrCode || '').trim() !== station.code.trim()) {
+    if (station.qr_required && station.code && !IS_LOCAL_DEV && (qrCode || '').trim() !== station.code.trim()) {
       return res.status(400).json({ error: 'QR code does not match' });
     }
 
@@ -515,6 +516,11 @@ app.get('/api/submission-status/:txHash', requireAgent, async (req, res) => {
       const sub = cached.rows[0];
       return res.json({ status: 'confirmed', blockHeight: sub.block_height, chainTimestamp: sub.chain_timestamp, txHash });
     }
+    // In LOCAL_DEV, fake tx hashes are immediately confirmed without hitting the chain.
+    if (IS_LOCAL_DEV && txHash.startsWith('local-dev-')) {
+      return res.json({ status: 'confirmed', blockHeight: 9999, chainTimestamp: new Date().toISOString(), txHash });
+    }
+
     const tx = await getTransaction(txHash);
     if (!tx || !tx.id) return res.json({ status: 'pending', txHash });
     const memo = decodeMemo(tx.attachment || tx.data || '');
