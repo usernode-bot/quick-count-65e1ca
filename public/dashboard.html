@@ -172,10 +172,17 @@
         .map(({ c, i, votes }) => {
           const pct = locked ? Math.round(100 / n) : (totalVotes ? Math.round((votes / totalVotes) * 100) : 0);
           const num = locked ? '•••' : (votes.toLocaleString() + ' <span class="text-zinc-500">(' + pct + '%)</span>');
-          return '<div class="mb-3">'
-            + '<div class="flex justify-between text-sm mb-1"><span>' + escapeHtml(c.name) + '</span>'
-            + '<span class="font-mono text-zinc-300">' + num + '</span></div>'
+          const initial = escapeHtml((c.name || '?').trim().charAt(0).toUpperCase() || '?');
+          const avatar = c.avatar
+            ? '<img src="' + escapeHtml(c.avatar) + '" alt="" class="h-8 w-8 rounded-full object-cover shrink-0 bg-zinc-800">'
+            : '<span class="h-8 w-8 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold text-white ' + COLORS[i % COLORS.length] + '">' + initial + '</span>';
+          return '<div class="mb-3 flex items-center gap-3">'
+            + avatar
+            + '<div class="flex-1 min-w-0">'
+            + '<div class="flex justify-between text-sm mb-1"><span class="truncate">' + escapeHtml(c.name) + '</span>'
+            + '<span class="font-mono text-zinc-300 shrink-0 ml-2">' + num + '</span></div>'
             + '<div class="h-3 rounded bg-zinc-800 overflow-hidden"><div class="h-full ' + COLORS[i % COLORS.length] + '" style="width:' + pct + '%"></div></div>'
+            + '</div>'
             + '</div>';
         }).join('');
 
@@ -183,9 +190,13 @@
         + pie + '<div class="flex-1 w-full">' + (bars || '<p class="text-zinc-500 text-sm">No candidates.</p>') + '</div></div>';
 
       const headCells = cands.map((c) => '<th class="py-2 px-2 text-right font-medium text-zinc-400">' + escapeHtml(c.name) + '</th>').join('');
+      const c1Link = (s) => (!locked && s.c1)
+        ? ' <a href="' + escapeHtml(s.c1) + '" target="_blank" rel="noopener" class="ml-1 text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-violet-300 hover:bg-zinc-700 align-middle" title="View uploaded C1 form scan">C1</a>'
+        : '';
       const stationRows = (d.stations || []).map((s) => {
+        const nameCell = escapeHtml(s.name) + c1Link(s);
         if (!s.reported) {
-          return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
+          return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + nameCell + '</td>'
             + '<td class="py-2 text-zinc-500" colspan="' + (cands.length + 1) + '">Awaiting result</td></tr>';
         }
         const cells = cands.map((c) => {
@@ -193,7 +204,7 @@
           return '<td class="py-2 px-2 text-right font-mono">' + val + '</td>';
         }).join('');
         const upd = locked ? '•••' : timeAgo(s.at);
-        return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + escapeHtml(s.name) + '</td>'
+        return '<tr class="border-t border-zinc-800"><td class="py-2 pr-2">' + nameCell + '</td>'
           + cells + '<td class="py-2 pl-2 text-right text-xs text-zinc-500 whitespace-nowrap">' + upd + '</td></tr>';
       }).join('');
 
@@ -315,6 +326,7 @@
       const totalVotes = (!locked && d.tally) ? Object.values(d.tally).reduce((s, n) => s + Number(n || 0), 0) : null;
 
       const votesLine = locked ? 'live count locked' : (totalVotes.toLocaleString() + ' votes counted');
+
       document.getElementById('content').innerHTML =
         '<h2 class="text-lg font-semibold mb-1">' + escapeHtml(d.election.name) + '</h2>'
         + '<p class="text-sm text-zinc-400 mb-5">' + d.reporting.reported + ' of ' + d.reporting.total + ' stations reported · ' + votesLine + '</p>'
