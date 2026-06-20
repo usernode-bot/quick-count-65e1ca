@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const txsource = require('./lib/txsource');
 const { normalizeTx, applyTx } = require('./lib/indexer');
 const { latestPerStation, computeTally, reporting } = require('./lib/aggregate');
+const { verifyPayment } = require('./lib/unlock');
 const { isKind, validateImageUpload } = require('./lib/attach');
 
 const app = express();
@@ -13,6 +14,14 @@ const port = process.env.PORT || 3000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.JWT_SECRET;
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
+
+// ── Pay-to-unlock config ─────────────────────────────────────────────────────
+// The recipient address and price are configured via dapp.json secrets. The
+// network is currently a test/mock-token network; switching to mainnet is just
+// setting UNLOCK_RECIPIENT_ADDRESS to a real wallet — no code changes.
+const UNLOCK_RECIPIENT = process.env.UNLOCK_RECIPIENT_ADDRESS || '';
+const UNLOCK_PRICE = Math.max(0, parseInt(process.env.UNLOCK_PRICE_TOKENS || '0', 10) || 0);
+const UNLOCK_ENABLED = !!UNLOCK_RECIPIENT;
 
 // Paths that stay open without authentication.
 const PUBLIC_API_PATHS = new Set(['/health']);
@@ -79,6 +88,13 @@ const store = {
   },
 };
 
+// Has this wallet paid to unlock? Unlock is global per wallet and permanent.
+async function walletUnlocked(pubkey) {
+  if (!pubkey) return false;
+  const { rows } = await pool.query('SELECT 1 FROM unlocks WHERE usernode_pubkey = $1', [pubkey]);
+  return rows.length > 0;
+}
+
 // ── Indexer poll loop ───────────────────────────────────────────────────────
 async function pollOnce() {
   const ws = (await pool.query('SELECT address, cursor FROM watched_addresses')).rows;
@@ -104,9 +120,17 @@ async function pollOnce() {
 
 // ── API ─────────────────────────────────────────────────────────────────────
 
-// Public config (staging banner, poll hint). Public so the dashboard can read it.
+// Public config (staging banner, poll hint, unlock pricing). Public so the
+// dashboard can read it before the viewer authenticates.
 app.get('/api/public/config', (_req, res) => {
-  res.json({ staging: IS_STAGING });
+  res.json({
+    staging: IS_STAGING,
+    unlock: {
+      enabled: UNLOCK_ENABLED,
+      recipient: UNLOCK_RECIPIENT || null,
+      price: UNLOCK_PRICE,
+    },
+  });
 });
 
 // Authenticated: who am I (header / wallet hint for the app shell).
@@ -274,14 +298,79 @@ app.get('/api/public/elections/:eid', async (req, res) => {
     let lastUpdated = null;
     for (const r of results) if (r.created_at && (!lastUpdated || r.created_at > lastUpdated)) lastUpdated = r.created_at;
 
-    res.json({
+    // Pay-to-unlock gate. The auth middleware has already populated req.user
+    // from any token, even on this public path, so one endpoint serves both
+    // locked (anonymous / unpaid) and unlocked (paid wallet) viewers.
+    const unlocked = await walletUnlocked(req.user && req.user.usernode_pubkey);
+
+    const base = {
       election: { eid: el.eid, name: el.name, root_pubkey: el.root_pubkey },
       candidates,
-      stations: perStation,
-      tally,
       reporting: prog,
       lastUpdated,
-    });
+      locked: !unlocked,
+    };
+
+    if (unlocked) {
+      return res.json(Object.assign(base, { stations: perStation, tally }));
+    }
+
+    // Locked: withhold every vote figure so the blur cannot be defeated in
+    // dev-tools. Keep structure (names, reported flag, reporting counts) so the
+    // dashboard can render a believable blurred placeholder and the submit flow
+    // (which only needs candidates/stations/root_pubkey) keeps working.
+    const lockedStations = perStation.map((s) => ({
+      sid: s.sid, name: s.name, reported: s.reported,
+      votes: null, tot: null, inv: null, at: null, submitter: null,
+    }));
+    return res.json(Object.assign(base, { stations: lockedStations, tally: null }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Authenticated: verify an on-chain unlock payment and record a permanent
+// per-wallet unlock. NOT in PUBLIC_API_PATHS — stays behind the JWT gate.
+app.post('/api/unlock/verify', async (req, res) => {
+  try {
+    const pubkey = req.user && req.user.usernode_pubkey;
+    if (!pubkey) return res.status(400).json({ error: 'Link a Usernode wallet first' });
+    if (!UNLOCK_ENABLED) return res.status(503).json({ error: 'Unlocking is not configured' });
+
+    // Already paid → idempotent success (never charge twice).
+    if (await walletUnlocked(pubkey)) return res.json({ unlocked: true });
+
+    if (IS_STAGING) {
+      // No live chain in staging — record a clearly-labelled demo unlock so the
+      // unlocked view is reviewable without a real payment.
+      await pool.query(
+        `INSERT INTO unlocks (usernode_pubkey, tx_id, amount, recipient, created_at)
+         VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
+        [pubkey, 'staging-demo-' + pubkey, UNLOCK_PRICE, UNLOCK_RECIPIENT]
+      );
+      return res.json({ unlocked: true, demo: true });
+    }
+
+    const { tx_id } = req.body || {};
+    if (!tx_id) return res.status(400).json({ error: 'tx_id required' });
+
+    // Independently fetch + verify the payment against the chain.
+    const raw = await txsource.getTransaction({ txId: tx_id, recipient: UNLOCK_RECIPIENT });
+    const tx = normalizeTx(raw || {});
+    const v = verifyPayment(tx, { recipient: UNLOCK_RECIPIENT, price: UNLOCK_PRICE, sender: pubkey });
+    if (!v.ok) return res.status(400).json({ error: 'Payment could not be verified', reason: v.reason });
+
+    try {
+      await pool.query(
+        `INSERT INTO unlocks (usernode_pubkey, tx_id, amount, recipient, created_at)
+         VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
+        [pubkey, tx.txId, Number(tx.amount) || UNLOCK_PRICE, UNLOCK_RECIPIENT]
+      );
+    } catch (e) {
+      // tx_id UNIQUE violation → this payment was already claimed by a wallet.
+      return res.status(400).json({ error: 'This payment has already been used' });
+    }
+    res.json({ unlocked: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -350,6 +439,18 @@ async function migrate() {
       cursor TEXT,
       added_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+  // Permanent per-wallet unlock records (pay-to-unlock). Keyed on the payer's
+  // wallet; tx_id UNIQUE prevents one payment being replayed by another wallet.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS unlocks (
+      usernode_pubkey TEXT PRIMARY KEY,
+      tx_id TEXT UNIQUE,
+      amount INTEGER,
+      recipient TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  // Payment + wallet data — private, so staging gets schema only (no rows).
+  await pool.query(`COMMENT ON TABLE unlocks IS 'staging:private'`);
   // Off-chain image attachments (candidate avatars + station C1 scans).
   // PUBLIC table: these images are shown on the public dashboard, so a stranger
   // seeing every row is by design. No FK to candidates/stations on purpose —

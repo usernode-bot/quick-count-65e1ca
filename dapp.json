@@ -6,6 +6,22 @@
       "description": "Base URL of the Usernode node the indexer polls for on-chain transactions. Platform-managed in-network; optional for standalone deploys (the indexer no-ops when unset).",
       "required": false,
       "private": false
+    },
+    {
+      "key": "UNLOCK_RECIPIENT_ADDRESS",
+      "description": "Wallet address that pay-to-unlock payments are sent to. Currently a test/mock-token network — set this to the real mainnet wallet to go live. Defaults to an internal testing placeholder so the deploy never blocks.",
+      "required": false,
+      "private": false,
+      "default": "ut1demo00000000000000000000000000000000",
+      "staging_default": "ut1demo00000000000000000000000000000000"
+    },
+    {
+      "key": "UNLOCK_PRICE_TOKENS",
+      "description": "Whole-number token amount a viewer must pay once to permanently unlock the live results charts. Test-token price during the testing phase.",
+      "required": false,
+      "private": false,
+      "default": "10",
+      "staging_default": "10"
     }
   ],
   "tests": [
@@ -15,9 +31,19 @@
       "expectText": "Staging demo"
     },
     {
-      "name": "Demo election shows latest-submission tally",
+      "name": "Demo election shows reporting progress",
       "path": "/dashboard.html?eid=demo-election",
       "expectText": "stations reported"
+    },
+    {
+      "name": "Dashboard shows the locked pay-to-unlock overlay",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectText": "Unlock live results"
+    },
+    {
+      "name": "Public results are locked for anonymous viewers",
+      "path": "/api/public/elections/demo-election",
+      "expectText": "\"locked\":true"
     },
     {
       "name": "Seeded candidate avatar serves an image",
