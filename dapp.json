@@ -8,6 +8,27 @@
       "private": false
     },
     {
+      "key": "TREASURY_ADDR",
+      "description": "Wallet address that receives organization registration fees. Public address — not a secret.",
+      "required": false,
+      "private": false,
+      "default": "ut1treasuryquickcount00000000000000000000"
+    },
+    {
+      "key": "ORG_FEE",
+      "description": "Minimum registration fee (smallest on-chain unit) an organization must pay to become active.",
+      "required": false,
+      "private": false,
+      "default": "100"
+    },
+    {
+      "key": "ADMIN_ADDRS",
+      "description": "Comma-separated platform-admin wallet addresses (fee waivers + admin dashboard). Public identifiers.",
+      "required": false,
+      "private": false,
+      "default": ""
+    },
+    {
       "key": "UNLOCK_RECIPIENT_ADDRESS",
       "description": "Wallet address that pay-to-unlock payments are sent to. Currently a test/mock-token network — set this to the real mainnet wallet to go live. Defaults to an internal testing placeholder so the deploy never blocks.",
       "required": false,
@@ -26,9 +47,19 @@
   ],
   "tests": [
     {
-      "name": "Live dashboard renders demo election",
-      "path": "/dashboard.html",
+      "name": "Dashboard renders demo election",
+      "path": "/#/dashboard",
       "expectText": "Staging demo"
+    },
+    {
+      "name": "Elections list renders",
+      "path": "/#/elections",
+      "expectText": "Elections"
+    },
+    {
+      "name": "Evidence gallery renders",
+      "path": "/#/evidence",
+      "expectText": "Evidence"
     },
     {
       "name": "Demo election shows reporting progress",

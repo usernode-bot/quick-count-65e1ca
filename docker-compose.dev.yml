@@ -1,0 +1,28 @@
+# Quick Count — local-dev stack. Runs fully offline against the in-process mock
+# ledger (/__mock/*) with no external Usernode node. Demo data is seeded so
+# every screen renders. A Postgres service is included for durable replay; the
+# app also runs with no DB at all (transaction log kept in memory).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: quickcount
+      POSTGRES_PASSWORD: quickcount
+      POSTGRES_DB: quickcount
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    command: ["node", "server.js", "--local-dev"]
+    depends_on:
+      - db
+    environment:
+      PORT: 3000
+      USERNODE_ENV: staging
+      APP_MODE: local-dev
+      DATABASE_URL: postgres://quickcount:quickcount@db:5432/quickcount
+      TREASURY_ADDR: ut1treasuryquickcount00000000000000000000
+      ORG_FEE: 100
+    ports:
+      - "3000:3000"
