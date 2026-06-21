@@ -28,7 +28,7 @@ const mock = require('./lib/mockledger');
 const { makeSource, getTransaction } = require('./lib/txsource');
 const { verifyPayment } = require('./lib/unlock');
 const { isKind, validateImageUpload } = require('./lib/attach');
-const { isValidDisplayName, isSupportedLang } = require('./lib/profile');
+const { isValidDisplayName, isValidBio, isSupportedLang } = require('./lib/profile');
 
 let Pool = null;
 try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
@@ -522,13 +522,14 @@ app.get('/api/me', async (req, res) => {
         [pubkey, username]
       );
       const { rows } = await pool.query(
-        'SELECT display_name, preferred_lang, created_at FROM profiles WHERE usernode_pubkey = $1',
+        'SELECT display_name, preferred_lang, bio, created_at FROM profiles WHERE usernode_pubkey = $1',
         [pubkey]
       );
       const r = rows[0] || {};
       profile = {
         display_name: r.display_name || null,
         preferred_lang: r.preferred_lang || null,
+        bio: r.bio || null,
         created_at: r.created_at instanceof Date ? r.created_at.toISOString() : (r.created_at || null),
       };
     }
@@ -547,27 +548,36 @@ app.put('/api/me/profile', async (req, res) => {
     const body = req.body || {};
     const hasName = body.display_name != null && body.display_name !== '';
     const hasLang = body.preferred_lang != null && body.preferred_lang !== '';
-    if (!hasName && !hasLang) return res.status(400).json({ error: 'Nothing to update' });
+    const hasBio = body.bio != null;  // empty string is valid (clears bio)
+    if (!hasName && !hasLang && !hasBio) return res.status(400).json({ error: 'Nothing to update' });
     if (hasName && !isValidDisplayName(body.display_name)) {
       return res.status(400).json({ error: 'Display name must be 3–20 letters, numbers, or underscores' });
     }
     if (hasLang && !isSupportedLang(body.preferred_lang)) {
       return res.status(400).json({ error: 'Unsupported language' });
     }
+    if (hasBio && !isValidBio(body.bio)) {
+      return res.status(400).json({ error: 'Bio must be 280 characters or fewer' });
+    }
     if (!pool) return res.status(503).json({ error: 'Profiles are unavailable in this environment' });
     const username = (req.user && req.user.username) || null;
+    // Empty string clears the bio (stored as null); non-empty sets it.
+    const newBio = hasBio ? (body.bio === '' ? null : body.bio) : null;
 
-    // Upsert; COALESCE keeps the existing value for fields not being changed.
+    // Upsert; COALESCE / CASE keeps the existing value for fields not being changed.
+    // $6 (hasBio boolean) tells Postgres whether to apply the bio update at all,
+    // distinguishing "not sent" (keep existing) from "sent empty" (clear to null).
     const { rows } = await pool.query(
-      `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, NOW(), NOW())
+      `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
        ON CONFLICT (usernode_pubkey) DO UPDATE SET
          display_name = COALESCE($3, profiles.display_name),
          preferred_lang = COALESCE($4, profiles.preferred_lang),
+         bio = CASE WHEN $6 THEN $5 ELSE profiles.bio END,
          username = COALESCE(profiles.username, EXCLUDED.username),
          updated_at = NOW()
-       RETURNING display_name, preferred_lang, created_at`,
-      [pubkey, username, hasName ? body.display_name : null, hasLang ? body.preferred_lang : null]
+       RETURNING display_name, preferred_lang, bio, created_at`,
+      [pubkey, username, hasName ? body.display_name : null, hasLang ? body.preferred_lang : null, newBio, hasBio]
     );
     const r = rows[0] || {};
     res.json({
@@ -575,8 +585,55 @@ app.put('/api/me/profile', async (req, res) => {
       profile: {
         display_name: r.display_name || null,
         preferred_lang: r.preferred_lang || null,
+        bio: r.bio || null,
         created_at: r.created_at instanceof Date ? r.created_at.toISOString() : (r.created_at || null),
       },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Public user profiles ─────────────────────────────────────────────────────
+// Returns the profile row + activity stats for any wallet address.
+// Stats and history come from the in-memory indexer (no extra DB queries);
+// they are filtered to elections visible to ?viewer=.
+// Path starts with /api/public/ which is already in PUBLIC_PREFIXES — no auth needed.
+app.get('/api/public/profiles/:addr', async (req, res) => {
+  try {
+    const addr = req.params.addr;
+    const viewer = (req.query.viewer || '').toString() || null;
+
+    let profileData = { username: null, display_name: null, bio: null };
+    if (pool) {
+      const { rows } = await pool.query(
+        'SELECT username, display_name, bio FROM profiles WHERE usernode_pubkey = $1',
+        [addr]
+      );
+      if (rows.length) {
+        profileData = {
+          username: rows[0].username || null,
+          display_name: rows[0].display_name || null,
+          bio: rows[0].bio || null,
+        };
+      }
+    }
+
+    const visible = indexer.visibleElections({ viewer, admin: indexer.isAdmin(viewer) });
+    const visibleEids = visible.map((el) => el.eid);
+    const activity = indexer.activityByAddr(addr, visibleEids);
+
+    res.json({
+      usernode_pubkey: addr,
+      username: profileData.username,
+      display_name: profileData.display_name,
+      bio: profileData.bio,
+      stats: {
+        results_submitted: activity.resultCount,
+        elections: activity.electionCount,
+        disputes_filed: activity.disputeCount,
+      },
+      history: activity.history,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -644,6 +701,8 @@ async function migrate() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
   await pool.query(`COMMENT ON TABLE profiles IS 'staging:private'`);
+  // bio added in v2 of the profiles schema.
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
 }
 
 async function loadFromDb() {
@@ -684,14 +743,21 @@ async function seedStaging() {
     );
   }
 
-  // `profiles` is staging:private (schema-only in staging) → seed one obviously
-  // fake row keyed by the demo address so My Profile is reviewable without a
-  // real wallet/token. /api/me resolves it via ?viewer=<root> in staging.
+  // `profiles` is staging:private (schema-only in staging) → seed obviously-fake
+  // rows so My Profile and public profile links are reviewable without real wallets.
   await pool.query(
-    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, created_at, updated_at)
-     VALUES ($1, 'Staging demo user', 'Staging_demo_user', 'en', '2026-06-01T00:00:00.000Z', NOW())
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
+     VALUES ($1, 'Staging demo user', 'Staging_demo_user', 'en', 'Staging demo — election observer for Citizens Count', '2026-06-01T00:00:00.000Z', NOW())
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [root]
+  );
+  // Second demo profile — keyed to the observer-one address used in demo elections,
+  // so clicking their name in Disputes/Evidence shows a populated public profile.
+  await pool.query(
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
+     VALUES ($1, 'observer_one', 'Observer_One', 'en', 'Staging demo — observer profile for testing public profile links', '2026-06-01T00:00:00.000Z', NOW())
+     ON CONFLICT (usernode_pubkey) DO NOTHING`,
+    [DEMO.obs1]
   );
 }
 

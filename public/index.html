@@ -116,6 +116,7 @@
     { id: 'orgs', label: 'Orgs', icon: '🏛️' },
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
+    { id: 'profile', label: 'My Profile', icon: '👤', walletOnly: true },
     { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
@@ -173,6 +174,17 @@
       evidence_sha256_desc: 'Each result may carry a SHA-256 hash of its tally sheet. Drop the original file below to prove it matches what was reported on-chain — the file never leaves your device.', evidence_verifying_label: 'Verifying against:', evidence_verifying_default: 'select a result below, or any hash', evidence_pick_target: 'Pick a result to compare against.', evidence_match_yes: '✓ Match — this file is exactly what was reported.', evidence_match_no: '✗ No match — this file differs from the recorded evidence.',
       admin_scope_required: 'Platform-admin scope required. Connect an admin wallet.', admin_stat_orgs: 'Organizations', admin_stat_active_orgs: 'Active orgs', admin_stat_elections: 'Elections', admin_stat_org_fee: 'Org fee', admin_all_orgs: 'All organizations', admin_badge_waived: 'waived', admin_paid: 'paid {amount}',
       select_election_prompt: 'Select an election.',
+      tab_profile: 'My Profile',
+      label_bio: 'Bio',
+      hint_bio: 'Up to 280 characters',
+      bio_saved: 'Bio updated',
+      bio_save_failed: 'Could not save bio',
+      profile_stat_results: 'Results submitted',
+      profile_stat_elections: 'Elections',
+      profile_stat_disputes: 'Disputes filed',
+      profile_history_heading: 'Activity',
+      profile_history_empty: 'No activity yet.',
+      profile_not_found: 'No profile or activity found for this address.',
     },
     id: {
       menu_profile: 'Profil Saya', menu_settings: 'Pengaturan', menu_connected: 'Masuk sebagai',
@@ -217,6 +229,17 @@
       evidence_sha256_desc: 'Setiap hasil mungkin memiliki hash SHA-256 dari lembar penghitungannya. Jatuhkan file asli di bawah untuk membuktikan kecocokannya dengan yang dilaporkan di blockchain — file tidak meninggalkan perangkat Anda.', evidence_verifying_label: 'Memverifikasi terhadap:', evidence_verifying_default: 'pilih hasil di bawah, atau hash apa pun', evidence_pick_target: 'Pilih hasil untuk dibandingkan.', evidence_match_yes: '✓ Cocok — file ini persis seperti yang dilaporkan.', evidence_match_no: '✗ Tidak cocok — file ini berbeda dari bukti yang tercatat.',
       admin_scope_required: 'Diperlukan hak admin platform. Hubungkan dompet admin.', admin_stat_orgs: 'Organisasi', admin_stat_active_orgs: 'Org aktif', admin_stat_elections: 'Pemilihan', admin_stat_org_fee: 'Biaya org', admin_all_orgs: 'Semua organisasi', admin_badge_waived: 'dibebaskan', admin_paid: 'dibayar {amount}',
       select_election_prompt: 'Pilih pemilihan.',
+      tab_profile: 'Profil Saya',
+      label_bio: 'Bio',
+      hint_bio: 'Maksimum 280 karakter',
+      bio_saved: 'Bio diperbarui',
+      bio_save_failed: 'Gagal menyimpan bio',
+      profile_stat_results: 'Hasil dikirim',
+      profile_stat_elections: 'Pemilihan',
+      profile_stat_disputes: 'Sengketa diajukan',
+      profile_history_heading: 'Aktivitas',
+      profile_history_empty: 'Belum ada aktivitas.',
+      profile_not_found: 'Tidak ada profil atau aktivitas untuk alamat ini.',
     },
     'zh-Hans': {
       menu_profile: '我的资料', menu_settings: '设置', menu_connected: '当前登录',
@@ -261,6 +284,17 @@
       evidence_sha256_desc: '每条结果可能附带其计票表的 SHA-256 哈希值。将原始文件拖放到下方，以证明其与链上报告的内容一致——文件不会离开您的设备。', evidence_verifying_label: '验证对象：', evidence_verifying_default: '在下方选择一条结果，或输入任意哈希值', evidence_pick_target: '请选择要对比的结果。', evidence_match_yes: '✓ 匹配 — 此文件与上报内容完全一致。', evidence_match_no: '✗ 不匹配 — 此文件与记录的证据不符。',
       admin_scope_required: '需要平台管理员权限。请连接管理员钱包。', admin_stat_orgs: '机构', admin_stat_active_orgs: '活跃机构', admin_stat_elections: '选举', admin_stat_org_fee: '注册费', admin_all_orgs: '所有机构', admin_badge_waived: '已豁免', admin_paid: '已缴 {amount}',
       select_election_prompt: '请选择一场选举。',
+      tab_profile: '我的资料',
+      label_bio: '简介',
+      hint_bio: '最多 280 个字符',
+      bio_saved: '简介已更新',
+      bio_save_failed: '无法保存简介',
+      profile_stat_results: '已提交结果',
+      profile_stat_elections: '选举',
+      profile_stat_disputes: '提交的争议',
+      profile_history_heading: '活动',
+      profile_history_empty: '暂无活动。',
+      profile_not_found: '未找到该地址的资料或活动。',
     },
     es: {
       menu_profile: 'Mi perfil', menu_settings: 'Configuración', menu_connected: 'Sesión de',
@@ -305,6 +339,17 @@
       evidence_sha256_desc: 'Cada resultado puede incluir un hash SHA-256 de su acta de escrutinio. Arrastra el archivo original aquí abajo para comprobar que coincide con lo reportado en la cadena — el archivo nunca sale de tu dispositivo.', evidence_verifying_label: 'Verificando contra:', evidence_verifying_default: 'selecciona un resultado abajo, o cualquier hash', evidence_pick_target: 'Selecciona un resultado para comparar.', evidence_match_yes: '✓ Coincide — este archivo es exactamente lo que fue reportado.', evidence_match_no: '✗ No coincide — este archivo difiere de la evidencia registrada.',
       admin_scope_required: 'Se requiere acceso de admin de plataforma. Conecta un monedero admin.', admin_stat_orgs: 'Organizaciones', admin_stat_active_orgs: 'Orgs activas', admin_stat_elections: 'Elecciones', admin_stat_org_fee: 'Cuota org', admin_all_orgs: 'Todas las organizaciones', admin_badge_waived: 'eximida', admin_paid: 'pagado {amount}',
       select_election_prompt: 'Selecciona una elección.',
+      tab_profile: 'Mi perfil',
+      label_bio: 'Biografía',
+      hint_bio: 'Hasta 280 caracteres',
+      bio_saved: 'Biografía actualizada',
+      bio_save_failed: 'No se pudo guardar la biografía',
+      profile_stat_results: 'Resultados enviados',
+      profile_stat_elections: 'Elecciones',
+      profile_stat_disputes: 'Disputas presentadas',
+      profile_history_heading: 'Actividad',
+      profile_history_empty: 'Sin actividad aún.',
+      profile_not_found: 'No se encontró perfil ni actividad para esta dirección.',
     },
     hi: {
       menu_profile: 'मेरी प्रोफ़ाइल', menu_settings: 'सेटिंग्स', menu_connected: 'साइन इन',
@@ -349,6 +394,17 @@
       evidence_sha256_desc: 'प्रत्येक परिणाम में उसकी मतगणना पत्र का SHA-256 हैश हो सकता है। मूल फ़ाइल नीचे डालें यह साबित करने के लिए कि यह श्रृंखला पर रिपोर्ट किए गए से मेल खाती है — फ़ाइल आपके डिवाइस से नहीं जाती।', evidence_verifying_label: 'सत्यापन:', evidence_verifying_default: 'नीचे एक परिणाम चुनें, या कोई भी हैश', evidence_pick_target: 'तुलना के लिए एक परिणाम चुनें।', evidence_match_yes: '✓ मेल खाता है — यह फ़ाइल बिल्कुल वैसी है जो रिपोर्ट की गई थी।', evidence_match_no: '✗ मेल नहीं खाता — यह फ़ाइल दर्ज साक्ष्य से भिन्न है।',
       admin_scope_required: 'प्लेटफ़ॉर्म एडमिन स्कोप आवश्यक। एडमिन वॉलेट कनेक्ट करें।', admin_stat_orgs: 'संगठन', admin_stat_active_orgs: 'सक्रिय संगठन', admin_stat_elections: 'चुनाव', admin_stat_org_fee: 'संगठन शुल्क', admin_all_orgs: 'सभी संगठन', admin_badge_waived: 'माफ़', admin_paid: 'दिया {amount}',
       select_election_prompt: 'चुनाव चुनें।',
+      tab_profile: 'मेरी प्रोफ़ाइल',
+      label_bio: 'परिचय',
+      hint_bio: 'अधिकतम 280 अक्षर',
+      bio_saved: 'परिचय अपडेट हुआ',
+      bio_save_failed: 'परिचय सहेजा नहीं जा सका',
+      profile_stat_results: 'परिणाम सबमिट',
+      profile_stat_elections: 'चुनाव',
+      profile_stat_disputes: 'विवाद दायर',
+      profile_history_heading: 'गतिविधि',
+      profile_history_empty: 'अभी तक कोई गतिविधि नहीं।',
+      profile_not_found: 'इस पते के लिए कोई प्रोफ़ाइल या गतिविधि नहीं मिली।',
     },
     ar: {
       menu_profile: 'ملفي الشخصي', menu_settings: 'الإعدادات', menu_connected: 'تسجيل الدخول باسم',
@@ -393,6 +449,17 @@
       evidence_sha256_desc: 'كل نتيجة قد تحمل هاش SHA-256 لورقة الفرز الخاصة بها. أسقط الملف الأصلي أدناه لإثبات مطابقته لما أُبلغ عنه على السلسلة — الملف لا يغادر جهازك.', evidence_verifying_label: 'جارٍ التحقق من:', evidence_verifying_default: 'حدد نتيجة أدناه، أو أي هاش', evidence_pick_target: 'اختر نتيجة للمقارنة.', evidence_match_yes: '✓ مطابق — هذا الملف هو بالضبط ما أُبلغ عنه.', evidence_match_no: '✗ غير مطابق — هذا الملف يختلف عن الدليل المسجل.',
       admin_scope_required: 'يلزم صلاحية مشرف المنصة. وصّل محفظة مشرف.', admin_stat_orgs: 'المنظمات', admin_stat_active_orgs: 'المنظمات النشطة', admin_stat_elections: 'الانتخابات', admin_stat_org_fee: 'رسوم المنظمة', admin_all_orgs: 'جميع المنظمات', admin_badge_waived: 'معفى', admin_paid: 'دفع {amount}',
       select_election_prompt: 'اختر انتخابات.',
+      tab_profile: 'ملفي الشخصي',
+      label_bio: 'نبذة',
+      hint_bio: 'حتى 280 حرفًا',
+      bio_saved: 'تم تحديث النبذة',
+      bio_save_failed: 'تعذّر حفظ النبذة',
+      profile_stat_results: 'النتائج المُقدَّمة',
+      profile_stat_elections: 'الانتخابات',
+      profile_stat_disputes: 'النزاعات المقدَّمة',
+      profile_history_heading: 'النشاط',
+      profile_history_empty: 'لا يوجد نشاط بعد.',
+      profile_not_found: 'لم يُعثر على ملف شخصي أو نشاط لهذا العنوان.',
     },
     fr: {
       menu_profile: 'Mon profil', menu_settings: 'Paramètres', menu_connected: 'Connecté en tant que',
@@ -437,6 +504,17 @@
       evidence_sha256_desc: "Chaque résultat peut porter un hachage SHA-256 de sa feuille de dépouillement. Déposez le fichier original ci-dessous pour prouver qu'il correspond à ce qui a été déclaré sur la chaîne — le fichier ne quitte pas votre appareil.", evidence_verifying_label: 'Vérification de :', evidence_verifying_default: 'sélectionnez un résultat ci-dessous ou entrez un hachage', evidence_pick_target: 'Choisissez un résultat à comparer.', evidence_match_yes: '✓ Correspondance — ce fichier est exactement ce qui a été déclaré.', evidence_match_no: '✗ Non-correspondance — ce fichier diffère de la preuve enregistrée.',
       admin_scope_required: "Portée admin de la plateforme requise. Connectez un portefeuille admin.", admin_stat_orgs: 'Organisations', admin_stat_active_orgs: 'Orgs actives', admin_stat_elections: 'Élections', admin_stat_org_fee: 'Cotisation org', admin_all_orgs: 'Toutes les organisations', admin_badge_waived: 'dispensé', admin_paid: 'payé {amount}',
       select_election_prompt: 'Sélectionnez une élection.',
+      tab_profile: 'Mon profil',
+      label_bio: 'Biographie',
+      hint_bio: '280 caractères maximum',
+      bio_saved: 'Biographie mise à jour',
+      bio_save_failed: "Impossible d'enregistrer la biographie",
+      profile_stat_results: 'Résultats soumis',
+      profile_stat_elections: 'Élections',
+      profile_stat_disputes: 'Contestations déposées',
+      profile_history_heading: 'Activité',
+      profile_history_empty: "Aucune activité pour l'instant.",
+      profile_not_found: 'Aucun profil ou activité trouvé pour cette adresse.',
     },
   };
 
@@ -561,6 +639,28 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function nm(addr) { return (window.QCNames ? window.QCNames.label(addr) : addr) || '—'; }
   function shortAddr(a) { return window.QCNames ? window.QCNames.short(a) : a; }
+  function userLink(addr) {
+    const label = nm(addr);
+    return `<a href="#/user/${encodeURIComponent(addr)}" class="text-sky-600 dark:text-sky-400 hover:underline">${esc(label)}</a>`;
+  }
+  function statsHtml(data) {
+    if (!data) return '';
+    const stats = data.stats || {};
+    return `<div class="grid grid-cols-3 gap-3 my-4">
+      <div class="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
+        <p class="text-2xl font-bold">${stats.results_submitted ?? 0}</p>
+        <p class="text-xs text-zinc-500 mt-1">${t('profile_stat_results')}</p>
+      </div>
+      <div class="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
+        <p class="text-2xl font-bold">${stats.elections ?? 0}</p>
+        <p class="text-xs text-zinc-500 mt-1">${t('profile_stat_elections')}</p>
+      </div>
+      <div class="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
+        <p class="text-2xl font-bold">${stats.disputes_filed ?? 0}</p>
+        <p class="text-xs text-zinc-500 mt-1">${t('profile_stat_disputes')}</p>
+      </div>
+    </div>`;
+  }
   function timeAgo(iso) {
     if (!iso) return '';
     const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -662,7 +762,11 @@
   }
   function renderChrome() {
     const route = currentRoute();
-    const tabs = TABS.filter((tab) => !tab.adminOnly || App.role.isAdmin);
+    const tabs = TABS.filter((tab) => {
+      if (tab.adminOnly && !App.role.isAdmin) return false;
+      if (tab.walletOnly && !App.wallet.connected) return false;
+      return true;
+    });
     const topHtml = tabs.map((tab) => `<a href="#/${tab.id}" class="px-3 py-1.5 rounded-lg ${route.tab === tab.id ? 'tab-on' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}">${t('tab_' + tab.id)}</a>`).join('');
     document.getElementById('top-tabs').innerHTML = topHtml;
     document.getElementById('bottom-tabs').innerHTML = tabs.map((tab) =>
@@ -715,6 +819,7 @@
       case 'admin': return renderAdmin(v);
       case 'profile': return renderProfile(v);
       case 'settings': return renderSettings(v);
+      case 'user': return renderUserProfile(v, route.arg);
       default: return renderDashboard(v);
     }
   }
@@ -1011,7 +1116,7 @@
         </select>
         <button id="ob-add" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">${t('election_observer_authorize_btn')}</button>
       </div>
-      <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('election_observer_count').replace('{n}', d.observers.length)} ${d.observers.map((o) => `${esc(nm(o.addr))}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
+      <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('election_observer_count').replace('{n}', d.observers.length)} ${d.observers.map((o) => `${userLink(o.addr)}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
     const p = panel(t('election_observers_title'), inner);
     setTimeout(() => {
       p.querySelector('#ob-add').onclick = async () => {
@@ -1052,7 +1157,7 @@
     const inner = open.length ? open.map((x) => `
       <div class="border-t border-zinc-200 dark:border-zinc-800 pt-2 mt-2 first:border-0 first:pt-0 first:mt-0">
         <p class="text-sm">${esc(x.reason || '—')}</p>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-2">${t('disputes_filed_by').replace('{who}', esc(nm(x.filer)))} · ${timeAgo(x.createdAt)}</p>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-2">${t('disputes_filed_by').replace('{who}', userLink(x.filer))} · ${timeAgo(x.createdAt)}</p>
         <button data-disp="${x.txId}" data-v="uphold" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 font-medium">${t('disputes_uphold')}</button>
         <button data-disp="${x.txId}" data-v="reject" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 font-medium">${t('disputes_reject')}</button>
       </div>`).join('') : `<p class="text-sm text-zinc-600 dark:text-zinc-500">${t('disputes_no_open')}</p>`;
@@ -1127,7 +1232,7 @@
       <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
         ${e.invalid ? `<span class="badge bg-rose-500/20 text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500">${esc(nm(e.observer))} · ${timeAgo(e.at)}</p>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
         <p class="text-[0.65rem] text-zinc-600 dark:text-zinc-500 break-all font-mono mt-1">${esc(e.ev)}</p>
         <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">${t('evidence_submit')}</button>
       </div>`).join('') : `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('evidence_no_evidence')}</p>`;
@@ -1174,7 +1279,7 @@
       <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stName(x.target))}</span>${statusBadge(x.status)}</div>
         <p class="text-sm text-zinc-700 dark:text-zinc-300 mt-1">${esc(x.reason || '—')}</p>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('disputes_filed_by').replace('{who}', esc(nm(x.filer)))} · ${timeAgo(x.createdAt)}${x.ev ? ' · ' + t('disputes_has_evidence') : ''}</p>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('disputes_filed_by').replace('{who}', userLink(x.filer))} · ${timeAgo(x.createdAt)}${x.ev ? ' · ' + t('disputes_has_evidence') : ''}</p>
       </div>`).join('') : `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('disputes_no_disputes')}</p>`;
     body.innerHTML = `<h2 class="text-lg font-semibold mb-3">${t('disputes_heading')} — ${esc(d.election.name)}</h2><div class="space-y-2 mb-4">${rows}</div>
       <p class="text-sm text-zinc-600 dark:text-zinc-500">${t('disputes_workspace_note').replace('election workspace', '<a href="#/election/' + d.election.eid + '" class="text-violet-400 hover:underline">election workspace</a>')}</p>`;
@@ -1229,13 +1334,14 @@
       style="background:linear-gradient(135deg,hsl(${hue},65%,45%),hsl(${(hue + 40) % 360},65%,35%))">${esc(initials)}</div>`;
   }
 
-  function renderProfile(v) {
+  async function renderProfile(v) {
     const me = App.me || {};
     const prof = me.profile || {};
     const addr = me.usernode_pubkey || App.wallet.address || '';
     const linked = !!addr;
     const username = me.username || null;
     const currentName = prof.display_name || username || (addr ? shortAddr(addr) : '');
+    const currentBio = prof.bio || '';
     const seed = username || addr || 'guest';
 
     v.innerHTML = `
@@ -1250,6 +1356,8 @@
             <div class="text-xs text-zinc-500">${esc(t('label_joined'))}: ${esc(fmtJoined(prof.created_at))}</div>
           </div>
         </div>
+
+        <div id="profile-stats-area"></div>
 
         <div class="space-y-4">
           <div>
@@ -1278,10 +1386,26 @@
           </div>
 
           <div>
+            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_bio'))}</label>
+            ${linked ? `
+            <textarea id="bio-input" maxlength="280" rows="3"
+              class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm resize-none"
+              placeholder="${esc(t('hint_bio'))}">${esc(currentBio)}</textarea>
+            <div class="flex items-center justify-between mt-1">
+              <p id="bio-err" class="hidden text-xs text-rose-400"></p>
+              <p id="bio-count" class="text-xs text-zinc-500 ml-auto">${currentBio.length}/280</p>
+            </div>
+            <button id="bio-save" class="mt-1 text-sm px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">${esc(t('action_save'))}</button>
+            ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
+          </div>
+
+          <div>
             <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_language'))}</label>
             ${langSelect('profile-lang')}
           </div>
         </div>
+
+        <div id="profile-history-area" class="mt-6"></div>
       </div>`;
 
     wireLangSelect('profile-lang');
@@ -1315,7 +1439,7 @@
         try {
           await putProfile({ display_name: val });
           toast(t('saved'));
-          renderChrome(); // refresh the wallet button label
+          renderChrome();
           save.textContent = prev;
           validate();
         } catch (e) {
@@ -1326,7 +1450,84 @@
           toast(t('save_failed'), 'error');
         }
       };
+
+      const bioInput = document.getElementById('bio-input');
+      const bioSave = document.getElementById('bio-save');
+      const bioErr = document.getElementById('bio-err');
+      const bioCount = document.getElementById('bio-count');
+      bioInput.oninput = () => { bioCount.textContent = bioInput.value.length + '/280'; };
+      bioSave.onclick = async () => {
+        bioSave.disabled = true;
+        const prev = bioSave.textContent;
+        bioSave.textContent = t('saving');
+        try {
+          await putProfile({ bio: bioInput.value });
+          toast(t('bio_saved'));
+          bioSave.textContent = prev;
+          bioSave.disabled = false;
+          bioErr.classList.add('hidden');
+        } catch (e) {
+          bioSave.textContent = prev;
+          bioSave.disabled = false;
+          bioErr.textContent = e.message || t('bio_save_failed');
+          bioErr.classList.remove('hidden');
+          toast(t('bio_save_failed'), 'error');
+        }
+      };
+
+      // Load stats + history asynchronously
+      if (addr) {
+        try {
+          const data = await api(`/api/public/profiles/${encodeURIComponent(addr)}`);
+          const statsArea = document.getElementById('profile-stats-area');
+          const histArea = document.getElementById('profile-history-area');
+          if (statsArea) statsArea.innerHTML = statsHtml(data);
+          if (histArea) {
+            const items = (data && data.history) || [];
+            histArea.innerHTML = `<h3 class="text-sm font-semibold mb-2">${esc(t('profile_history_heading'))}</h3>` +
+              (items.length ? `<ul class="space-y-2">${items.map((item) =>
+                `<li class="text-sm text-zinc-400"><span class="text-zinc-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-zinc-600">${timeAgo(item.submitted_at)}</span></li>`
+              ).join('')}</ul>` : `<p class="text-sm text-zinc-500">${esc(t('profile_history_empty'))}</p>`);
+          }
+        } catch (_) {}
+      }
     }
+  }
+
+  async function renderUserProfile(v, addr) {
+    if (!addr) { v.innerHTML = `<p class="text-zinc-500 text-sm">${esc(t('profile_not_found'))}</p>`; return; }
+    v.innerHTML = `<div class="max-w-xl"><p class="text-zinc-500 text-sm">${esc(t('loading') || '…')}</p></div>`;
+    let data;
+    try {
+      const viewer = (App.me && App.me.usernode_pubkey) || '';
+      data = await api(`/api/public/profiles/${encodeURIComponent(addr)}${viewer ? '?viewer=' + encodeURIComponent(viewer) : ''}`);
+    } catch (_) {
+      v.innerHTML = `<div class="max-w-xl"><p class="text-zinc-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
+      return;
+    }
+    if (!data || (!data.display_name && !data.username && !(data.stats && (data.stats.results_submitted || data.stats.elections)))) {
+      v.innerHTML = `<div class="max-w-xl"><p class="text-zinc-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
+      return;
+    }
+    const displayLabel = data.display_name || data.username || shortAddr(addr);
+    const seed = data.username || addr;
+    const items = (data && data.history) || [];
+    v.innerHTML = `
+      <div class="max-w-xl">
+        <div class="flex items-center gap-4 mb-4">
+          ${identicon(seed)}
+          <div class="min-w-0">
+            <div class="text-lg font-semibold truncate">${esc(displayLabel)}</div>
+            ${data.username ? `<div class="text-xs text-zinc-500">@${esc(data.username)}</div>` : ''}
+          </div>
+        </div>
+        ${data.bio ? `<p class="text-sm text-zinc-300 mb-4">${esc(data.bio)}</p>` : ''}
+        ${statsHtml(data)}
+        <h3 class="text-sm font-semibold mb-2 mt-4">${esc(t('profile_history_heading'))}</h3>
+        ${items.length ? `<ul class="space-y-2">${items.map((item) =>
+          `<li class="text-sm text-zinc-400"><span class="text-zinc-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-zinc-600">${timeAgo(item.submitted_at)}</span></li>`
+        ).join('')}</ul>` : `<p class="text-sm text-zinc-500">${esc(t('profile_history_empty'))}</p>`}
+      </div>`;
   }
 
   function renderSettings(v) {
