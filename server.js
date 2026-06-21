@@ -28,6 +28,7 @@ const mock = require('./lib/mockledger');
 const { makeSource, getTransaction } = require('./lib/txsource');
 const { verifyPayment } = require('./lib/unlock');
 const { isKind, validateImageUpload } = require('./lib/attach');
+const { isValidDisplayName, isSupportedLang } = require('./lib/profile');
 
 let Pool = null;
 try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
@@ -193,7 +194,12 @@ const UNLOCK_ENABLED = !!UNLOCK_RECIPIENT;
 
 // Paths that stay open without authentication.
 const JWT_SECRET = process.env.JWT_SECRET;
-const PUBLIC_API_PATHS = new Set(['/health']);
+// /api/me + /api/me/profile are listed public so they don't 401 without a
+// token: identity is resolved inside the handlers. In production the wallet
+// comes only from req.user (the auth middleware still populates it from any
+// token); the `viewer` fallback is honored ONLY in local-dev / staging so a
+// production caller can never read or write another wallet's profile.
+const PUBLIC_API_PATHS = new Set(['/health', '/api/me', '/api/me/profile']);
 const PUBLIC_PREFIXES = ['/__quickcount/', '/__mock/', '/explorer-api/', '/api/public/'];
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
@@ -465,6 +471,100 @@ app.post('/api/unlock/verify', async (req, res) => {
   }
 });
 
+// ── My Profile (app-local display name + preferred language) ─────────────────
+// Identity is the Usernode wallet. Username + wallet address are platform-owned
+// and read-only here; only the app-local display name + language preference are
+// writable. Keyed by usernode_pubkey in the private `profiles` table.
+
+// Resolve the acting wallet for a profile request. Production: req.user only.
+// local-dev / staging: fall back to a `viewer` param so the page works offline
+// and the staging demo profile is reviewable without a real token.
+function profileKey(req) {
+  const fromUser = req.user && req.user.usernode_pubkey;
+  if (fromUser) return fromUser;
+  if (LOCAL_DEV || IS_STAGING) {
+    const v = (req.body && req.body.viewer) || req.query.viewer;
+    return (v && String(v)) || null;
+  }
+  return null;
+}
+
+// GET /api/me — caller identity + their profile row (upserts on first access
+// so created_at is captured). Degrades to nulls when unauthenticated.
+app.get('/api/me', async (req, res) => {
+  try {
+    const pubkey = profileKey(req);
+    const username = (req.user && req.user.username) || null;
+    const id = (req.user && req.user.id) || null;
+    let profile = null;
+    if (pubkey && pool) {
+      await pool.query(
+        `INSERT INTO profiles (usernode_pubkey, username, created_at, updated_at)
+         VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
+        [pubkey, username]
+      );
+      const { rows } = await pool.query(
+        'SELECT display_name, preferred_lang, created_at FROM profiles WHERE usernode_pubkey = $1',
+        [pubkey]
+      );
+      const r = rows[0] || {};
+      profile = {
+        display_name: r.display_name || null,
+        preferred_lang: r.preferred_lang || null,
+        created_at: r.created_at instanceof Date ? r.created_at.toISOString() : (r.created_at || null),
+      };
+    }
+    res.json({ id, username, usernode_pubkey: pubkey, profile });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/me/profile — update display name and/or preferred language.
+app.put('/api/me/profile', async (req, res) => {
+  try {
+    const pubkey = profileKey(req);
+    if (!pubkey) return res.status(400).json({ error: 'Link a Usernode wallet first' });
+
+    const body = req.body || {};
+    const hasName = body.display_name != null && body.display_name !== '';
+    const hasLang = body.preferred_lang != null && body.preferred_lang !== '';
+    if (!hasName && !hasLang) return res.status(400).json({ error: 'Nothing to update' });
+    if (hasName && !isValidDisplayName(body.display_name)) {
+      return res.status(400).json({ error: 'Display name must be 3–20 letters, numbers, or underscores' });
+    }
+    if (hasLang && !isSupportedLang(body.preferred_lang)) {
+      return res.status(400).json({ error: 'Unsupported language' });
+    }
+    if (!pool) return res.status(503).json({ error: 'Profiles are unavailable in this environment' });
+    const username = (req.user && req.user.username) || null;
+
+    // Upsert; COALESCE keeps the existing value for fields not being changed.
+    const { rows } = await pool.query(
+      `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, NOW(), NOW())
+       ON CONFLICT (usernode_pubkey) DO UPDATE SET
+         display_name = COALESCE($3, profiles.display_name),
+         preferred_lang = COALESCE($4, profiles.preferred_lang),
+         username = COALESCE(profiles.username, EXCLUDED.username),
+         updated_at = NOW()
+       RETURNING display_name, preferred_lang, created_at`,
+      [pubkey, username, hasName ? body.display_name : null, hasLang ? body.preferred_lang : null]
+    );
+    const r = rows[0] || {};
+    res.json({
+      ok: true,
+      profile: {
+        display_name: r.display_name || null,
+        preferred_lang: r.preferred_lang || null,
+        created_at: r.created_at instanceof Date ? r.created_at.toISOString() : (r.created_at || null),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // SPA shell. The public dashboard works without a wallet, so serve index.html
@@ -512,6 +612,20 @@ async function migrate() {
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (eid, kind, ref_id)
     )`);
+  // App-local user profiles: editable display name + preferred UI language,
+  // keyed by the Usernode wallet. PRIVATE — it ties a wallet to a chosen
+  // personal name and language (PII), like `unlocks`. Schema-only in staging;
+  // seedStaging() inserts an obviously-fake demo row.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS profiles (
+      usernode_pubkey TEXT PRIMARY KEY,
+      username TEXT,
+      display_name TEXT,
+      preferred_lang TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  await pool.query(`COMMENT ON TABLE profiles IS 'staging:private'`);
 }
 
 async function loadFromDb() {
@@ -551,6 +665,16 @@ async function seedStaging() {
       [kind, refId, buf, buf.length, root]
     );
   }
+
+  // `profiles` is staging:private (schema-only in staging) → seed one obviously
+  // fake row keyed by the demo address so My Profile is reviewable without a
+  // real wallet/token. /api/me resolves it via ?viewer=<root> in staging.
+  await pool.query(
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, created_at, updated_at)
+     VALUES ($1, 'Staging demo user', 'Staging_demo_user', 'en', '2026-06-01T00:00:00.000Z', NOW())
+     ON CONFLICT (usernode_pubkey) DO NOTHING`,
+    [root]
+  );
 }
 
 async function start() {
@@ -564,6 +688,10 @@ async function start() {
   app.listen(PORT, () => console.log(`Quick Count listening on :${PORT}` + (LOCAL_DEV ? ' (local-dev)' : '') + (IS_STAGING ? ' (staging)' : '')));
 }
 
-start().catch((err) => { console.error(err); process.exit(1); });
+// Only auto-start when run directly (`node server.js`); stays importable from
+// tests, which exercise `app` without booting the poller / listener.
+if (require.main === module) {
+  start().catch((err) => { console.error(err); process.exit(1); });
+}
 
 module.exports = { app, indexer, buildDemoTxs };
