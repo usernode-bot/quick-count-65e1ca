@@ -1,20 +1,19 @@
 {
-  "name": "quick-count-65e1ca",
-  "version": "1.0.0",
+  "name": "quick-count",
+  "version": "2.0.0",
   "private": true,
-  "description": "Quick Count",
+  "description": "Quick Count — on-chain election quick-count platform (standalone usernode-dapp-starter layout)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev": "node server.js --local-dev",
     "test": "node --test",
-    "generate": "prisma generate"
+    "keygen": "node scripts/generate-keypair.js"
   },
   "dependencies": {
     "express": "^4.21.0",
+    "pg": "^8.13.0",
     "jsonwebtoken": "^9.0.2",
-    "@prisma/client": "^6.0.0",
-    "prisma": "^6.0.0",
-    "multer": "^1.4.5-lts.1",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.5"
   }
 }

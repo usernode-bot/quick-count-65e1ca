@@ -57,977 +57,731 @@
   <title>Quick Count</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
+  <!-- Hosted bridge (used inside Usernode). Harmless if unreachable in local-dev. -->
   <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
+  <script src="/usernode-loading.js"></script>
+  <script src="/usernode-usernames.js"></script>
+  <script src="/usernode-bridge.js"></script>
+  <style>
+    .tab-on { background:#7c3aed; color:#fff; }
+    .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
+  </style>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+<body class="bg-zinc-950 text-zinc-100 min-h-screen pb-20 sm:pb-0">
 
-<div id="app" class="min-h-screen flex flex-col">
   <!-- Top bar -->
-  <header class="bg-zinc-900 border-b border-zinc-800 sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 flex items-center h-12 gap-6">
-      <span class="font-bold text-white text-sm tracking-wide shrink-0">Quick Count</span>
-      <nav id="top-nav" class="flex items-center gap-1 flex-1 overflow-x-auto"></nav>
-      <div id="wallet-display" class="text-xs text-zinc-400 shrink-0 font-mono">Not connected</div>
+  <header class="sticky top-0 z-20 bg-zinc-950/90 backdrop-blur border-b border-zinc-800">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+      <h1 class="text-lg font-bold tracking-tight">Quick&nbsp;Count</h1>
+      <span id="staging-badge" class="hidden badge bg-amber-500/20 text-amber-300">demo data</span>
+      <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
+      <div class="ml-auto flex items-center gap-2">
+        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
+        <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Connect wallet</button>
+      </div>
     </div>
   </header>
 
-  <main class="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
-    <div id="content"><div class="text-zinc-500 text-sm">Loading…</div></div>
-  </main>
-</div>
+  <main id="view" class="max-w-5xl mx-auto px-4 py-5"></main>
 
-<script>
-// ── State ──────────────────────────────────────────────────────────────────
-let TOKEN = new URLSearchParams(location.search).get('token') || '';
-let CURRENT_USER = null;
-let ROLE = 'observer';
-let ORG_IDS = [];
-let IS_MEMBER_OF = [];
-let _dashboardTimer = null;
+  <!-- Mobile bottom tab bar -->
+  <nav id="bottom-tabs" class="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-zinc-950/95 backdrop-blur border-t border-zinc-800 flex"></nav>
 
-const ROLE_ORDER = ['observer', 'org_staff', 'org_admin', 'platform_admin'];
-function roleAtLeast(min) { return ROLE_ORDER.indexOf(ROLE) >= ROLE_ORDER.indexOf(min); }
+  <div id="toast" class="fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 hidden px-4 py-2 rounded-lg text-sm font-medium shadow-lg"></div>
 
-// ── Utils ──────────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-function abbrev(s, n) {
-  if (!s) return '';
-  s = String(s);
-  return s.length <= (n || 14) ? s : s.slice(0, 6) + '…' + s.slice(-4);
-}
-function fmt(n) { return Number(n || 0).toLocaleString(); }
-function timeAgo(iso) {
-  if (!iso) return '';
-  const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (secs < 60) return secs + 's ago';
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return mins + 'm ago';
-  return Math.round(mins / 60) + 'h ago';
-}
+  <script>
+  // ───────────────────────── App state ─────────────────────────
+  const App = {
+    cfg: null,
+    role: { addr: null, isAdmin: false, org: null, observerOf: [] },
+    state: null,        // last /__quickcount/state response
+    eid: '',            // selected election
+    method: 'latest',
+    wallet: { connected: false, address: null },
+    refreshTimer: null,
+  };
 
-async function apiFetch(path, opts) {
-  const headers = { 'x-usernode-token': TOKEN, ...(opts?.headers || {}) };
-  if (opts && opts.body && !(opts.body instanceof FormData)) headers['Content-Type'] = 'application/json';
-  const r = await fetch(path, { ...opts, headers });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({ error: r.status }));
-    throw Object.assign(new Error(err.error || r.status), { status: r.status });
-  }
-  return r.json();
-}
-
-function setContent(html) { document.getElementById('content').innerHTML = html; }
-function showError(msg) { setContent(`<div class="text-red-400 text-sm p-4 bg-red-950/30 rounded">${esc(msg)}</div>`); }
-
-// ── Nav ────────────────────────────────────────────────────────────────────
-function renderNav() {
-  const screen = currentScreen();
-  const nav = document.getElementById('top-nav');
-  const items = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'elections', label: 'Elections' },
-    { id: 'orgs', label: 'Organizations' },
-    { id: 'evidence', label: 'Evidence' },
-    { id: 'disputes', label: 'Disputes' },
-    { id: 'submit', label: 'Submit', show: roleAtLeast('org_staff') },
-    { id: 'admin', label: 'Admin', show: ROLE === 'platform_admin' },
+  const TABS = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'elections', label: 'Elections', icon: '🗳️' },
+    { id: 'orgs', label: 'Orgs', icon: '🏛️' },
+    { id: 'evidence', label: 'Evidence', icon: '🔎' },
+    { id: 'disputes', label: 'Disputes', icon: '⚖️' },
+    { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
-  nav.innerHTML = items.filter(i => i.show !== false).map(i => {
-    const active = screen === i.id || screen.startsWith(i.id + '/');
-    return `<a href="#${i.id}" class="px-3 py-1 rounded text-xs font-medium whitespace-nowrap transition-colors
-      ${active ? 'bg-indigo-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}">${esc(i.label)}</a>`;
-  }).join('');
-}
+  const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' };
+  const COLORS = ['bg-rose-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-violet-500','bg-pink-500','bg-teal-500'];
 
-function updateWalletDisplay() {
-  const el = document.getElementById('wallet-display');
-  if (CURRENT_USER && CURRENT_USER.pubkey) {
-    el.textContent = abbrev(CURRENT_USER.pubkey, 14);
-    el.title = CURRENT_USER.pubkey;
-  } else {
-    el.textContent = 'Not connected';
+  // ───────────────────────── Memo builders (mirror lib/memo.js) ─────────────────────────
+  const APP = 'quickcount', V = 1;
+  const clamp = (s, n) => String(s == null ? '' : s).slice(0, n);
+  const pint = (n) => { const x = Number(n); return Number.isFinite(x) ? Math.max(0, Math.round(x)) : null; };
+  const isHash64 = (s) => typeof s === 'string' && /^[0-9a-f]{64}$/i.test(s);
+  const QC = {
+    org: (name, jur) => ({ app: APP, v: V, t: 'org', name: clamp(name, 120), jur: clamp(jur, 80) }),
+    el: (name) => ({ app: APP, v: V, t: 'el', name: clamp(name, 120) }),
+    cand: (eid, cid, name) => ({ app: APP, v: V, t: 'cand', eid, cid: Number(cid), name: clamp(name, 80) }),
+    stn: (eid, sid, name, label) => ({ app: APP, v: V, t: 'stn', eid, sid: Number(sid), name: clamp(name, 80), label: clamp(label, 80) }),
+    obs: (eid, addr, sid) => { const m = { app: APP, v: V, t: 'obs', eid, addr }; if (sid != null && sid !== '') m.sid = Number(sid); return m; },
+    res: (eid, sid, votes, tot, inv, ev) => { const m = { app: APP, v: V, t: 'res', eid, sid: Number(sid), votes: {} }; for (const k of Object.keys(votes || {})) { const n = pint(votes[k]); if (n != null) m.votes[String(Number(k))] = n; } const t = pint(tot), i = pint(inv); if (t != null) m.tot = t; if (i != null) m.inv = i; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
+    disp: (eid, target, reason, ev) => { const m = { app: APP, v: V, t: 'disp', eid, target, reason: clamp(reason, 200) }; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
+    dres: (eid, disp, verdict) => ({ app: APP, v: V, t: 'dres', eid, disp, verdict }),
+    adm: (act, org) => ({ app: APP, v: V, t: 'adm', act, org }),
+  };
+
+  // ───────────────────────── Helpers ─────────────────────────
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function nm(addr) { return (window.QCNames ? window.QCNames.label(addr) : addr) || '—'; }
+  function shortAddr(a) { return window.QCNames ? window.QCNames.short(a) : a; }
+  function timeAgo(iso) {
+    if (!iso) return '';
+    const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (secs < 60) return secs + 's ago';
+    const m = Math.round(secs / 60); if (m < 60) return m + 'm ago';
+    const h = Math.round(m / 60); if (h < 24) return h + 'h ago';
+    return Math.round(h / 24) + 'd ago';
   }
-}
-
-// ── Routing ────────────────────────────────────────────────────────────────
-function currentScreen() {
-  return (location.hash.replace('#', '').trim()) || 'dashboard';
-}
-
-function navigate(screen) { location.hash = screen; }
-
-window.addEventListener('hashchange', () => {
-  if (_dashboardTimer) { clearInterval(_dashboardTimer); _dashboardTimer = null; }
-  renderScreen(currentScreen());
-  renderNav();
-});
-
-// ── Boot ───────────────────────────────────────────────────────────────────
-async function boot() {
-  if (TOKEN) {
-    try {
-      const me = await apiFetch('/api/me');
-      CURRENT_USER = me;
-      ROLE = me.role || 'observer';
-      ORG_IDS = me.orgIds || [];
-      IS_MEMBER_OF = me.isMemberOf || [];
-    } catch {}
+  function toast(msg, kind) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-lg text-sm font-medium shadow-lg ' +
+      (kind === 'error' ? 'bg-rose-600 text-white' : kind === 'warn' ? 'bg-amber-500 text-zinc-900' : 'bg-emerald-600 text-white');
+    t.classList.remove('hidden');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.add('hidden'), 4200);
   }
-  updateWalletDisplay();
-  renderNav();
-  renderScreen(currentScreen());
-}
+  async function api(path) {
+    const r = await fetch(path);
+    if (!r.ok) { let e = {}; try { e = await r.json(); } catch (_) {} throw new Error(e.error || ('HTTP ' + r.status)); }
+    return r.json();
+  }
+  async function sha256File(file) {
+    const buf = await file.arrayBuffer();
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  function download(name, text, type) {
+    const blob = new Blob([text], { type: type || 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
 
-async function renderScreen(screen) {
-  if (screen === 'dashboard') return renderDashboard();
-  if (screen === 'elections') return renderElections();
-  if (screen.startsWith('elections/')) return renderElectionDetail(screen.slice('elections/'.length));
-  if (screen === 'orgs') return renderOrganizations();
-  if (screen === 'evidence') return renderEvidence();
-  if (screen === 'disputes') return renderDisputes();
-  if (screen === 'submit') return renderSubmit();
-  if (screen === 'create') return renderCreate();
-  if (screen === 'admin') return renderAdmin();
-  return renderDashboard();
-}
-
-// ── Dashboard ──────────────────────────────────────────────────────────────
-async function renderDashboard() {
-  setContent('<div class="text-zinc-500 text-sm animate-pulse">Loading dashboard…</div>');
-  try {
-    const endpoint = TOKEN ? '/api/elections' : '/api/public/elections';
-    const data = await apiFetch(endpoint);
-    const elections = data.elections || [];
-
-    if (!elections.length) {
-      setContent('<p class="text-zinc-500 text-sm">No elections available yet.</p>');
-      return;
-    }
-
-    const elCards = await Promise.all(elections.slice(0, 6).map(async (el) => {
-      let dashData = null;
-      try {
-        const path = TOKEN ? `/api/elections/${el.txHash}/dashboard` : `/api/public/elections/${el.txHash}`;
-        dashData = await apiFetch(path);
-      } catch {}
-      const rep = dashData?.reporting || { reported: 0, total: (el.stations || []).length };
-      const tally = dashData?.tally || {};
-      const candidates = dashData?.election?.candidates || el.candidates || [];
-      const topCands = candidates.slice(0, 5).map(c => ({
-        name: c.name, votes: tally[c.txHash] || 0,
-      })).sort((a, b) => b.votes - a.votes);
-      return `
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 cursor-pointer hover:border-zinc-600 transition-colors"
-             onclick="navigate('elections/${esc(el.txHash)}')">
-          <div class="flex items-start justify-between gap-2 mb-3">
-            <div>
-              <h3 class="font-semibold text-sm text-white">${esc(el.name)}</h3>
-              <p class="text-xs text-zinc-500 mt-0.5">${esc(el.org?.name || '')}</p>
-            </div>
-            <span class="text-xs px-2 py-0.5 rounded-full shrink-0 ${el.status === 'open' ? 'bg-green-900/50 text-green-400' : 'bg-zinc-800 text-zinc-400'}">${esc(el.status)}</span>
-          </div>
-          <p class="text-xs text-zinc-500 mb-3">${rep.reported} / ${rep.total} stations reported</p>
-          <div class="space-y-1">
-            ${topCands.map(c => `
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-zinc-400 w-20 truncate">${esc(c.name)}</span>
-                <div class="flex-1 bg-zinc-800 rounded-full h-1.5">
-                  <div class="bg-indigo-500 h-1.5 rounded-full" style="width:${topCands[0]?.votes ? Math.round(c.votes / topCands[0].votes * 100) : 0}%"></div>
-                </div>
-                <span class="text-xs text-zinc-300 w-12 text-right">${fmt(c.votes)}</span>
-              </div>`).join('')}
-          </div>
-        </div>`;
-    }));
-
-    setContent(`
-      <div>
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">Dashboard</h2>
-          <span class="text-xs text-zinc-500">Auto-refreshes every 10s</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          ${elCards.join('')}
-        </div>
-      </div>`);
-  } catch (e) { showError('Dashboard failed to load: ' + e.message); }
-
-  _dashboardTimer = setInterval(() => {
-    if (currentScreen() === 'dashboard') renderDashboard();
-    else { clearInterval(_dashboardTimer); _dashboardTimer = null; }
-  }, 10000);
-}
-
-// ── Elections ──────────────────────────────────────────────────────────────
-const VIS_LABELS = { public: 'Public', private: 'Private', public_after_close: 'After close', hidden: 'Hidden' };
-
-async function renderElections() {
-  const div = document.createElement('div');
-  div.id = 'screen-elections';
-  div.innerHTML = '<div class="text-zinc-500 text-sm animate-pulse">Loading elections…</div>';
-  document.getElementById('content').replaceChildren(div);
-  try {
-    const endpoint = TOKEN ? '/api/elections' : '/api/public/elections';
-    const { elections } = await apiFetch(endpoint);
-    div.innerHTML = `
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-base font-semibold">Elections</h2>
-        ${roleAtLeast('org_admin') ? `<button onclick="showCreateElectionModal()" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded">+ New Election</button>` : ''}
-      </div>
-      <div id="elections-list" class="space-y-2">
-        ${(elections || []).map(el => `
-          <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex items-center gap-4 cursor-pointer hover:border-zinc-600"
-               onclick="navigate('elections/${esc(el.txHash)}')">
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="font-medium text-sm text-white truncate">${esc(el.name)}</span>
-                <span class="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 shrink-0">${esc(VIS_LABELS[el.visibility] || el.visibility)}</span>
-              </div>
-              <p class="text-xs text-zinc-500">${esc(el.org?.name || '')} · ${(el.candidates || []).length} candidates · ${(el.stations || []).length} stations</p>
-            </div>
-            <span class="text-xs px-2 py-0.5 rounded-full shrink-0 ${el.status === 'open' ? 'bg-green-900/50 text-green-400' : 'bg-zinc-800 text-zinc-400'}">${esc(el.status)}</span>
-          </div>`).join('') || '<p class="text-zinc-500 text-sm">No elections visible.</p>'}
-      </div>`;
-  } catch (e) { div.innerHTML = `<p class="text-red-400 text-sm">${esc(e.message)}</p>`; }
-}
-
-async function renderElectionDetail(txHash) {
-  setContent('<div class="text-zinc-500 text-sm animate-pulse">Loading election…</div>');
-  try {
-    const endpoint = TOKEN ? `/api/elections/${txHash}/dashboard` : `/api/public/elections/${txHash}`;
-    const data = await apiFetch(endpoint);
-    const el = data.election;
-    const tally = data.tally || {};
-    const rep = data.reporting || {};
-    const details = data.stationDetails || [];
-    const candidates = el.candidates || [];
-    const maxVotes = Math.max(...candidates.map(c => tally[c.txHash] || 0), 1);
-
-    setContent(`
-      <div>
-        <div class="flex items-center gap-2 mb-1">
-          <button onclick="navigate('elections')" class="text-xs text-zinc-500 hover:text-zinc-300">← Elections</button>
-        </div>
-        <div class="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h2 class="text-lg font-semibold text-white">${esc(el.name)}</h2>
-            <p class="text-xs text-zinc-500 mt-1">${esc(el.org?.name || '')} · ${esc(VIS_LABELS[el.visibility] || el.visibility)} · ${esc(el.aggregation)}</p>
-          </div>
-          <div class="text-right shrink-0">
-            <span class="text-xs px-2 py-1 rounded-full ${el.status === 'open' ? 'bg-green-900/50 text-green-400' : 'bg-zinc-800 text-zinc-400'}">${esc(el.status)}</span>
-            <p class="text-xs text-zinc-500 mt-1">${rep.reported || 0} / ${rep.total || 0} stations reported</p>
-          </div>
-        </div>
-
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 mb-6">
-          <h3 class="text-sm font-medium mb-3">Candidate Tallies</h3>
-          <div class="space-y-2">
-            ${candidates.length ? candidates.map(c => `
-              <div class="flex items-center gap-3">
-                <span class="text-sm text-zinc-300 w-32 truncate">${esc(c.name)}</span>
-                <div class="flex-1 bg-zinc-800 rounded-full h-2">
-                  <div class="bg-indigo-500 h-2 rounded-full transition-all" style="width:${Math.round((tally[c.txHash] || 0) / maxVotes * 100)}%"></div>
-                </div>
-                <span class="text-sm text-white w-16 text-right font-mono">${fmt(tally[c.txHash] || 0)}</span>
-              </div>`).join('') : '<p class="text-zinc-500 text-xs">No candidates yet.</p>'}
-          </div>
-        </div>
-
-        ${details.length ? `
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 mb-6 overflow-x-auto">
-          <h3 class="text-sm font-medium mb-3">Station Breakdown</h3>
-          <table class="w-full text-xs">
-            <thead><tr class="text-zinc-500 border-b border-zinc-800">
-              <th class="text-left py-1 pr-3">Station</th>
-              <th class="text-left py-1 pr-3">Region</th>
-              <th class="text-left py-1 pr-3">Reporter</th>
-              ${candidates.map(c => `<th class="text-right py-1 px-2">${esc(c.name)}</th>`).join('')}
-              <th class="text-left py-1 pl-3">Status</th>
-            </tr></thead>
-            <tbody>
-              ${details.map(s => `
-                <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                  <td class="py-1.5 pr-3 text-zinc-300">${esc(s.name)}</td>
-                  <td class="py-1.5 pr-3 text-zinc-500">${esc(s.region)}</td>
-                  <td class="py-1.5 pr-3 text-zinc-500 font-mono">${s.submitterPubkey ? abbrev(s.submitterPubkey) : '—'}</td>
-                  ${candidates.map(c => `<td class="py-1.5 px-2 text-right text-zinc-300">${s.votes ? fmt(s.votes[c.txHash] || 0) : '—'}</td>`).join('')}
-                  <td class="py-1.5 pl-3">
-                    ${s.noConsensus ? '<span class="text-yellow-400">no consensus</span>'
-                      : !s.reported ? '<span class="text-zinc-500">pending</span>'
-                      : s.status === 'disputed' ? '<span class="text-red-400">disputed</span>'
-                      : s.status === 'revised' ? '<span class="text-blue-400">revised</span>'
-                      : '<span class="text-green-400">ok</span>'}
-                  </td>
-                </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>` : ''}
-
-        ${roleAtLeast('org_staff') ? `
-          <div class="flex gap-2 mt-4">
-            <button onclick="navigate('submit')" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded">Submit Results</button>
-          </div>` : ''}
-      </div>`);
-  } catch (e) { showError('Election not found or access denied: ' + e.message); }
-}
-
-async function showCreateElectionModal() {
-  const html = `
-    <div id="modal-bg" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onclick="if(event.target.id==='modal-bg')closeModal()">
-      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-full max-w-md mx-4">
-        <h3 class="text-sm font-semibold mb-4">Create Election</h3>
-        <div class="space-y-3">
-          <div>
-            <label class="text-xs text-zinc-400 block mb-1">Org Tx Hash</label>
-            <input id="new-el-org" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="seed-org-1">
-          </div>
-          <div>
-            <label class="text-xs text-zinc-400 block mb-1">Name</label>
-            <input id="new-el-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="My Election">
-          </div>
-          <div>
-            <label class="text-xs text-zinc-400 block mb-1">Visibility</label>
-            <select id="new-el-vis" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">
-              <option value="public">Public</option><option value="private">Private</option>
-              <option value="public_after_close">Public after close</option><option value="hidden">Hidden</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-zinc-400 block mb-1">Aggregation</label>
-            <select id="new-el-agg" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">
-              <option value="first_report">First Report</option><option value="median">Median</option>
-              <option value="average">Average</option><option value="consensus">Consensus</option>
-              <option value="manual_review">Manual Review</option>
-            </select>
-          </div>
-        </div>
-        <p id="modal-err" class="text-red-400 text-xs mt-2 hidden"></p>
-        <div class="flex gap-2 mt-4">
-          <button onclick="submitCreateElection()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded py-2">Create</button>
-          <button onclick="closeModal()" class="px-4 bg-zinc-800 hover:bg-zinc-700 text-sm rounded py-2">Cancel</button>
-        </div>
-      </div>
-    </div>`;
-  document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function closeModal() { document.getElementById('modal-bg')?.remove(); }
-
-async function submitCreateElection() {
-  const org_id = document.getElementById('new-el-org').value.trim();
-  const name = document.getElementById('new-el-name').value.trim();
-  const visibility = document.getElementById('new-el-vis').value;
-  const aggregation = document.getElementById('new-el-agg').value;
-  const errEl = document.getElementById('modal-err');
-  if (!org_id || !name) { errEl.textContent = 'Org ID and name required'; errEl.classList.remove('hidden'); return; }
-  try {
-    await apiFetch('/api/elections', { method: 'POST', body: JSON.stringify({ org_id, name, visibility, aggregation }) });
-    closeModal();
-    navigate('elections');
-  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
-}
-
-// ── Organizations ──────────────────────────────────────────────────────────
-async function renderOrganizations() {
-  const div = document.createElement('div');
-  div.id = 'screen-orgs';
-  div.innerHTML = '<div class="text-zinc-500 text-sm animate-pulse">Loading organizations…</div>';
-  document.getElementById('content').replaceChildren(div);
-
-  try {
-    const endpoint = TOKEN ? '/api/orgs' : '/api/public/orgs';
-    const { orgs } = await apiFetch(endpoint);
-
-    const statusBadge = (s) => s === 'registered'
-      ? '<span class="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-400">registered</span>'
-      : s === 'pending'
-        ? '<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-900/50 text-yellow-400">pending</span>'
-        : '<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">' + esc(s) + '</span>';
-
-    div.innerHTML = `
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-base font-semibold">Organizations</h2>
-      </div>
-      <div class="space-y-2 mb-6">
-        ${(orgs || []).map(o => `
-          <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 flex items-center gap-4">
-            <div class="flex-1">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="font-medium text-sm text-white">${esc(o.name)}</span>
-                ${statusBadge(o.status)}
-                ${o.feeConfirmed ? '<span class="text-xs text-green-400">✓ fee paid</span>' : ''}
-              </div>
-              <p class="text-xs text-zinc-500 font-mono">${abbrev(o.txHash, 20)}</p>
-            </div>
-          </div>`).join('') || '<p class="text-zinc-500 text-sm">No organizations yet.</p>'}
-      </div>
-
-      <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-        <h3 class="text-sm font-medium mb-3">Register a New Organization</h3>
-        <p class="text-xs text-zinc-500 mb-4">Requires sending 1,000 tokens to the platform wallet. Your wallet address becomes the org owner.</p>
-        <div class="space-y-3">
-          <div>
-            <label class="text-xs text-zinc-400 block mb-1">Organization Name</label>
-            <input id="reg-org-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="My Commission">
-          </div>
-          <div>
-            <label class="text-xs text-zinc-400 block mb-1">Description (optional)</label>
-            <input id="reg-org-desc" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="…">
-          </div>
-        </div>
-        <p id="reg-org-err" class="text-red-400 text-xs mt-2 hidden"></p>
-        <p id="reg-org-ok" class="text-green-400 text-xs mt-2 hidden">Registration submitted — pending indexer confirmation.</p>
-        <button onclick="submitRegisterOrg()" class="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded">
-          Register (costs 1,000 tokens)
-        </button>
-      </div>`;
-  } catch (e) { div.innerHTML = `<p class="text-red-400 text-sm">${esc(e.message)}</p>`; }
-}
-
-async function submitRegisterOrg() {
-  const name = document.getElementById('reg-org-name').value.trim();
-  const desc = document.getElementById('reg-org-desc').value.trim();
-  const errEl = document.getElementById('reg-org-err');
-  const okEl = document.getElementById('reg-org-ok');
-  errEl.classList.add('hidden');
-  okEl.classList.add('hidden');
-  if (!name) { errEl.textContent = 'Name required'; errEl.classList.remove('hidden'); return; }
-  try {
-    const appPubkey = document.querySelector('meta[name="app-pubkey"]')?.content || '';
-    const memoObj = { app: 'quickcount', type: 'org_register', name, desc };
-    if (typeof usernode !== 'undefined' && usernode.sendTransaction) {
-      await usernode.sendTransaction({ to: appPubkey, amount: 1000, memo: JSON.stringify(memoObj) });
-      okEl.classList.remove('hidden');
+  // ───────────────────────── Wallet ─────────────────────────
+  function bridgeReady() {
+    return new Promise((resolve) => {
+      let n = 0;
+      (function poll() {
+        if (typeof window.sendTransaction === 'function' && typeof window.getNodeAddress === 'function') return resolve(true);
+        if (n++ > 60) return resolve(false);
+        setTimeout(poll, 100);
+      })();
+    });
+  }
+  function extractTxId(res) {
+    if (!res) return null;
+    if (typeof res === 'string') return res;
+    for (const k of ['txId', 'tx_id', 'id', 'txid', 'hash', 'tx_hash', 'txHash']) if (typeof res[k] === 'string') return res[k];
+    for (const sub of [res.matchedTx, res.tx, res.transaction]) if (sub) { const v = extractTxId(sub); if (v) return v; }
+    return null;
+  }
+  async function connectWallet() {
+    if (App.cfg.localDev) {
+      App.wallet.address = window.QCMock.address();
+      App.wallet.connected = true;
     } else {
-      errEl.textContent = 'Wallet bridge not available. Connect via the Usernode platform.';
-      errEl.classList.remove('hidden');
+      const ok = await bridgeReady();
+      if (!ok) { toast('Wallet bridge unavailable — open inside Usernode.', 'error'); return; }
+      const addr = await window.getNodeAddress();
+      if (!addr) { toast('No wallet address linked.', 'error'); return; }
+      App.wallet.address = addr;
+      App.wallet.connected = true;
     }
-  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
-}
-
-// ── Evidence ───────────────────────────────────────────────────────────────
-async function renderEvidence() {
-  setContent('<div id="screen-evidence" class="text-zinc-500 text-sm animate-pulse">Loading evidence…</div>');
-  try {
-    const election = new URLSearchParams(location.hash.split('?')[1] || '').get('election') || '';
-    const url = '/api/evidence' + (election ? '?election=' + encodeURIComponent(election) : '');
-    const { records } = await apiFetch(url);
-
-    const IPFS_BADGES = {
-      verified: 'bg-green-900/50 text-green-400',
-      invalid: 'bg-red-900/50 text-red-400',
-      unverified: 'bg-zinc-800 text-zinc-400',
-      pending: 'bg-yellow-900/50 text-yellow-400',
-    };
-
-    document.getElementById('content').innerHTML = `
-      <div id="screen-evidence">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">Evidence</h2>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden mb-6">
-          <table class="w-full text-xs">
-            <thead><tr class="text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
-              <th class="text-left py-2 px-4">Hash</th>
-              <th class="text-left py-2 px-4">IPFS Status</th>
-              <th class="text-left py-2 px-4">Uploaded by</th>
-              <th class="text-left py-2 px-4">Date</th>
-            </tr></thead>
-            <tbody>
-              ${(records || []).map(r => `
-                <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                  <td class="py-2 px-4 font-mono text-zinc-300">${esc(r.sha256.slice(0, 12))}…</td>
-                  <td class="py-2 px-4"><span class="px-2 py-0.5 rounded-full text-xs ${IPFS_BADGES[r.ipfsStatus] || 'bg-zinc-800 text-zinc-400'}">${esc(r.ipfsStatus)}</span></td>
-                  <td class="py-2 px-4 font-mono text-zinc-500">${abbrev(r.uploaderPubkey)}</td>
-                  <td class="py-2 px-4 text-zinc-500">${timeAgo(r.createdAt)}</td>
-                </tr>`).join('') || '<tr><td colspan="4" class="py-4 px-4 text-zinc-500">No evidence records.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-
-        ${roleAtLeast('org_staff') ? `
-          <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-            <h3 class="text-sm font-medium mb-3">Upload Evidence</h3>
-            <div class="space-y-3">
-              <div>
-                <label class="text-xs text-zinc-400 block mb-1">Submission Tx Hash</label>
-                <input id="ev-submission" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="seed-sub-1">
-              </div>
-              <div>
-                <label class="text-xs text-zinc-400 block mb-1">File (max 10 MB)</label>
-                <input id="ev-file" type="file" class="w-full text-sm text-zinc-400">
-              </div>
-              <p id="ev-hash-display" class="text-xs text-zinc-500 font-mono hidden"></p>
-            </div>
-            <p id="ev-err" class="text-red-400 text-xs mt-2 hidden"></p>
-            <p id="ev-ok" class="text-green-400 text-xs mt-2 hidden">Evidence uploaded successfully.</p>
-            <button onclick="submitEvidence()" class="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded">Upload</button>
-          </div>` : ''}
-      </div>`;
-
-    const fileInput = document.getElementById('ev-file');
-    if (fileInput) {
-      fileInput.addEventListener('change', async () => {
-        const f = fileInput.files[0];
-        if (!f) return;
-        const buf = await f.arrayBuffer();
-        const hashBuf = await crypto.subtle.digest('SHA-256', buf);
-        const hex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
-        const el = document.getElementById('ev-hash-display');
-        el.textContent = 'SHA-256: ' + hex;
-        el.classList.remove('hidden');
-        el.dataset.hash = hex;
-      });
-    }
-  } catch (e) { showError(e.message); }
-}
-
-async function submitEvidence() {
-  const submission_id = document.getElementById('ev-submission').value.trim();
-  const file = document.getElementById('ev-file').files[0];
-  const errEl = document.getElementById('ev-err');
-  const okEl = document.getElementById('ev-ok');
-  errEl.classList.add('hidden'); okEl.classList.add('hidden');
-  if (!submission_id) { errEl.textContent = 'Submission Tx Hash required'; errEl.classList.remove('hidden'); return; }
-  if (!file) { errEl.textContent = 'File required'; errEl.classList.remove('hidden'); return; }
-  try {
-    const fd = new FormData();
-    fd.append('submission_id', submission_id);
-    fd.append('file', file);
-    await apiFetch('/api/evidence', { method: 'POST', body: fd });
-    okEl.classList.remove('hidden');
-    document.getElementById('ev-submission').value = '';
-    document.getElementById('ev-file').value = '';
-  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
-}
-
-// ── Create Election (wallet-based) ─────────────────────────────────────────
-async function renderCreate() {
-  if (!TOKEN) { setContent('<p class="text-zinc-400 text-sm">Login required to create elections.</p>'); return; }
-
-  async function bridgeReady() {
-    return typeof window.sendTransaction === 'function';
+    await refresh();
+    renderChrome();
+  }
+  async function sendTx(to, amount, memoObj) {
+    const memoStr = JSON.stringify(memoObj);
+    if (App.cfg.localDev) return window.QCMock.send(to, amount, memoStr);
+    const ok = await bridgeReady();
+    if (!ok) throw new Error('Wallet bridge unavailable');
+    const res = await window.sendTransaction(to, amount || 0, memoStr);
+    return extractTxId(res);
   }
 
-  const ALLOWED_IMG = ['image/png', 'image/jpeg', 'image/webp'];
-  const MAX_IMG_BYTES = 2 * 1024 * 1024;
-
-  function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
-      fr.onerror = () => reject(new Error('read failed'));
-      fr.readAsDataURL(file);
-    });
-  }
-
-  async function uploadRowImage(eid, kind, refId, file) {
-    if (!file) return true;
+  // ───────────────────────── Data ─────────────────────────
+  async function refresh() {
+    const viewer = App.wallet.address || '';
+    const q = '?viewer=' + encodeURIComponent(viewer) + '&method=' + encodeURIComponent(App.method) + (App.eid ? '&eid=' + encodeURIComponent(App.eid) : '');
     try {
-      const data_base64 = await fileToBase64(file);
-      const r = await fetch('/api/elections/' + encodeURIComponent(eid) + '/attachments/' + kind + '/' + refId, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-usernode-token': TOKEN },
-        body: JSON.stringify({ mime: file.type, data_base64 }),
-      });
-      return r.ok;
-    } catch { return false; }
+      App.state = await api('/__quickcount/state' + q);
+      App.role = App.state.role;
+      if (!App.eid && App.state.elections.length) { App.eid = App.state.elections[0].eid; return refresh(); }
+    } catch (e) { console.error('state load failed', e); }
+    render();
   }
 
-  setContent(`
-    <div>
-      <h2 class="text-base font-semibold mb-4">Create Election</h2>
-      <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5 space-y-4">
-        <div>
-          <label class="text-xs text-zinc-400 block mb-1">Election Name</label>
-          <input id="el-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="My Election">
-        </div>
-        <div>
-          <label class="text-xs text-zinc-400 block mb-2">Candidates</label>
-          <div id="candidates" class="space-y-2 mb-2"></div>
-          <button id="add-candidate" class="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded">+ Add Candidate</button>
-        </div>
-        <div>
-          <label class="text-xs text-zinc-400 block mb-2">Stations</label>
-          <div id="stations" class="space-y-2 mb-2"></div>
-          <button id="add-station" class="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded">+ Add Station</button>
-        </div>
-        <p id="create-status" class="text-xs text-zinc-400"></p>
-        <button id="create-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded">Publish on Chain</button>
-        <div id="create-done" class="hidden text-sm text-green-400">
-          Election published! Dashboard: <a id="dash-link" href="#" class="underline text-indigo-400" target="_blank"></a>
+  // ───────────────────────── Chrome (tabs / wallet) ─────────────────────────
+  function currentRoute() {
+    const h = (location.hash || '#/dashboard').replace(/^#/, '');
+    const parts = h.split('/').filter(Boolean);
+    return { tab: parts[0] || 'dashboard', arg: parts[1] || null };
+  }
+  function renderChrome() {
+    const route = currentRoute();
+    const tabs = TABS.filter((t) => !t.adminOnly || App.role.isAdmin);
+    const topHtml = tabs.map((t) => `<a href="#/${t.id}" class="px-3 py-1.5 rounded-lg ${route.tab === t.id ? 'tab-on' : 'text-zinc-400 hover:text-zinc-100'}">${t.label}</a>`).join('');
+    document.getElementById('top-tabs').innerHTML = topHtml;
+    document.getElementById('bottom-tabs').innerHTML = tabs.map((t) =>
+      `<a href="#/${t.id}" class="flex-1 py-2 flex flex-col items-center gap-0.5 text-[0.62rem] ${route.tab === t.id ? 'text-violet-400' : 'text-zinc-500'}">
+        <span class="text-base leading-none">${t.icon}</span>${t.label}</a>`).join('');
+
+    const wb = document.getElementById('wallet-btn');
+    if (App.wallet.connected) { wb.textContent = nm(App.wallet.address); wb.title = App.wallet.address; }
+    else { wb.textContent = 'Connect wallet'; wb.title = ''; }
+
+    const ps = document.getElementById('persona-select');
+    if (App.cfg && App.cfg.localDev && App.cfg.personas) {
+      ps.classList.remove('hidden');
+      ps.innerHTML = App.cfg.personas.map((p, i) => `<option value="${i}">${esc(p.label)}</option>`).join('');
+      ps.value = String(window.QCMock.currentIndex());
+    } else ps.classList.add('hidden');
+
+    document.getElementById('staging-badge').classList.toggle('hidden', !(App.cfg && App.cfg.demo));
+  }
+
+  // ───────────────────────── Render dispatch ─────────────────────────
+  function render() {
+    renderChrome();
+    const route = currentRoute();
+    const v = document.getElementById('view');
+    if (route.tab === 'election' && route.arg) { App.eid = route.arg; return renderElectionDetail(v); }
+    switch (route.tab) {
+      case 'dashboard': return renderDashboard(v);
+      case 'elections': return renderElections(v);
+      case 'orgs': return renderOrgs(v);
+      case 'evidence': return renderEvidence(v);
+      case 'disputes': return renderDisputes(v);
+      case 'admin': return renderAdmin(v);
+      default: return renderDashboard(v);
+    }
+  }
+
+  function electionPicker() {
+    const els = (App.state && App.state.elections) || [];
+    if (!els.length) return '<p class="text-zinc-500 text-sm">No elections published yet.</p>';
+    return `<div class="flex flex-wrap items-center gap-2 mb-4">
+      <select id="el-picker" class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-sm">
+        ${els.map((e) => `<option value="${e.eid}" ${e.eid === App.eid ? 'selected' : ''}>${esc(e.name)}${e.orgActive ? '' : ' (pending)'}</option>`).join('')}
+      </select>
+      <select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-sm">
+        ${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${METHOD_LABELS[m]}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+  function wirePickers() {
+    const ep = document.getElementById('el-picker');
+    if (ep) ep.onchange = () => { App.eid = ep.value; refresh(); };
+    const mp = document.getElementById('method-picker');
+    if (mp) mp.onchange = () => { App.method = mp.value; refresh(); };
+  }
+
+  // ───────────────────────── Dashboard ─────────────────────────
+  function tallyBars(d) {
+    const total = Object.values(d.tally).reduce((s, n) => s + n, 0) || 1;
+    return d.candidates.map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
+      .sort((a, b) => b.votes - a.votes)
+      .map(({ c, i, votes }) => {
+        const pct = Math.round((votes / total) * 100);
+        return `<div class="mb-3">
+          <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+          <span class="font-mono text-zinc-300">${votes.toLocaleString()} <span class="text-zinc-500">(${pct}%)</span></span></div>
+          <div class="h-3 rounded bg-zinc-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('');
+  }
+  function stationTable(d) {
+    const head = d.candidates.map((c) => `<th class="py-2 px-2 text-right font-medium text-zinc-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
+    const rows = d.stations.map((s) => {
+      const badges = [];
+      if (s.invalid) badges.push('<span class="badge bg-rose-500/20 text-rose-300">invalidated</span>');
+      else if (s.disputed) badges.push('<span class="badge bg-amber-500/20 text-amber-300">disputed</span>');
+      if (s.needsReview && !s.invalid) badges.push('<span class="badge bg-orange-500/20 text-orange-300">review</span>');
+      if (s.sources > 1) badges.push(`<span class="badge bg-zinc-700 text-zinc-300">${s.sources} reports</span>`);
+      const label = `<td class="py-2 pr-2"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-zinc-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
+      if (!s.reported) return `<tr class="border-t border-zinc-800">${label}<td class="py-2 text-zinc-500" colspan="${d.candidates.length + 1}">Awaiting result</td></tr>`;
+      const cells = d.candidates.map((c) => `<td class="py-2 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
+      return `<tr class="border-t border-zinc-800">${label}${cells}<td class="py-2 pl-2 text-right text-xs text-zinc-500 whitespace-nowrap">${timeAgo(s.at)}</td></tr>`;
+    }).join('');
+    return `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[480px]">
+      <thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-zinc-400">Station</th>${head}<th class="py-2 pl-2 text-right font-medium text-zinc-400">Updated</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }
+  function marginBanner(d) {
+    const m = d.margin;
+    const cls = m.needsReview ? 'bg-orange-500/10 border-orange-500/40 text-orange-200' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200';
+    return `<div class="border ${cls} rounded-lg px-3 py-2 text-sm mb-4">
+      <span class="font-semibold">${m.needsReview ? '⚠ Needs review' : '✓ Stable lead'}</span>
+      · lead margin ${m.leadMarginPct}% · uncertainty ±${m.uncertaintyPct}%
+      ${m.needsReview ? ' — disagreements or disputes could affect the outcome.' : ''}
+    </div>`;
+  }
+  function renderDashboard(v) {
+    v.innerHTML = electionPicker() + '<div id="dash-body"></div>';
+    wirePickers();
+    const d = App.state && App.state.detail;
+    const body = document.getElementById('dash-body');
+    if (!d) { body.innerHTML = '<p class="text-zinc-500 text-sm">Select an election to view live results.</p>'; return; }
+    const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0);
+    body.innerHTML =
+      `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
+        <h2 class="text-lg font-semibold">${esc(d.election.name)}</h2>
+        <div class="flex gap-2">
+          <button id="exp-csv" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700">Export CSV</button>
+          <button id="exp-json" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700">Export JSON</button>
         </div>
       </div>
-    </div>`);
-
-  function addRow(containerId, placeholder, imgKind, imgLabel) {
-    const wrap = document.createElement('div');
-    wrap.dataset.imgKind = imgKind;
-    wrap._imgFile = null;
-    wrap.innerHTML =
-      '<div class="flex gap-2 items-center">'
-      + '<label class="img-pick relative shrink-0 h-10 w-10 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-violet-500 cursor-pointer flex items-center justify-center overflow-hidden" title="' + imgLabel + '">'
-      + '<span class="img-ph text-zinc-500 text-lg leading-none">+</span>'
-      + '<img class="img-prev hidden absolute inset-0 h-full w-full object-cover" alt="">'
-      + '<input type="file" accept="image/png,image/jpeg,image/webp" class="img-input hidden">'
-      + '</label>'
-      + '<input placeholder="' + placeholder + '" class="row-input flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none">'
-      + '<button class="row-del px-3 self-stretch rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">\xd7</button>'
-      + '</div>'
-      + '<p class="img-err hidden text-xs text-rose-400 mt-1 ml-12"></p>';
-    wrap.querySelector('.row-del').addEventListener('click', () => wrap.remove());
-
-    const input = wrap.querySelector('.img-input');
-    const prev = wrap.querySelector('.img-prev');
-    const ph = wrap.querySelector('.img-ph');
-    const err = wrap.querySelector('.img-err');
-    input.addEventListener('change', () => {
-      err.classList.add('hidden'); err.textContent = '';
-      const f = input.files && input.files[0];
-      if (!f) return;
-      if (!ALLOWED_IMG.includes(f.type)) {
-        input.value = ''; wrap._imgFile = null;
-        err.textContent = 'Unsupported image type (PNG, JPEG or WebP).'; err.classList.remove('hidden');
-        return;
-      }
-      if (f.size > MAX_IMG_BYTES) {
-        input.value = ''; wrap._imgFile = null;
-        err.textContent = 'Image too large (max 2 MB).'; err.classList.remove('hidden');
-        return;
-      }
-      wrap._imgFile = f;
-      prev.src = URL.createObjectURL(f);
-      prev.classList.remove('hidden'); ph.classList.add('hidden');
-    });
-    document.getElementById(containerId).appendChild(wrap);
+      <p class="text-sm text-zinc-400 mb-3">by ${esc(d.election.orgName || '—')} · ${d.reporting.reported} of ${d.reporting.total} stations reported · ${totalVotes.toLocaleString()} votes · method: ${METHOD_LABELS[d.method]}</p>
+      ${marginBanner(d)}
+      <div class="mb-6">${tallyBars(d) || '<p class="text-zinc-500 text-sm">No candidates.</p>'}</div>
+      <h3 class="text-sm font-medium text-zinc-400 mb-2">By station</h3>
+      ${stationTable(d)}
+      <p class="mt-4 text-xs text-zinc-600">${d.lastUpdated ? 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing' : 'No submissions yet'}</p>
+      <p class="mt-3 text-xs"><a class="text-violet-400 hover:underline" href="#/election/${d.election.eid}">Open election workspace →</a></p>`;
+    document.getElementById('exp-csv').onclick = () => exportCsv(d);
+    document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
   }
-
-  document.getElementById('add-candidate').addEventListener('click', () => addRow('candidates', 'Candidate name', 'cand_avatar', 'Candidate photo'));
-  document.getElementById('add-station').addEventListener('click', () => addRow('stations', 'Station name / label', 'station_c1', 'Scan C1 Form'));
-  addRow('candidates', 'Candidate name', 'cand_avatar', 'Candidate photo');
-  addRow('candidates', 'Candidate name', 'cand_avatar', 'Candidate photo');
-  addRow('stations', 'Station name / label', 'station_c1', 'Scan C1 Form');
-
-  function rowEntries(containerId) {
-    return Array.from(document.querySelectorAll('#' + containerId + ' > div[data-img-kind]'))
-      .map((wrap) => ({ name: wrap.querySelector('.row-input').value.trim(), file: wrap._imgFile, kind: wrap.dataset.imgKind }))
-      .filter((e) => e.name);
-  }
-
-  document.getElementById('create-btn').addEventListener('click', async () => {
-    const name = document.getElementById('el-name').value.trim();
-    const candEntries = rowEntries('candidates');
-    const stnEntries = rowEntries('stations');
-    const cands = candEntries.map((e) => e.name);
-    const stns = stnEntries.map((e) => e.name);
-    const status = document.getElementById('create-status');
-    if (!name || !cands.length || !stns.length) {
-      status.textContent = 'Add an election name, at least one candidate and one station.';
-      return;
+  function exportCsv(d) {
+    const head = ['Station', 'Label', 'Reporting observer', 'Updated', ...d.candidates.map((c) => c.name), 'Total', 'Invalid', 'Status'];
+    const lines = [head];
+    for (const s of d.stations) {
+      lines.push([
+        s.name, s.label || '', s.reported ? nm(s.observer) : '', s.at || '',
+        ...d.candidates.map((c) => s.reported ? (s.votes[c.cid] || 0) : ''),
+        s.tot == null ? '' : s.tot, s.inv == null ? '' : s.inv,
+        s.invalid ? 'invalidated' : s.disputed ? 'disputed' : s.needsReview ? 'review' : s.reported ? 'ok' : 'awaiting',
+      ]);
     }
-    const ready = await bridgeReady();
-    if (!ready) { status.textContent = 'Wallet bridge unavailable — open this app inside Usernode.'; return; }
-    const btn = document.getElementById('create-btn');
-    btn.disabled = true;
+    lines.push([]);
+    lines.push(['TALLY (' + d.method + ')']);
+    for (const c of d.candidates) lines.push([c.name, d.tally[c.cid] || 0]);
+    const csv = lines.map((r) => r.map((x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(',')).join('\n');
+    download((d.election.name || 'election') + '.csv', csv, 'text/csv');
+  }
+
+  // ───────────────────────── Elections list ─────────────────────────
+  function renderElections(v) {
+    const els = (App.state && App.state.elections) || [];
+    const canCreate = App.role.org && App.role.org.active;
+    let html = '<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-semibold">Elections</h2>'
+      + (canCreate ? '<button id="new-el" class="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">+ New election</button>' : '')
+      + '</div>';
+    if (!App.role.org) html += '<p class="text-sm text-zinc-500 mb-4">Connect an organization wallet to create elections. Register one under the <a href="#/orgs" class="text-violet-400 hover:underline">Orgs</a> tab.</p>';
+    else if (!App.role.org.active) html += '<p class="text-sm text-amber-300 mb-4">Your organization is pending — pay the registration fee under <a href="#/orgs" class="text-violet-400 hover:underline">Orgs</a> to publish elections.</p>';
+
+    html += '<div id="new-el-form"></div>';
+    html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => `
+      <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-violet-600/60">
+        <div class="flex items-start justify-between gap-2">
+          <h3 class="font-semibold">${esc(e.name)}</h3>
+          ${e.orgActive ? '' : '<span class="badge bg-amber-500/20 text-amber-300">pending</span>'}
+        </div>
+        <p class="text-xs text-zinc-500 mt-1">${esc(e.orgName || '—')}</p>
+        <p class="text-sm text-zinc-400 mt-2">${e.reportedCount}/${e.stationCount} stations · ${e.candidateCount} candidates · ${e.disputeCount} disputes</p>
+      </a>`).join('') + '</div>'
+      : '<p class="text-zinc-500 text-sm">No elections yet.</p>';
+    v.innerHTML = html;
+
+    if (canCreate) document.getElementById('new-el').onclick = () => showNewElectionForm();
+  }
+  function showNewElectionForm() {
+    const f = document.getElementById('new-el-form');
+    f.innerHTML = `<div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
+      <label class="block text-sm mb-1 text-zinc-300">Election name</label>
+      <input id="nel-name" placeholder="Springfield Mayoral 2026" class="w-full mb-3 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+      <div class="flex items-center justify-between mb-1"><label class="text-sm text-zinc-300">Candidates</label>
+        <button id="nel-add" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700">+ Add</button></div>
+      <div id="nel-cands" class="space-y-2 mb-3"></div>
+      <button id="nel-create" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm">Create &amp; publish</button>
+      <p class="text-xs text-zinc-500 mt-2">Signs one transaction for the election and one per candidate.</p>
+    </div>`;
+    const add = (val) => {
+      const row = document.createElement('div'); row.className = 'flex gap-2';
+      row.innerHTML = `<input value="${esc(val || '')}" placeholder="Candidate name" class="nel-c flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none"><button class="px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">×</button>`;
+      row.querySelector('button').onclick = () => row.remove();
+      document.getElementById('nel-cands').appendChild(row);
+    };
+    add(''); add('');
+    document.getElementById('nel-add').onclick = () => add('');
+    document.getElementById('nel-create').onclick = createElection;
+  }
+  async function createElection() {
+    const name = document.getElementById('nel-name').value.trim();
+    const cands = Array.from(document.querySelectorAll('.nel-c')).map((i) => i.value.trim()).filter(Boolean);
+    if (!name || !cands.length) return toast('Add a name and at least one candidate.', 'warn');
+    const me = App.wallet.address;
     try {
-      const addr = document.querySelector('meta[name="app-pubkey"]')?.content || '';
-      const total = 1 + cands.length + stns.length;
-      let done = 0;
-      const tick = (msg) => { done++; status.textContent = '(' + done + '/' + total + ') ' + msg; };
-      const elMemo = JSON.stringify({ app: 'quickcount', type: 'election_create', name });
-      tick('Creating election…');
-      const elTx = await window.sendTransaction(addr, 0, elMemo);
-      const eid = elTx && (elTx.txHash || elTx.hash) ? (elTx.txHash || elTx.hash) : '';
-      const candMemo = (e, i, n) => JSON.stringify({ app: 'quickcount', type: 'candidate_add', eid: e, idx: i, name: n });
-      const stnMemo = (e, i, n) => JSON.stringify({ app: 'quickcount', type: 'station_add', eid: e, idx: i, name: n });
-      let imgFailures = 0;
-      for (let i = 0; i < cands.length; i++) {
-        await window.sendTransaction(addr, 0, candMemo(eid, i + 1, cands[i]));
-        if (candEntries[i].file && !(await uploadRowImage(eid, 'cand_avatar', i + 1, candEntries[i].file))) imgFailures++;
-        tick('Added candidate "' + cands[i] + '"');
-      }
-      for (let j = 0; j < stns.length; j++) {
-        await window.sendTransaction(addr, 0, stnMemo(eid, j + 1, stns[j]));
-        if (stnEntries[j].file && !(await uploadRowImage(eid, 'station_c1', j + 1, stnEntries[j].file))) imgFailures++;
-        tick('Added station "' + stns[j] + '"');
-      }
-
-      const url = location.origin + '/dashboard.html?eid=' + encodeURIComponent(eid);
-      const link = document.getElementById('dash-link');
-      link.href = url; link.textContent = url;
-      document.getElementById('create-done').classList.remove('hidden');
-      status.textContent = 'All ' + total + ' transactions confirmed.'
-        + (imgFailures ? '  (' + imgFailures + ' image upload' + (imgFailures > 1 ? 's' : '') + ' failed — the election still published.)' : '');
-    } catch (e) {
-      status.textContent = 'Failed: ' + (e.message || e);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-}
-
-// ── Disputes ───────────────────────────────────────────────────────────────
-async function renderDisputes() {
-  setContent('<div class="text-zinc-500 text-sm animate-pulse">Loading disputes…</div>');
-  try {
-    const { disputes } = await apiFetch('/api/disputes');
-    setContent(`
-      <div>
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">Disputes</h2>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden mb-6">
-          <table class="w-full text-xs">
-            <thead><tr class="text-zinc-500 border-b border-zinc-800 bg-zinc-900/50">
-              <th class="text-left py-2 px-4">Submission</th>
-              <th class="text-left py-2 px-4">Reason</th>
-              <th class="text-left py-2 px-4">Filer</th>
-              <th class="text-left py-2 px-4">Status</th>
-              <th class="text-left py-2 px-4">Date</th>
-              ${roleAtLeast('org_admin') ? '<th class="py-2 px-4"></th>' : ''}
-            </tr></thead>
-            <tbody>
-              ${(disputes || []).map(d => `
-                <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                  <td class="py-2 px-4 font-mono text-zinc-300">${abbrev(d.txHash)}</td>
-                  <td class="py-2 px-4 text-zinc-400 max-w-xs truncate">${esc(d.reason)}</td>
-                  <td class="py-2 px-4 font-mono text-zinc-500">${abbrev(d.filerPubkey)}</td>
-                  <td class="py-2 px-4">
-                    <span class="px-2 py-0.5 rounded-full ${d.status === 'open' ? 'bg-red-900/50 text-red-400' : 'bg-zinc-800 text-zinc-400'}">${esc(d.status)}</span>
-                  </td>
-                  <td class="py-2 px-4 text-zinc-500">${timeAgo(d.createdAt)}</td>
-                  ${roleAtLeast('org_admin') ? `<td class="py-2 px-4">${d.status === 'open' ? `<button onclick="resolveDispute('${esc(d.txHash)}')" class="text-xs px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded">Resolve</button>` : ''}</td>` : ''}
-                </tr>`).join('') || '<tr><td colspan="6" class="py-4 px-4 text-zinc-500">No disputes.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-
-        ${roleAtLeast('org_staff') ? `
-          <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-            <h3 class="text-sm font-medium mb-3">File a Dispute</h3>
-            <div class="space-y-3">
-              <div>
-                <label class="text-xs text-zinc-400 block mb-1">Submission Tx Hash</label>
-                <input id="disp-sub" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">
-              </div>
-              <div>
-                <label class="text-xs text-zinc-400 block mb-1">Reason (max 280 chars)</label>
-                <textarea id="disp-reason" rows="3" maxlength="280" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm resize-none"></textarea>
-              </div>
-            </div>
-            <p id="disp-err" class="text-red-400 text-xs mt-2 hidden"></p>
-            <p id="disp-ok" class="text-green-400 text-xs mt-2 hidden">Dispute filed.</p>
-            <button onclick="submitDispute()" class="mt-4 px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-sm rounded">File Dispute</button>
-          </div>` : ''}
-      </div>`);
-  } catch (e) { showError(e.message); }
-}
-
-async function submitDispute() {
-  const submission_id = document.getElementById('disp-sub').value.trim();
-  const reason = document.getElementById('disp-reason').value.trim();
-  const errEl = document.getElementById('disp-err');
-  const okEl = document.getElementById('disp-ok');
-  errEl.classList.add('hidden'); okEl.classList.add('hidden');
-  if (!submission_id || !reason) { errEl.textContent = 'All fields required'; errEl.classList.remove('hidden'); return; }
-  try {
-    await apiFetch('/api/disputes', { method: 'POST', body: JSON.stringify({ submission_id, reason }) });
-    okEl.classList.remove('hidden');
-    document.getElementById('disp-sub').value = '';
-    document.getElementById('disp-reason').value = '';
-  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
-}
-
-async function resolveDispute(txHash) {
-  const notes = prompt('Resolution notes:');
-  if (notes === null) return;
-  try {
-    await apiFetch(`/api/disputes/${encodeURIComponent(txHash)}/resolve`, { method: 'POST', body: JSON.stringify({ notes }) });
-    renderDisputes();
-  } catch (e) { alert('Error: ' + e.message); }
-}
-
-// ── Submit ─────────────────────────────────────────────────────────────────
-async function renderSubmit() {
-  setContent('<div class="text-zinc-500 text-sm animate-pulse">Loading submit form…</div>');
-  try {
-    if (!TOKEN) { setContent('<p class="text-zinc-400 text-sm">Login required to submit results.</p>'); return; }
-    const { elections } = await apiFetch('/api/elections');
-    const openElections = (elections || []).filter(e => e.status === 'open');
-
-    setContent(`
-      <div>
-        <h2 class="text-base font-semibold mb-4">Submit Results</h2>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-          <div class="space-y-4">
-            <div>
-              <label class="text-xs text-zinc-400 block mb-1">Election</label>
-              <select id="sub-election" onchange="loadStationsForSubmit()" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">
-                <option value="">— select —</option>
-                ${openElections.map(e => `<option value="${esc(e.txHash)}">${esc(e.name)}</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label class="text-xs text-zinc-400 block mb-1">Station</label>
-              <select id="sub-station" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm">
-                <option value="">— select election first —</option>
-              </select>
-            </div>
-            <div id="vote-inputs"></div>
-            <div>
-              <label class="text-xs text-zinc-400 block mb-1">Photo (optional)</label>
-              <input id="sub-photo" type="file" accept="image/*" class="text-sm text-zinc-400">
-            </div>
-            <div>
-              <label class="text-xs text-zinc-400 block mb-1">Revising previous submission? (paste original tx hash)</label>
-              <input id="sub-ref" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm" placeholder="Leave blank for new submission">
-            </div>
-          </div>
-          <p id="sub-err" class="text-red-400 text-xs mt-3 hidden"></p>
-          <p id="sub-ok" class="text-green-400 text-xs mt-3 hidden"></p>
-          <button onclick="submitResults()" class="mt-4 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded font-medium">Submit</button>
-        </div>
-      </div>`);
-  } catch (e) { showError(e.message); }
-}
-
-async function loadStationsForSubmit() {
-  const elTxHash = document.getElementById('sub-election').value;
-  const stationSel = document.getElementById('sub-station');
-  const voteInputs = document.getElementById('vote-inputs');
-  if (!elTxHash) { stationSel.innerHTML = '<option>— select election first —</option>'; voteInputs.innerHTML = ''; return; }
-  try {
-    const [{ stations }, { election }] = await Promise.all([
-      apiFetch(`/api/elections/${elTxHash}/stations`),
-      apiFetch(`/api/elections/${elTxHash}`),
-    ]);
-    stationSel.innerHTML = '<option value="">— select —</option>' +
-      (stations || []).map(s => `<option value="${esc(s.txHash)}">${esc(s.name)}${s.region ? ' (' + esc(s.region) + ')' : ''}</option>`).join('');
-    const cands = election?.candidates || [];
-    voteInputs.innerHTML = cands.length ? `
-      <div>
-        <label class="text-xs text-zinc-400 block mb-2">Vote Counts</label>
-        <div class="space-y-2">
-          ${cands.map(c => `
-            <div class="flex items-center gap-3">
-              <span class="text-sm text-zinc-300 w-28 truncate">${esc(c.name)}</span>
-              <input type="number" min="0" id="vote-${esc(c.txHash)}" data-cand="${esc(c.txHash)}"
-                     class="w-32 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm" placeholder="0">
-            </div>`).join('')}
-        </div>
-      </div>` : '<p class="text-zinc-500 text-xs">No candidates for this election.</p>';
-    stationSel.dataset.candidates = JSON.stringify(cands.map(c => c.txHash));
-  } catch (e) { stationSel.innerHTML = '<option>Error loading stations</option>'; }
-}
-
-async function submitResults() {
-  const election_id = document.getElementById('sub-election').value;
-  const station_id = document.getElementById('sub-station').value;
-  const ref_tx_id = document.getElementById('sub-ref').value.trim();
-  const errEl = document.getElementById('sub-err');
-  const okEl = document.getElementById('sub-ok');
-  errEl.classList.add('hidden'); okEl.classList.add('hidden');
-  if (!election_id || !station_id) { errEl.textContent = 'Select election and station'; errEl.classList.remove('hidden'); return; }
-
-  const candIds = JSON.parse(document.getElementById('sub-station').dataset.candidates || '[]');
-  const votes = {};
-  for (const cid of candIds) {
-    const v = document.getElementById('vote-' + cid);
-    if (v) votes[cid] = parseInt(v.value) || 0;
+      QCLoading.show('Creating election…');
+      const eid = await sendTx(me, 0, QC.el(name));
+      if (!eid) throw new Error('No election tx id');
+      for (let i = 0; i < cands.length; i++) { QCLoading.show(`Adding candidate ${i + 1}/${cands.length}…`); await sendTx(me, 0, QC.cand(eid, i + 1, cands[i])); }
+      QCLoading.hide();
+      toast('Election published ✓');
+      App.eid = eid; location.hash = '#/election/' + eid; await refresh();
+    } catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
   }
 
-  const fd = new FormData();
-  fd.append('election_id', election_id);
-  fd.append('station_id', station_id);
-  fd.append('votes', JSON.stringify(votes));
-  if (ref_tx_id) fd.append('ref_tx_id', ref_tx_id);
-  const photo = document.getElementById('sub-photo').files[0];
-  if (photo) fd.append('photo', photo);
+  // ───────────────────────── Election detail / workspace ─────────────────────────
+  async function renderElectionDetail(v) {
+    const d = App.state && App.state.detail;
+    if (!d) { v.innerHTML = '<p class="text-zinc-500 text-sm">Loading election… <a href="#/elections" class="text-violet-400 hover:underline">back</a></p>'; return; }
+    const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
+    const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
+    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${METHOD_LABELS[m]}</option>`).join('')}</select>`;
 
-  try {
-    const { txHash } = await apiFetch('/api/submit', { method: 'POST', body: fd });
-    okEl.textContent = 'Submitted! Tx: ' + txHash;
-    okEl.classList.remove('hidden');
-  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
-}
+    v.innerHTML = `
+      <a href="#/elections" class="text-xs text-zinc-500 hover:text-zinc-300">← all elections</a>
+      <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
+        <div><h2 class="text-xl font-semibold">${esc(d.election.name)}</h2>
+        <p class="text-xs text-zinc-500">by ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · pending fee'}</p></div>
+        ${methodSel}
+      </div>
+      ${marginBanner(d)}
+      <div class="mb-5">${tallyBars(d) || '<p class="text-zinc-500 text-sm">No candidates yet.</p>'}</div>
+      <p class="text-sm text-zinc-400 mb-2">${d.reporting.reported} of ${d.reporting.total} stations reported</p>
+      ${stationTable(d)}
+      <div id="ws" class="mt-6 space-y-4"></div>`;
+    const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; refresh(); };
 
-// ── Admin ──────────────────────────────────────────────────────────────────
-async function renderAdmin() {
-  if (ROLE !== 'platform_admin') { setContent('<p class="text-zinc-400 text-sm">Access denied.</p>'); return; }
-  setContent('<div class="text-zinc-500 text-sm animate-pulse">Loading admin…</div>');
-  try {
-    const [{ orgs }, { state }] = await Promise.all([
-      apiFetch('/api/admin/orgs'),
-      apiFetch('/api/admin/indexer'),
-    ]);
+    const ws = document.getElementById('ws');
+    if (myObs) ws.appendChild(observerPanel(d, myObs));
+    if (myObs || isOrgOwner) ws.appendChild(disputeFilePanel(d));
+    if (isOrgOwner) { ws.appendChild(stationsPanel(d)); ws.appendChild(observersPanel(d)); ws.appendChild(resolvePanel(d)); }
+    if (!myObs && !isOrgOwner) {
+      const p = document.createElement('p'); p.className = 'text-sm text-zinc-500';
+      p.innerHTML = 'Connect an authorized observer or the organizing wallet to report results or manage this election.';
+      ws.appendChild(p);
+    }
+  }
 
-    setContent(`
-      <div>
-        <h2 class="text-base font-semibold mb-4">Platform Admin</h2>
+  function panel(title, inner) {
+    const el = document.createElement('div');
+    el.className = 'p-4 rounded-xl bg-zinc-900 border border-zinc-800';
+    el.innerHTML = `<h3 class="font-semibold mb-3">${title}</h3>` + inner;
+    return el;
+  }
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-            <h3 class="text-sm font-medium mb-3">Org Verification Queue</h3>
-            <div class="space-y-2">
-              ${(orgs || []).filter(o => o.status === 'pending').map(o => `
-                <div class="flex items-center gap-3 p-3 bg-zinc-800/50 rounded">
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-white">${esc(o.name)}</p>
-                    <p class="text-xs text-zinc-500 font-mono truncate">${abbrev(o.txHash, 20)}</p>
-                    <p class="text-xs text-zinc-500">Owner: ${abbrev(o.ownerPubkey)}</p>
-                    ${o.feeConfirmed ? '<span class="text-xs text-green-400">✓ fee confirmed</span>' : '<span class="text-xs text-yellow-400">⚠ fee not confirmed</span>'}
-                  </div>
-                  <div class="flex flex-col gap-1">
-                    <button onclick="adminApproveOrg('${esc(o.txHash)}')" class="text-xs px-3 py-1 bg-green-700 hover:bg-green-600 text-white rounded">Approve</button>
-                    <button onclick="adminRejectOrg('${esc(o.txHash)}')" class="text-xs px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded">Reject</button>
-                  </div>
-                </div>`).join('') || '<p class="text-zinc-500 text-xs">No pending orgs.</p>'}
-            </div>
+  function observerPanel(d, myObs) {
+    const stations = myObs.sid != null ? d.stations.filter((s) => s.sid === myObs.sid) : d.stations;
+    const inner = `
+      <label class="block text-sm mb-1 text-zinc-300">Polling station</label>
+      <select id="ob-station" class="w-full mb-3 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none" ${myObs.sid != null ? 'disabled' : ''}>
+        ${stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
+      </select>
+      <div id="ob-cands" class="space-y-2 mb-3">${d.candidates.map((c) => `
+        <div class="flex items-center gap-2"><label class="flex-1 text-sm text-zinc-300">${esc(c.name)}</label>
+        <input type="number" min="0" data-cid="${c.cid}" value="0" class="ob-v w-28 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-right"></div>`).join('')}</div>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div><label class="block text-xs mb-1 text-zinc-400">Total ballots</label><input id="ob-tot" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none"></div>
+        <div><label class="block text-xs mb-1 text-zinc-400">Invalid / blank</label><input id="ob-inv" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none"></div>
+      </div>
+      <label class="block text-xs mb-1 text-zinc-400">Evidence (tally sheet) — hashed locally, file never uploaded</label>
+      <input id="ob-file" type="file" class="w-full mb-1 text-xs text-zinc-400">
+      <p id="ob-hash" class="text-[0.65rem] text-zinc-500 break-all mb-3 font-mono"></p>
+      <button id="ob-submit" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm">Submit / revise result</button>`;
+    const p = panel('Report result' + (myObs.sid != null ? ' (your station)' : ''), inner);
+    setTimeout(() => {
+      let evHash = '';
+      p.querySelector('#ob-file').onchange = async (e) => {
+        const f = e.target.files[0]; if (!f) { evHash = ''; p.querySelector('#ob-hash').textContent = ''; return; }
+        evHash = await sha256File(f); p.querySelector('#ob-hash').textContent = 'sha256: ' + evHash;
+      };
+      p.querySelector('#ob-submit').onclick = async () => {
+        const sid = Number(p.querySelector('#ob-station').value);
+        const votes = {}; p.querySelectorAll('.ob-v').forEach((i) => votes[i.dataset.cid] = Number(i.value) || 0);
+        const tot = p.querySelector('#ob-tot').value, inv = p.querySelector('#ob-inv').value;
+        try {
+          QCLoading.show('Submitting result…');
+          await sendTx(d.election.orgAddr, 0, QC.res(d.election.eid, sid, votes, tot, inv, evHash));
+          QCLoading.hide(); toast('Result submitted ✓'); refreshSoon();
+        } catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+      };
+    });
+    return p;
+  }
 
-            <h3 class="text-sm font-medium mt-4 mb-2">All Orgs</h3>
-            <div class="space-y-1">
-              ${(orgs || []).map(o => `
-                <div class="flex items-center gap-2 text-xs px-2 py-1.5 bg-zinc-800/30 rounded">
-                  <span class="flex-1 text-zinc-300 truncate">${esc(o.name)}</span>
-                  <span class="px-1.5 py-0.5 rounded-full text-xs ${o.status === 'registered' ? 'bg-green-900/50 text-green-400' : o.status === 'pending' ? 'bg-yellow-900/50 text-yellow-400' : 'bg-zinc-800 text-zinc-400'}">${esc(o.status)}</span>
-                </div>`).join('')}
-            </div>
-          </div>
+  function stationsPanel(d) {
+    const inner = `
+      <div class="flex gap-2 mb-3">
+        <input id="st-name" placeholder="Station name" class="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+        <input id="st-label" placeholder="Label / region" class="w-36 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+        <button id="st-add" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">Add</button>
+      </div>
+      <details class="text-sm">
+        <summary class="cursor-pointer text-zinc-400 mb-2">Bulk import from CSV</summary>
+        <p class="text-xs text-zinc-500 mb-1">One station per line: <code>name,label</code></p>
+        <textarea id="st-csv" rows="4" placeholder="North School,District 1&#10;Town Hall,District 2" class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none font-mono text-xs mb-1"></textarea>
+        <input id="st-csv-file" type="file" accept=".csv,text/csv" class="text-xs text-zinc-400 mb-2 block">
+        <div id="st-csv-preview" class="text-xs text-zinc-400 mb-2"></div>
+        <button id="st-csv-import" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">Import all</button>
+      </details>
+      <p class="text-xs text-zinc-500 mt-3">${d.stations.length} stations: ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
+    const p = panel('Stations', inner);
+    setTimeout(() => {
+      const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
+      p.querySelector('#st-add').onclick = async () => {
+        const name = p.querySelector('#st-name').value.trim(); if (!name) return toast('Enter a station name', 'warn');
+        const label = p.querySelector('#st-label').value.trim();
+        try { QCLoading.show('Adding station…'); await sendTx(d.election.orgAddr, 0, QC.stn(d.election.eid, nextSid(), name, label)); QCLoading.hide(); toast('Station added ✓'); refreshSoon(); }
+        catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+      };
+      const parseCsv = (text) => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const [name, ...rest] = l.split(','); return { name: (name || '').trim(), label: rest.join(',').trim() }; }).filter((r) => r.name);
+      const preview = () => { const rows = parseCsv(p.querySelector('#st-csv').value); p.querySelector('#st-csv-preview').textContent = rows.length ? `${rows.length} station(s) ready to import.` : ''; return rows; };
+      p.querySelector('#st-csv').oninput = preview;
+      p.querySelector('#st-csv-file').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { p.querySelector('#st-csv').value = r.result; preview(); }; r.readAsText(f); };
+      p.querySelector('#st-csv-import').onclick = async () => {
+        const rows = preview(); if (!rows.length) return toast('Nothing to import', 'warn');
+        let sid = nextSid();
+        try { for (let i = 0; i < rows.length; i++) { QCLoading.show(`Importing station ${i + 1}/${rows.length}…`); await sendTx(d.election.orgAddr, 0, QC.stn(d.election.eid, sid++, rows[i].name, rows[i].label)); } QCLoading.hide(); toast(`${rows.length} stations imported ✓`); refreshSoon(); }
+        catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+      };
+    });
+    return p;
+  }
 
-          <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-            <h3 class="text-sm font-medium mb-3">Chain Sync Health</h3>
-            ${state ? `
-              <div class="space-y-2 text-sm mb-4">
-                <div class="flex justify-between"><span class="text-zinc-500">Last block</span><span class="font-mono text-zinc-300">${fmt(state.lastIndexedBlock)}</span></div>
-                <div class="flex justify-between"><span class="text-zinc-500">Last indexed</span><span class="text-zinc-300">${timeAgo(state.lastIndexedAt)}</span></div>
-              </div>` : '<p class="text-zinc-500 text-xs mb-4">No state yet.</p>'}
-            <button onclick="adminReindex()" class="text-xs px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded">Re-index from block 0</button>
-            <p id="reindex-ok" class="text-green-400 text-xs mt-2 hidden">Re-index started.</p>
-          </div>
-        </div>
-      </div>`);
-  } catch (e) { showError(e.message); }
-}
+  function observersPanel(d) {
+    const inner = `
+      <div class="flex flex-wrap gap-2 mb-3">
+        <input id="ob-addr" placeholder="Observer wallet (ut1…)" class="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none font-mono text-xs">
+        <select id="ob-scope" class="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm">
+          <option value="">All stations</option>
+          ${d.stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
+        </select>
+        <button id="ob-add" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">Authorize</button>
+      </div>
+      <p class="text-xs text-zinc-500">${d.observers.length} observer(s): ${d.observers.map((o) => `${esc(nm(o.addr))}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
+    const p = panel('Observers', inner);
+    setTimeout(() => {
+      p.querySelector('#ob-add').onclick = async () => {
+        const addr = p.querySelector('#ob-addr').value.trim(); if (!addr) return toast('Enter an observer address', 'warn');
+        const scope = p.querySelector('#ob-scope').value;
+        try { QCLoading.show('Authorizing observer…'); await sendTx(d.election.orgAddr, 0, QC.obs(d.election.eid, addr, scope || null)); QCLoading.hide(); toast('Observer authorized ✓'); refreshSoon(); }
+        catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+      };
+    });
+    return p;
+  }
 
-async function adminApproveOrg(txHash) {
-  try { await apiFetch(`/api/admin/orgs/${encodeURIComponent(txHash)}/approve`, { method: 'POST' }); renderAdmin(); }
-  catch (e) { alert('Error: ' + e.message); }
-}
-async function adminRejectOrg(txHash) {
-  try { await apiFetch(`/api/admin/orgs/${encodeURIComponent(txHash)}/reject`, { method: 'POST' }); renderAdmin(); }
-  catch (e) { alert('Error: ' + e.message); }
-}
-async function adminReindex() {
-  try {
-    await apiFetch('/api/admin/reindex', { method: 'POST' });
-    document.getElementById('reindex-ok').classList.remove('hidden');
-  } catch (e) { alert('Error: ' + e.message); }
-}
+  function disputeFilePanel(d) {
+    const reported = d.stations.filter((s) => s.reported && s.resultTx);
+    const inner = reported.length ? `
+      <label class="block text-sm mb-1 text-zinc-300">Target result</label>
+      <select id="dp-target" class="w-full mb-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+        ${reported.map((s) => `<option value="${s.resultTx}">${esc(s.name)} — ${nm(s.observer)}</option>`).join('')}
+      </select>
+      <input id="dp-reason" placeholder="Reason for dispute" class="w-full mb-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+      <button id="dp-file" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm font-semibold">File dispute</button>`
+      : '<p class="text-sm text-zinc-500">No reported results to dispute yet.</p>';
+    const p = panel('File a dispute', inner);
+    setTimeout(() => {
+      const b = p.querySelector('#dp-file'); if (!b) return;
+      b.onclick = async () => {
+        const target = p.querySelector('#dp-target').value, reason = p.querySelector('#dp-reason').value.trim();
+        if (!reason) return toast('Enter a reason', 'warn');
+        try { QCLoading.show('Filing dispute…'); await sendTx(d.election.orgAddr, 0, QC.disp(d.election.eid, target, reason)); QCLoading.hide(); toast('Dispute filed ✓'); refreshSoon(); }
+        catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+      };
+    });
+    return p;
+  }
 
-// ── Start ──────────────────────────────────────────────────────────────────
-boot().catch(console.error);
-</script>
+  function resolvePanel(d) {
+    const open = d.disputes.filter((x) => x.status === 'open');
+    const inner = open.length ? open.map((x) => `
+      <div class="border-t border-zinc-800 pt-2 mt-2 first:border-0 first:pt-0 first:mt-0">
+        <p class="text-sm">${esc(x.reason || '—')}</p>
+        <p class="text-xs text-zinc-500 mb-2">filed by ${esc(nm(x.filer))} · ${timeAgo(x.createdAt)}</p>
+        <button data-disp="${x.txId}" data-v="uphold" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 font-medium">Uphold</button>
+        <button data-disp="${x.txId}" data-v="reject" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 font-medium">Reject</button>
+      </div>`).join('') : '<p class="text-sm text-zinc-500">No open disputes.</p>';
+    const p = panel('Resolve disputes', inner);
+    setTimeout(() => {
+      p.querySelectorAll('.dres-btn').forEach((b) => b.onclick = async () => {
+        try { QCLoading.show('Resolving…'); await sendTx(d.election.orgAddr, 0, QC.dres(d.election.eid, b.dataset.disp, b.dataset.v)); QCLoading.hide(); toast('Dispute ' + (b.dataset.v === 'uphold' ? 'upheld' : 'rejected') + ' ✓'); refreshSoon(); }
+        catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+      });
+    });
+    return p;
+  }
+
+  // ───────────────────────── Orgs ─────────────────────────
+  function renderOrgs(v) {
+    const myOrg = App.role.org;
+    let html = '<h2 class="text-lg font-semibold mb-4">Organizations</h2>';
+    if (myOrg) {
+      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <div class="flex items-center justify-between"><h3 class="font-semibold">${esc(myOrg.name)}</h3>
+        <span class="badge ${myOrg.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${myOrg.active ? 'Active' : 'Pending — fee not paid'}</span></div>
+        <p class="text-xs text-zinc-500 mt-1">${esc(myOrg.jur || '')} · ${esc(myOrg.addr)}</p>
+        ${myOrg.active ? '<p class="text-sm text-zinc-400 mt-2">Your elections are live. Manage them under <a href="#/elections" class="text-violet-400 hover:underline">Elections</a>.</p>'
+          : `<button id="pay-fee" class="mt-3 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-semibold">Pay registration fee (${App.cfg.orgFee})</button>`}
+      </div>`;
+    } else {
+      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <h3 class="font-semibold mb-2">Register your organization</h3>
+        <p class="text-sm text-zinc-400 mb-3">Registration pays a one-time fee of <strong>${App.cfg.orgFee}</strong> to the platform treasury. Until it confirms, your elections stay hidden.</p>
+        <input id="org-name" placeholder="Organization name" class="w-full mb-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+        <input id="org-jur" placeholder="Jurisdiction (optional)" class="w-full mb-3 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+        <button id="org-reg" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-semibold">Register &amp; pay fee</button>
+        ${App.wallet.connected ? '' : '<p class="text-xs text-amber-300 mt-2">Connect your wallet first.</p>'}
+      </div>`;
+    }
+    const active = (App.state.elections || []);
+    html += '<h3 class="text-sm font-medium text-zinc-400 mb-2">Active organizations</h3>';
+    const orgs = {};
+    active.forEach((e) => { if (e.orgActive) orgs[e.orgAddr] = e.orgName; });
+    const orgList = Object.entries(orgs);
+    html += orgList.length ? '<div class="space-y-2">' + orgList.map(([addr, name]) => `<div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-sm flex justify-between"><span>${esc(name)}</span><span class="text-xs text-zinc-500 font-mono">${shortAddr(addr)}</span></div>`).join('') + '</div>'
+      : '<p class="text-zinc-500 text-sm">No active organizations visible yet.</p>';
+    v.innerHTML = html;
+
+    const reg = document.getElementById('org-reg');
+    if (reg) reg.onclick = registerOrg;
+    const pay = document.getElementById('pay-fee');
+    if (pay) pay.onclick = payOrgFee;
+  }
+  async function registerOrg() {
+    if (!App.wallet.connected) { await connectWallet(); if (!App.wallet.connected) return; }
+    const name = document.getElementById('org-name').value.trim();
+    const jur = document.getElementById('org-jur').value.trim();
+    if (!name) return toast('Enter an organization name', 'warn');
+    try { QCLoading.show('Registering & paying fee…'); await sendTx(App.cfg.treasury, App.cfg.orgFee, QC.org(name, jur)); QCLoading.hide(); toast('Organization registered ✓'); refreshSoon(); }
+    catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+  }
+  async function payOrgFee() {
+    try { QCLoading.show('Paying fee…'); await sendTx(App.cfg.treasury, App.cfg.orgFee, QC.org(App.role.org.name, App.role.org.jur || '')); QCLoading.hide(); toast('Fee paid ✓'); refreshSoon(); }
+    catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+  }
+
+  // ───────────────────────── Evidence gallery ─────────────────────────
+  function renderEvidence(v) {
+    v.innerHTML = electionPicker() + '<div id="ev-body"></div>';
+    wirePickers();
+    const d = App.state && App.state.detail;
+    const body = document.getElementById('ev-body');
+    if (!d) { body.innerHTML = '<p class="text-zinc-500 text-sm">Select an election.</p>'; return; }
+    const stationName = (sid) => { const s = d.stations.find((x) => x.sid === sid); return s ? s.name : ('Station ' + sid); };
+    const gallery = d.evidence.length ? d.evidence.map((e) => `
+      <div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+        <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
+        ${e.invalid ? '<span class="badge bg-rose-500/20 text-rose-300">invalidated</span>' : ''}</div>
+        <p class="text-xs text-zinc-500">${esc(nm(e.observer))} · ${timeAgo(e.at)}</p>
+        <p class="text-[0.65rem] text-zinc-500 break-all font-mono mt-1">${esc(e.ev)}</p>
+        <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700">Verify a file against this</button>
+      </div>`).join('') : '<p class="text-zinc-500 text-sm">No evidence hashes recorded for this election.</p>';
+
+    body.innerHTML = `<h2 class="text-lg font-semibold mb-1">Evidence — ${esc(d.election.name)}</h2>
+      <p class="text-sm text-zinc-400 mb-4">Each result may carry a SHA-256 hash of its tally sheet. Drop the original file below to prove it matches what was reported on-chain — the file never leaves your device.</p>
+      <div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <p class="text-sm text-zinc-300 mb-2" id="vf-target">Verifying against: <span class="text-zinc-500">select a result below, or any hash</span></p>
+        <input id="vf-file" type="file" class="text-xs text-zinc-400 mb-2 block">
+        <p id="vf-result" class="text-sm"></p>
+        <p id="vf-hash" class="text-[0.65rem] text-zinc-500 break-all font-mono"></p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">${gallery}</div>`;
+
+    let target = '';
+    body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
+      target = b.dataset.hash;
+      document.getElementById('vf-target').innerHTML = 'Verifying against: <span class="text-zinc-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-zinc-500">' + esc(target.slice(0, 16)) + '…</span>';
+      document.getElementById('vf-result').textContent = '';
+    });
+    document.getElementById('vf-file').onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const h = await sha256File(f);
+      document.getElementById('vf-hash').textContent = 'sha256: ' + h;
+      const r = document.getElementById('vf-result');
+      if (!target) { r.innerHTML = '<span class="text-zinc-400">Pick a result to compare against.</span>'; return; }
+      if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = '<span class="text-emerald-400 font-semibold">✓ Match — this file is exactly what was reported.</span>';
+      else r.innerHTML = '<span class="text-rose-400 font-semibold">✗ No match — this file differs from the recorded evidence.</span>';
+    };
+  }
+
+  // ───────────────────────── Disputes ─────────────────────────
+  function renderDisputes(v) {
+    v.innerHTML = electionPicker() + '<div id="dsp-body"></div>';
+    wirePickers();
+    const d = App.state && App.state.detail;
+    const body = document.getElementById('dsp-body');
+    if (!d) { body.innerHTML = '<p class="text-zinc-500 text-sm">Select an election.</p>'; return; }
+    const stName = (txId) => { const s = d.stations.find((x) => x.resultTx === txId); return s ? s.name : txId.slice(0, 10) + '…'; };
+    const statusBadge = (s) => s === 'upheld' ? '<span class="badge bg-rose-500/20 text-rose-300">upheld</span>'
+      : s === 'rejected' ? '<span class="badge bg-zinc-700 text-zinc-300">rejected</span>'
+      : '<span class="badge bg-amber-500/20 text-amber-300">open</span>';
+    const rows = d.disputes.length ? d.disputes.map((x) => `
+      <div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+        <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stName(x.target))}</span>${statusBadge(x.status)}</div>
+        <p class="text-sm text-zinc-300 mt-1">${esc(x.reason || '—')}</p>
+        <p class="text-xs text-zinc-500">filed by ${esc(nm(x.filer))} · ${timeAgo(x.createdAt)}${x.ev ? ' · has evidence' : ''}</p>
+      </div>`).join('') : '<p class="text-zinc-500 text-sm">No disputes filed for this election.</p>';
+    body.innerHTML = `<h2 class="text-lg font-semibold mb-3">Disputes — ${esc(d.election.name)}</h2><div class="space-y-2 mb-4">${rows}</div>
+      <p class="text-sm text-zinc-500">Authorized observers and the organizing wallet can file and resolve disputes from the <a href="#/election/${d.election.eid}" class="text-violet-400 hover:underline">election workspace</a>.</p>`;
+  }
+
+  // ───────────────────────── Admin ─────────────────────────
+  async function renderAdmin(v) {
+    if (!App.role.isAdmin) { v.innerHTML = '<p class="text-zinc-500 text-sm">Platform-admin scope required. Connect an admin wallet.</p>'; return; }
+    let data;
+    try { data = await api('/__quickcount/admin?viewer=' + encodeURIComponent(App.wallet.address)); }
+    catch (e) { v.innerHTML = '<p class="text-rose-400 text-sm">' + esc(e.message) + '</p>'; return; }
+    const s = data.stats;
+    v.innerHTML = `<h2 class="text-lg font-semibold mb-3">Platform admin</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        ${[['Organizations', s.orgs], ['Active orgs', s.activeOrgs], ['Elections', s.elections], ['Org fee', s.orgFee]].map(([k, val]) =>
+          `<div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-zinc-500">${k}</div></div>`).join('')}
+      </div>
+      <p class="text-xs text-zinc-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
+      <h3 class="text-sm font-medium text-zinc-400 mb-2">All organizations</h3>
+      <div class="space-y-2">${data.orgs.map((o) => `
+        <div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-2">
+          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ' <span class="badge bg-sky-500/20 text-sky-300">waived</span>' : ''}</div>
+          <div class="text-xs text-zinc-500 font-mono">${esc(o.addr)} · paid ${o.feeAmount}</div></div>
+          ${o.active ? '<span class="badge bg-emerald-500/20 text-emerald-300">active</span>'
+            : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">Waive fee</button>`}
+        </div>`).join('')}</div>`;
+    v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = async () => {
+      try { QCLoading.show('Waiving fee…'); await sendTx(App.wallet.address, 0, QC.adm('waive', b.dataset.org)); QCLoading.hide(); toast('Fee waived ✓'); refreshSoon(); }
+      catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+    });
+  }
+
+  // ───────────────────────── Boot ─────────────────────────
+  function refreshSoon() { setTimeout(() => refresh(), App.cfg.localDev ? 400 : 2500); }
+  function startAutoRefresh() {
+    if (App.refreshTimer) clearInterval(App.refreshTimer);
+    App.refreshTimer = setInterval(() => { const r = currentRoute(); if (['dashboard', 'election', 'evidence', 'disputes'].includes(r.tab)) refresh(); }, 6000);
+  }
+
+  async function boot() {
+    App.cfg = await api('/__quickcount/config');
+    App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
+    if (App.cfg.localDev && window.QCMock) {
+      window.QCMock.init(App.cfg.personas || []);
+      document.getElementById('persona-select').onchange = async (e) => { window.QCMock.setPersona(Number(e.target.value)); await connectWallet(); };
+      // Auto-connect a persona in local-dev for a friction-free demo.
+      App.wallet.address = window.QCMock.address(); App.wallet.connected = true;
+    } else {
+      // Try a silent wallet connect inside the platform.
+      bridgeReady().then(async (ok) => { if (ok) { try { const a = await window.getNodeAddress(); if (a) { App.wallet.address = a; App.wallet.connected = true; renderChrome(); refresh(); } } catch (_) {} } });
+    }
+    document.getElementById('wallet-btn').onclick = () => connectWallet();
+    window.addEventListener('hashchange', render);
+    await refresh();
+    startAutoRefresh();
+  }
+
+  boot().catch((e) => { console.error(e); document.getElementById('view').innerHTML = '<p class="text-rose-400 text-sm p-4">Failed to start: ' + esc(e.message) + '</p>'; });
+  </script>
 </body>
 </html>

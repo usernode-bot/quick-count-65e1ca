@@ -1,85 +1,201 @@
-'use strict';
+// Quick Count — standalone usernode-dapp-starter server.
+//
+// A plain Node/Express server. The chain is the source of truth: every state
+// change is an on-chain transaction carrying an app:"quickcount" memo. A
+// deterministic indexer (lib/indexer.js) replays the transaction log to build
+// all read state, so the server itself never mutates election data — it only
+// reads the chain and serves the UI. Identity is the wallet address.
+//
+// Two run modes:
+//   • production  — polls a Usernode node at NODE_RPC_URL.
+//   • --local-dev — uses an in-process mock ledger + /__mock/* endpoints so the
+//     whole app runs offline. The mock wallet bridge signs against it.
+//
+// Persistence is optional: with DATABASE_URL set the raw transaction log is
+// stored in `chain_txs` (durable across restarts); without it the log lives in
+// memory only. Either way the read model is rebuilt from the log on every poll.
+
+try { require('dotenv').config(); } catch { /* dotenv optional */ }
+
 const express = require('express');
 const path = require('path');
-const jwt = require('jsonwebtoken');
-const multer = require('multer');
 const crypto = require('crypto');
-const { PrismaClient } = require('@prisma/client');
-
-const txsource = require('./lib/txsource');
-const { normalizeTx, applyTx } = require('./lib/indexer');
-const { aggregate, latestPerStation, computeTally, reporting } = require('./lib/aggregate');
-const { verifyPayment } = require('./lib/unlock');
-const blockchain = require('./lib/blockchain');
-const storage = require('./lib/storage');
+const jwt = require('jsonwebtoken');
+const { normalizeTx, QuickCountIndexer } = require('./lib/indexer');
 const memo = require('./lib/memo');
-const { isKind, validateImageUpload } = require('./lib/attach');
+const mock = require('./lib/mockledger');
+const { makeSource, getTransaction } = require('./lib/txsource');
+const { verifyPayment } = require('./lib/unlock');
 
-const app = express();
-const port = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET;
+let Pool = null;
+try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
+
+// ── Configuration ───────────────────────────────────────────────────────────
+const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
+const IS_DEMO = LOCAL_DEV || IS_STAGING; // seed obviously-fake data so every screen renders
+const PORT = process.env.PORT || 3000;
+const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
+const TREASURY_ADDR = process.env.TREASURY_ADDR || 'ut1treasuryquickcount00000000000000000000';
+const ORG_FEE = Number(process.env.ORG_FEE) || 100;
 
-const prisma = new PrismaClient();
-const { Pool } = require('pg');
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+// Demo personas (local-dev persona switcher + admin).
+const DEMO = {
+  admin: 'ut1demoadmin000000000000000000000000000000',
+  orgA: 'ut1democitizenscount0000000000000000000000',
+  orgB: 'ut1demounpaidorg000000000000000000000000000',
+  obs1: 'ut1demoobserverone000000000000000000000000',
+  obs2: 'ut1demoobservertwo000000000000000000000000',
+  obs3: 'ut1demoobserverthree00000000000000000000000',
+};
+const ADMIN_ADDRS = (process.env.ADMIN_ADDRS || '').split(',').map((s) => s.trim()).filter(Boolean);
+if (IS_DEMO) ADMIN_ADDRS.push(DEMO.admin);
+
+const pool = (Pool && process.env.DATABASE_URL)
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : null;
+
+const indexer = new QuickCountIndexer({ treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS });
+const source = makeSource({ localDev: LOCAL_DEV, nodeUrl: NODE_RPC_URL });
+
+// In-memory transaction log (source for every rebuild) and dedupe set.
+const txLog = [];
+const seen = new Set();
+const watched = new Map(); // address -> cursor
+watched.set(TREASURY_ADDR, null);
+
+// ── Ingest / rebuild ─────────────────────────────────────────────────────────
+function ingestRaw(raw) {
+  const n = normalizeTx(raw);
+  if (!n.txId || seen.has(n.txId)) return false;
+  seen.add(n.txId);
+  txLog.push(n);
+  if (pool) {
+    pool.query(
+      `INSERT INTO chain_txs (tx_id, from_addr, to_addr, amount, memo, created_at, seen_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW()) ON CONFLICT (tx_id) DO NOTHING`,
+      [n.txId, n.from, n.to, n.amount, n.memo, n.createdAt]
+    ).catch((e) => console.error('persist failed:', e.message));
+  }
+  return true;
+}
+
+function rebuild() {
+  indexer.rebuild(txLog);
+  // Discover org wallets so the poller watches them for elections/results/etc.
+  for (const org of indexer.orgs.values()) {
+    if (!watched.has(org.addr)) watched.set(org.addr, null);
+  }
+}
+
+async function pollOnce() {
+  let added = false;
+  if (LOCAL_DEV) {
+    for (const raw of mock.all()) if (ingestRaw(raw)) added = true;
+  } else {
+    for (const [addr, cursor] of watched) {
+      let txs = [];
+      try { txs = await source.listTransactions({ account: addr, sinceCursor: cursor }); } catch { continue; }
+      if (!Array.isArray(txs)) continue;
+      for (const raw of txs) {
+        if (ingestRaw(raw)) added = true;
+        const n = normalizeTx(raw);
+        if (n.createdAt && (!cursor || n.createdAt > cursor)) watched.set(addr, n.createdAt);
+      }
+    }
+  }
+  rebuild(); // deterministic full replay — cheap at this scale
+  return added;
+}
+
+// ── Demo seed (obviously fake; only in local-dev / staging) ──────────────────
+function evHash(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
+
+function buildDemoTxs() {
+  let t = Date.parse('2026-06-19T08:00:00.000Z');
+  const at = () => new Date(t += 60000).toISOString();
+  const mk = (txId, from, to, amount, env) => ({ txId, from, to, amount, memo: memo.encode(env), createdAt: at() });
+  const eid = 'demo-election';
+  const ev1 = evHash('Staging demo — tally sheet station 1');
+  const ev2 = evHash('Staging demo — tally sheet station 3');
+
+  const txs = [
+    // Organizations — one pays the fee (active), one does not (pending).
+    mk('demo_org_a', DEMO.orgA, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Citizens Count', 'Demo Republic')),
+    mk('demo_org_b', DEMO.orgB, TREASURY_ADDR, 0, memo.orgMemo('Staging demo — Unpaid Org', 'Demo Republic')),
+    // Election + candidates (by the active org).
+    mk(eid, DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — General Election')),
+    mk('demo_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 1, 'Demo Candidate Red')),
+    mk('demo_c2', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 2, 'Demo Candidate Blue')),
+    mk('demo_c3', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 3, 'Demo Candidate Green')),
+    // Stations.
+    mk('demo_s1', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 1, 'Demo Station A', 'North district')),
+    mk('demo_s2', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 2, 'Demo Station B', 'East district')),
+    mk('demo_s3', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 3, 'Demo Station C', 'South district')),
+    mk('demo_s4', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(eid, 4, 'Demo Station D', 'West district')),
+    // Observers (one scoped to station 2).
+    mk('demo_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo(eid, DEMO.obs1)),
+    mk('demo_o2', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo(eid, DEMO.obs2)),
+    mk('demo_o3', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo(eid, DEMO.obs3, 2)),
+    // Station 1: two submissions (latest wins) — later one carries evidence.
+    mk('demo_res_s1_a', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo(eid, 1, { 1: 40, 2: 60, 3: 12 }, 117, 5)),
+    mk('demo_res_s1_b', DEMO.obs2, DEMO.orgA, 0, memo.resultMemo(eid, 1, { 1: 52, 2: 71, 3: 14 }, 142, 5, ev1)),
+    // Station 2: two observers disagree → exercises consensus / median / review.
+    mk('demo_res_s2_a', DEMO.obs3, DEMO.orgA, 0, memo.resultMemo(eid, 2, { 1: 80, 2: 35, 3: 20 }, 140, 5)),
+    mk('demo_res_s2_b', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo(eid, 2, { 1: 81, 2: 33, 3: 21 }, 140, 5)),
+    // Station 3: one submission with evidence — later invalidated by an upheld dispute.
+    mk('demo_res_s3_a', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo(eid, 3, { 1: 200, 2: 5, 3: 5 }, 215, 5, ev2)),
+    // Station 4: no submission → "3 of 4 reported".
+    // Disputes: one open (station 2), one upheld (station 3 → invalid).
+    mk('demo_disp_open', DEMO.obs2, DEMO.orgA, 0, memo.disputeMemo(eid, 'demo_res_s2_a', 'Numbers look inconsistent with turnout')),
+    mk('demo_disp_up', DEMO.obs2, DEMO.orgA, 0, memo.disputeMemo(eid, 'demo_res_s3_a', 'Tally sheet altered', ev2)),
+    mk('demo_dres_up', DEMO.orgA, DEMO.orgA, 0, memo.resolveMemo(eid, 'demo_disp_up', 'uphold')),
+  ];
+  return txs;
+}
+
+function seedDemo() {
+  if (!IS_DEMO) return;
+  const txs = buildDemoTxs();
+  if (LOCAL_DEV) {
+    for (const tx of txs) mock.append(tx); // flows through the normal poll path
+  } else {
+    for (const tx of txs) ingestRaw(tx);
+  }
+}
+
+// ── Express app ──────────────────────────────────────────────────────────────
+const app = express();
+app.use(express.json({ limit: '256kb' }));
+
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// Local-dev mock chain endpoints — mounted BEFORE the auth gate, 404 otherwise.
+if (LOCAL_DEV) {
+  app.post('/__mock/submit', async (req, res) => {
+    const { from, to, amount, memo: m } = req.body || {};
+    if (!from) return res.status(400).json({ error: 'from required' });
+    const tx = mock.append({ from, to: to || from, amount: amount || 0, memo: m });
+    await pollOnce();
+    res.json({ txId: tx.txId, ok: true });
+  });
+  app.get('/__mock/transactions', (_req, res) => res.json({ transactions: mock.all() }));
+  app.post('/__mock/reset', async (_req, res) => { mock.reset(); txLog.length = 0; seen.clear(); rebuild(); res.json({ ok: true }); });
+  app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
+}
 
 // ── Pay-to-unlock config ─────────────────────────────────────────────────────
-// The recipient address and price are configured via dapp.json secrets. The
-// network is currently a test/mock-token network; switching to mainnet is just
-// setting UNLOCK_RECIPIENT_ADDRESS to a real wallet — no code changes.
 const UNLOCK_RECIPIENT = process.env.UNLOCK_RECIPIENT_ADDRESS || '';
 const UNLOCK_PRICE = Math.max(0, parseInt(process.env.UNLOCK_PRICE_TOKENS || '0', 10) || 0);
 const UNLOCK_ENABLED = !!UNLOCK_RECIPIENT;
 
-// ── Auth & role middleware ───────────────────────────────────────────────────
+// Paths that stay open without authentication.
+const JWT_SECRET = process.env.JWT_SECRET;
 const PUBLIC_API_PATHS = new Set(['/health']);
-const PUBLIC_PREFIXES = ['/explorer-api/', '/api/public/'];
-const ROLE_ORDER = ['observer', 'org_staff', 'org_admin', 'platform_admin'];
-
-async function resolveRole(pubkey) {
-  if (!pubkey) return { role: 'observer', orgIds: [], isMemberOf: [] };
-
-  const ur = await prisma.userRole.findUnique({ where: { userId: pubkey } });
-  if (ur && ur.role === 'platform_admin') {
-    return { role: 'platform_admin', orgIds: [], isMemberOf: [] };
-  }
-
-  const ownedOrgs = await prisma.organization.findMany({ where: { ownerPubkey: pubkey, status: 'registered' } });
-  const orgIds = ownedOrgs.map((o) => o.id);
-
-  const memberships = await prisma.orgMember.findMany({
-    where: { memberPubkey: pubkey },
-    include: { org: { select: { id: true, status: true } } },
-  });
-  const isMemberOf = memberships.filter((m) => m.org.status === 'registered').map((m) => m.orgId);
-
-  if (orgIds.length > 0) return { role: 'org_admin', orgIds, isMemberOf };
-  if (isMemberOf.length > 0) return { role: 'org_staff', orgIds: [], isMemberOf };
-  return { role: 'observer', orgIds: [], isMemberOf: [] };
-}
-
-function requireRole(minRole) {
-  return async (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-    const { role, orgIds, isMemberOf } = await resolveRole(req.user.usernode_pubkey);
-    req.role = role;
-    req.orgIds = orgIds;
-    req.isMemberOf = isMemberOf;
-    if (ROLE_ORDER.indexOf(role) < ROLE_ORDER.indexOf(minRole)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
-    next();
-  };
-}
-
-app.use(express.json());
-app.use(async (req, res, next) => {
+const PUBLIC_PREFIXES = ['/__quickcount/', '/__mock/', '/explorer-api/', '/api/public/'];
+app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
-  if (token && JWT_SECRET) {
-    try { req.user = jwt.verify(token, JWT_SECRET); } catch {}
-  }
+  if (token && JWT_SECRET) { try { req.user = jwt.verify(token, JWT_SECRET); } catch { /* ignore */ } }
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     if (PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
@@ -88,85 +204,30 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Attach role for authenticated requests (lazy, only on api routes that need it)
-async function withRole(req) {
-  if (!req.user) { req.role = 'observer'; req.orgIds = []; req.isMemberOf = []; return; }
-  const r = await resolveRole(req.user.usernode_pubkey);
-  req.role = r.role; req.orgIds = r.orgIds; req.isMemberOf = r.isMemberOf;
-}
-
-// ── Read-model store (PgStore) used by the indexer ──────────────────────────
-// All writes are insert-if-absent so replaying a tx_id is a no-op.
-const store = {
-  async getElection(eid) {
-    const { rows } = await pool.query('SELECT eid, name, root_pubkey, creator_pubkey FROM elections WHERE eid = $1', [eid]);
-    return rows[0] || null;
-  },
-  async putElection(r) {
-    await pool.query(
-      `INSERT INTO elections (eid, name, root_pubkey, creator_pubkey, tx_id, created_at)
-       VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, NOW()))
-       ON CONFLICT (eid) DO NOTHING`,
-      [r.eid, r.name, r.root_pubkey, r.creator_pubkey, r.tx_id, r.created_at]
-    );
-  },
-  async putCandidate(r) {
-    await pool.query(
-      `INSERT INTO candidates (eid, cid, name, tx_id) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (eid, cid) DO NOTHING`,
-      [r.eid, r.cid, r.name, r.tx_id]
-    );
-  },
-  async putStation(r) {
-    await pool.query(
-      `INSERT INTO stations (eid, sid, name, tx_id) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (eid, sid) DO NOTHING`,
-      [r.eid, r.sid, r.name, r.tx_id]
-    );
-  },
-  async putResult(r) {
-    await pool.query(
-      `INSERT INTO results (tx_id, eid, sid, submitter_pubkey, votes, tot, inv, created_at)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, COALESCE($8::timestamptz, NOW()))
-       ON CONFLICT (tx_id) DO NOTHING`,
-      [r.tx_id, r.eid, r.sid, r.submitter_pubkey, JSON.stringify(r.votes || {}), r.tot, r.inv, r.created_at]
-    );
-  },
-};
+// Public config for the frontend (SPA).
+app.get('/__quickcount/config', (_req, res) => {
+  const personas = LOCAL_DEV ? [
+    { label: 'Org — Citizens Count', addr: DEMO.orgA },
+    { label: 'Observer One', addr: DEMO.obs1 },
+    { label: 'Observer Three (Station B)', addr: DEMO.obs3 },
+    { label: 'Platform Admin', addr: DEMO.admin },
+    { label: 'Fresh wallet', addr: null },
+  ] : null;
+  res.json({
+    localDev: LOCAL_DEV, staging: IS_STAGING, demo: IS_DEMO,
+    treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
+    methods: require('./lib/aggregate').METHODS, personas,
+  });
+});
 
 // Has this wallet paid to unlock? Unlock is global per wallet and permanent.
 async function walletUnlocked(pubkey) {
-  if (!pubkey) return false;
+  if (!pubkey || !pool) return false;
   const { rows } = await pool.query('SELECT 1 FROM unlocks WHERE usernode_pubkey = $1', [pubkey]);
   return rows.length > 0;
 }
 
-// ── Indexer poll loop ───────────────────────────────────────────────────────
-async function pollOnce() {
-  const ws = (await pool.query('SELECT address, cursor FROM watched_addresses')).rows;
-  for (const w of ws) {
-    let txs = [];
-    try {
-      txs = await txsource.listTransactions({ account: w.address, sinceCursor: w.cursor });
-    } catch { continue; }
-    if (!Array.isArray(txs) || !txs.length) continue;
-    const norm = txs.map(normalizeTx).filter((t) => t.txId);
-    // Apply oldest-first so an election is indexed before its children.
-    norm.sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-    let cursor = w.cursor;
-    for (const t of norm) {
-      try { await applyTx(store, t); } catch (e) { console.error('applyTx failed:', e.message); }
-      if (t.createdAt && (!cursor || t.createdAt > cursor)) cursor = t.createdAt;
-    }
-    if (cursor && cursor !== w.cursor) {
-      await pool.query('UPDATE watched_addresses SET cursor = $2 WHERE address = $1', [w.address, cursor]);
-    }
-  }
-}
-
-// ── Visibility helpers ───────────────────────────────────────────────────────
-
-// Public config (staging banner, poll hint, unlock pricing). Public so the
+// Public config (staging banner, unlock pricing). Public so the
 // dashboard can read it before the viewer authenticates.
 app.get('/api/public/config', (_req, res) => {
   res.json({
@@ -179,93 +240,60 @@ app.get('/api/public/config', (_req, res) => {
   });
 });
 
-// Authenticated: register a newly-created election's root address so the
-// indexer starts watching it. Carries NO election content — the chain remains
-// the source of truth.
-app.post('/api/elections/track', async (req, res) => {
+// Visibility-aware app state. `viewer` is the connected wallet (or empty).
+app.get('/__quickcount/state', (req, res) => {
   try {
-    const { root_pubkey, tx_id } = req.body || {};
-    if (!root_pubkey) return res.status(400).json({ error: 'root_pubkey required' });
-    if (req.user.usernode_pubkey && req.user.usernode_pubkey !== root_pubkey) {
-      return res.status(403).json({ error: 'root_pubkey does not match your linked wallet' });
+    const viewer = (req.query.viewer || '').toString() || null;
+    const method = require('./lib/aggregate').METHODS.includes(req.query.method) ? req.query.method : 'latest';
+    const role = indexer.viewerRole(viewer);
+    const visible = indexer.visibleElections({ viewer, admin: role.isAdmin });
+    const elections = visible.map((el) => indexer.electionSummary(el));
+
+    let detail = null;
+    if (req.query.eid) {
+      const can = visible.some((el) => el.eid === req.query.eid);
+      detail = can ? indexer.electionDetail(req.query.eid, method) : null;
     }
-    await pool.query(
-      `INSERT INTO watched_addresses (address, cursor, added_at) VALUES ($1, NULL, NOW())
-       ON CONFLICT (address) DO NOTHING`,
-      [root_pubkey]
-    );
-    pollOnce().catch(() => {}); // kick an immediate index pass
-    res.json({ ok: true, tx_id: tx_id || null });
+    res.json({ role, elections, detail, method });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-function canSeeElection(election, role, orgIds, isMemberOf) {
-  const now = new Date();
-  if (election.visibility === 'public') return true;
-  if (election.visibility === 'public_after_close') {
-    if (election.closedAt && new Date(election.closedAt) < now) return true;
-  }
-  if (role === 'platform_admin') return true;
-  const allOrgIds = [...(orgIds || []), ...(isMemberOf || [])];
-  if (election.visibility === 'private' || election.visibility === 'public_after_close') {
-    return allOrgIds.includes(election.orgId);
-  }
-  if (election.visibility === 'hidden') return false;
-  return false;
-}
-
-// ── Health ───────────────────────────────────────────────────────────────────
-
-app.get('/health', (req, res) => res.json({ ok: true }));
-
-// ── Public routes ────────────────────────────────────────────────────────────
-
-app.get('/api/public/elections', async (req, res) => {
-  try {
-    const now = new Date();
-    const elections = await prisma.election.findMany({
-      where: {
-        OR: [
-          { visibility: 'public' },
-          { visibility: 'public_after_close', closedAt: { lte: now } },
-        ],
-      },
-      include: { org: { select: { name: true } }, candidates: true, stations: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    res.json({ elections });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/public/elections/:txHash', async (req, res) => {
-  try {
-    const el = await prisma.election.findUnique({
-      where: { txHash: req.params.txHash },
-      include: { org: true, candidates: { orderBy: { displayOrder: 'asc' } }, stations: true },
-    });
-    if (!el) return res.status(404).json({ error: 'Not found' });
-    const now = new Date();
-    if (el.visibility !== 'public' && !(el.visibility === 'public_after_close' && el.closedAt && new Date(el.closedAt) < now)) {
-      return res.status(404).json({ error: 'Not found' });
-    }
-    const submissions = await prisma.cachedSubmission.findMany({ where: { electionId: el.id } });
-    const agg = aggregate(el.aggregation, submissions, el.candidates, el.stations, el.manualTally);
-    res.json({ election: el, ...agg });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+// Platform-admin read view — all orgs incl. pending. Scoped to admin wallets.
+app.get('/__quickcount/admin', (req, res) => {
+  const viewer = (req.query.viewer || '').toString() || null;
+  if (!indexer.isAdmin(viewer)) return res.status(403).json({ error: 'admin scope required' });
+  const orgs = indexer.allOrgs();
+  res.json({
+    orgs,
+    stats: {
+      orgs: orgs.length,
+      activeOrgs: orgs.filter((o) => o.active).length,
+      elections: indexer.elections.size,
+      treasury: TREASURY_ADDR,
+      orgFee: ORG_FEE,
+    },
+  });
 });
 
 // ── Off-chain image attachments ──────────────────────────────────────────────
-// Candidate avatars and station C1-form scans stored in the `attachments` table.
-// Keyed by eid (election txHash) + kind + ref_id so uploads work before indexing.
+// Candidate avatars and station C1-form scans. NON-CONSENSUS off-chain data:
+// not signed, not on-chain, never rebuilt by the indexer. Keyed by the same
+// logical ids the chain uses so uploads don't depend on indexing lag.
 
+const ATTACHMENT_KINDS = new Set(['cand_avatar', 'station_c1']);
+const ATTACHMENT_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const MAX_ATTACH_BYTES = 4 * 1024 * 1024;
+
+// Authenticated: upload (or replace) an attachment. Route-scoped JSON parser
+// with a raised limit — the global express.json() caps bodies at 256 KB.
 const uploadJson = express.json({ limit: '4mb' });
 app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, res) => {
   try {
     const { eid, kind } = req.params;
     const refId = Number(req.params.refId);
-    if (!isKind(kind)) return res.status(400).json({ error: 'unknown attachment kind' });
+    if (!ATTACHMENT_KINDS.has(kind)) return res.status(400).json({ error: 'unknown attachment kind' });
     if (!Number.isInteger(refId) || refId <= 0) return res.status(400).json({ error: 'bad ref id' });
 
     const { mime, data_base64 } = req.body || {};
@@ -274,17 +302,19 @@ app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, 
     }
     let buf;
     try { buf = Buffer.from(data_base64, 'base64'); } catch { buf = null; }
-    const check = validateImageUpload(mime, buf);
-    if (!check.ok) return res.status(check.status || 400).json({ error: check.error });
+    if (!buf || buf.length === 0) return res.status(400).json({ error: 'empty file' });
+    if (!ATTACHMENT_MIMES.has(mime)) return res.status(400).json({ error: 'unsupported mime type' });
+    if (buf.length > MAX_ATTACH_BYTES) return res.status(413).json({ error: 'file too large' });
+    if (!pool) return res.status(503).json({ error: 'database not configured' });
 
-    await prisma.$executeRawUnsafe(
+    await pool.query(
       `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
        ON CONFLICT (eid, kind, ref_id)
        DO UPDATE SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
                      byte_size = EXCLUDED.byte_size, uploader_pubkey = EXCLUDED.uploader_pubkey,
                      updated_at = NOW()`,
-      eid, kind, refId, mime, buf, buf.length, (req.user && req.user.usernode_pubkey) || null
+      [eid, kind, refId, mime, buf, buf.length, (req.user && req.user.usernode_pubkey) || null]
     );
     res.json({ ok: true, eid, kind, ref_id: refId, byte_size: buf.length });
   } catch (err) {
@@ -296,12 +326,13 @@ app.get('/api/public/elections/:eid/attachments/:kind/:refId', async (req, res) 
   try {
     const { eid, kind } = req.params;
     const refId = Number(req.params.refId);
-    if (!isKind(kind) || !Number.isInteger(refId) || refId <= 0) {
+    if (!ATTACHMENT_KINDS.has(kind) || !Number.isInteger(refId) || refId <= 0) {
       return res.status(404).json({ error: 'not found' });
     }
-    const rows = await prisma.$queryRawUnsafe(
+    if (!pool) return res.status(404).json({ error: 'not found' });
+    const { rows } = await pool.query(
       'SELECT mime, bytes FROM attachments WHERE eid = $1 AND kind = $2 AND ref_id = $3',
-      eid, kind, refId
+      [eid, kind, refId]
     );
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     res.set('Content-Type', rows[0].mime);
@@ -312,88 +343,78 @@ app.get('/api/public/elections/:eid/attachments/:kind/:refId', async (req, res) 
   }
 });
 
-app.get('/api/public/orgs', async (req, res) => {
+// Public: list elections with counts (backed by in-memory indexer).
+app.get('/api/public/elections', (_req, res) => {
   try {
-    const orgs = await prisma.organization.findMany({ where: { status: 'registered' }, orderBy: { createdAt: 'desc' } });
-    res.json({ orgs });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    res.json({
+      elections: visible.map((el) => {
+        const s = indexer.electionSummary(el);
+        return {
+          eid: s.eid,
+          name: s.name,
+          candidate_count: s.candidateCount,
+          station_count: s.stationCount,
+          reported_count: s.reportedCount,
+        };
+      }),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ── Authenticated routes ─────────────────────────────────────────────────────
-
-app.get('/api/me', async (req, res) => {
-  try {
-    await withRole(req);
-    res.json({ pubkey: req.user.usernode_pubkey, role: req.role, orgIds: req.orgIds, isMemberOf: req.isMemberOf });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Public election detail with pay-to-unlock gate ───────────────────────────
+// Public: election detail with pay-to-unlock gate (backed by in-memory indexer).
 app.get('/api/public/elections/:eid', async (req, res) => {
   try {
     const eid = req.params.eid;
-    const el = (await pool.query('SELECT eid, name, root_pubkey, created_at FROM elections WHERE eid = $1', [eid])).rows[0];
-    if (!el) return res.status(404).json({ error: 'not found' });
+    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    if (!visible.some((el) => el.eid === eid)) return res.status(404).json({ error: 'not found' });
+    const d = indexer.electionDetail(eid, 'latest');
+    if (!d) return res.status(404).json({ error: 'not found' });
 
-    const att = (await pool.query('SELECT kind, ref_id FROM attachments WHERE eid = $1', [eid])).rows;
-    const hasAvatar = new Set(att.filter((a) => a.kind === 'cand_avatar').map((a) => Number(a.ref_id)));
-    const hasC1 = new Set(att.filter((a) => a.kind === 'station_c1').map((a) => Number(a.ref_id)));
+    // Resolve avatar and C1 attachment URLs from the off-chain attachments table.
+    let hasAvatar = new Set(), hasC1 = new Set();
+    if (pool) {
+      const att = (await pool.query('SELECT kind, ref_id FROM attachments WHERE eid = $1', [eid])).rows;
+      hasAvatar = new Set(att.filter((a) => a.kind === 'cand_avatar').map((a) => Number(a.ref_id)));
+      hasC1 = new Set(att.filter((a) => a.kind === 'station_c1').map((a) => Number(a.ref_id)));
+    }
     const avatarUrl = (cid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/cand_avatar/${cid}`;
     const c1Url = (sid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/station_c1/${sid}`;
 
-    const candidates = (await pool.query('SELECT cid, name FROM candidates WHERE eid = $1 ORDER BY cid', [eid])).rows
-      .map((c) => ({ cid: Number(c.cid), name: c.name, avatar: hasAvatar.has(Number(c.cid)) ? avatarUrl(Number(c.cid)) : null }));
-    const stations = (await pool.query('SELECT sid, name FROM stations WHERE eid = $1 ORDER BY sid', [eid])).rows
-      .map((s) => ({ sid: Number(s.sid), name: s.name }));
-    const results = (await pool.query(
-      'SELECT sid, tx_id, submitter_pubkey, votes, tot, inv, created_at FROM results WHERE eid = $1', [eid]
-    )).rows.map((r) => ({
-      sid: Number(r.sid),
-      tx_id: r.tx_id,
-      submitter_pubkey: r.submitter_pubkey,
-      votes: r.votes || {},
-      tot: r.tot,
-      inv: r.inv,
-      created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+    const candidates = d.candidates.map((c) => ({
+      cid: c.cid, name: c.name,
+      avatar: hasAvatar.has(Number(c.cid)) ? avatarUrl(Number(c.cid)) : null,
     }));
 
-    const latest = latestPerStation(results);
-    const tally = computeTally(candidates, latest);
-    const prog = reporting(stations, latest);
-    const perStation = stations.map((s) => {
-      const r = latest.get(s.sid);
-      return {
-        sid: s.sid,
-        name: s.name,
-        reported: !!r,
-        votes: r ? r.votes : null,
-        tot: r ? r.tot : null,
-        inv: r ? r.inv : null,
-        at: r ? r.created_at : null,
-        submitter: r ? r.submitter_pubkey : null,
-        c1: hasC1.has(s.sid) ? c1Url(s.sid) : null,
-      };
-    });
-    let lastUpdated = null;
-    for (const r of results) if (r.created_at && (!lastUpdated || r.created_at > lastUpdated)) lastUpdated = r.created_at;
-
+    // Pay-to-unlock gate. The auth middleware has already populated req.user
+    // from any token, even on this public path, so one endpoint serves both
+    // locked (anonymous / unpaid) and unlocked (paid wallet) viewers.
     const unlocked = await walletUnlocked(req.user && req.user.usernode_pubkey);
 
     const base = {
-      election: { eid: el.eid, name: el.name, root_pubkey: el.root_pubkey },
+      election: { eid: d.election.eid, name: d.election.name, root_pubkey: d.election.orgAddr },
       candidates,
-      reporting: prog,
-      lastUpdated,
+      reporting: d.reporting,
+      lastUpdated: d.lastUpdated,
       locked: !unlocked,
     };
 
     if (unlocked) {
-      return res.json(Object.assign(base, { stations: perStation, tally }));
+      const stations = d.stations.map((s) => ({
+        sid: s.sid, name: s.name, reported: s.reported,
+        votes: s.votes, tot: s.tot, inv: s.inv, at: s.at,
+        c1: hasC1.has(s.sid) ? c1Url(s.sid) : null,
+      }));
+      return res.json(Object.assign(base, { stations, tally: d.tally }));
     }
 
-    const lockedStations = perStation.map((s) => ({
+    // Locked: withhold vote figures so the blur cannot be defeated in dev-tools.
+    // Keep structure (names, reported flag, reporting counts) for the placeholder UI.
+    const lockedStations = d.stations.map((s) => ({
       sid: s.sid, name: s.name, reported: s.reported,
-      votes: null, tot: null, inv: null, at: null, submitter: null,
+      votes: null, tot: null, inv: null, at: null,
     }));
     return res.json(Object.assign(base, { stations: lockedStations, tally: null }));
   } catch (err) {
@@ -423,7 +444,8 @@ app.post('/api/unlock/verify', async (req, res) => {
     const { tx_id } = req.body || {};
     if (!tx_id) return res.status(400).json({ error: 'tx_id required' });
 
-    const raw = await txsource.getTransaction({ txId: tx_id, recipient: UNLOCK_RECIPIENT });
+    // Independently fetch + verify the payment against the chain.
+    const raw = await getTransaction({ txId: tx_id, recipient: UNLOCK_RECIPIENT });
     const tx = normalizeTx(raw || {});
     const v = verifyPayment(tx, { recipient: UNLOCK_RECIPIENT, price: UNLOCK_PRICE, sender: pubkey });
     if (!v.ok) return res.status(400).json({ error: 'Payment could not be verified', reason: v.reason });
@@ -443,443 +465,23 @@ app.post('/api/unlock/verify', async (req, res) => {
   }
 });
 
-app.get('/api/elections', async (req, res) => {
-  try {
-    await withRole(req);
-    const all = await prisma.election.findMany({
-      include: { org: { select: { name: true } }, candidates: true, stations: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    const visible = all.filter((el) => canSeeElection(el, req.role, req.orgIds, req.isMemberOf));
-    res.json({ elections: visible });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/elections/:txHash', async (req, res) => {
-  try {
-    await withRole(req);
-    const el = await prisma.election.findUnique({
-      where: { txHash: req.params.txHash },
-      include: { org: true, candidates: { orderBy: { displayOrder: 'asc' } }, stations: true },
-    });
-    if (!el || !canSeeElection(el, req.role, req.orgIds, req.isMemberOf)) return res.status(404).json({ error: 'Not found' });
-    res.json({ election: el });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/elections/:txHash/dashboard', async (req, res) => {
-  try {
-    await withRole(req);
-    const el = await prisma.election.findUnique({
-      where: { txHash: req.params.txHash },
-      include: { candidates: { orderBy: { displayOrder: 'asc' } }, stations: true, org: { select: { name: true } } },
-    });
-    if (!el || !canSeeElection(el, req.role, req.orgIds, req.isMemberOf)) return res.status(404).json({ error: 'Not found' });
-    const submissions = await prisma.cachedSubmission.findMany({ where: { electionId: el.id } });
-    const agg = aggregate(el.aggregation, submissions, el.candidates, el.stations, el.manualTally);
-    res.json({ election: el, ...agg });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/elections/:txHash/stations', async (req, res) => {
-  try {
-    await withRole(req);
-    const el = await prisma.election.findUnique({ where: { txHash: req.params.txHash } });
-    if (!el || !canSeeElection(el, req.role, req.orgIds, req.isMemberOf)) return res.status(404).json({ error: 'Not found' });
-    const stations = await prisma.station.findMany({
-      where: { electionId: el.id },
-      include: { submissions: { orderBy: { chainTimestamp: 'desc' }, take: 1 } },
-    });
-    res.json({ stations });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/orgs', async (req, res) => {
-  try {
-    await withRole(req);
-    const where = req.role === 'platform_admin' ? {} : { status: 'registered' };
-    const orgs = await prisma.organization.findMany({ where, orderBy: { createdAt: 'desc' } });
-    res.json({ orgs });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/orgs/:txHash', async (req, res) => {
-  try {
-    await withRole(req);
-    const org = await prisma.organization.findUnique({ where: { txHash: req.params.txHash }, include: { members: true } });
-    if (!org) return res.status(404).json({ error: 'Not found' });
-    if (org.status !== 'registered' && req.role !== 'platform_admin' && !req.orgIds.includes(org.id)) {
-      return res.status(404).json({ error: 'Not found' });
-    }
-    res.json({ org });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/evidence', async (req, res) => {
-  try {
-    const where = {};
-    if (req.query.election) {
-      const el = await prisma.election.findUnique({ where: { txHash: req.query.election } });
-      if (el) where.electionId = el.id;
-    }
-    if (req.query.submission) {
-      const sub = await prisma.cachedSubmission.findUnique({ where: { txHash: req.query.submission } });
-      if (sub) where.submissionId = sub.id;
-    }
-    const records = await prisma.evidenceRecord.findMany({ where, orderBy: { createdAt: 'desc' } });
-    res.json({ records });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/disputes', async (req, res) => {
-  try {
-    const where = {};
-    if (req.query.election) {
-      const el = await prisma.election.findUnique({ where: { txHash: req.query.election } });
-      if (el) where.electionId = el.id;
-    }
-    if (req.query.status) where.status = req.query.status;
-    const disputes = await prisma.dispute.findMany({ where, orderBy: { createdAt: 'desc' } });
-    res.json({ disputes });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/explorer', async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 20);
-    const where = {};
-    if (req.query.election) {
-      const el = await prisma.election.findUnique({ where: { txHash: req.query.election } });
-      if (el) where.electionId = el.id;
-    }
-    if (req.query.txHash) where.txHash = { contains: req.query.txHash };
-    const [total, items] = await Promise.all([
-      prisma.cachedSubmission.count({ where }),
-      prisma.cachedSubmission.findMany({ where, orderBy: { chainTimestamp: 'desc' }, skip: (page - 1) * limit, take: limit }),
-    ]);
-    res.json({ items, total, page, limit });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Org Staff+ routes ────────────────────────────────────────────────────────
-
-app.post('/api/submit', upload.single('photo'), requireRole('org_staff'), async (req, res) => {
-  try {
-    const { election_id, station_id, votes: votesRaw, ref_tx_id } = req.body;
-    if (!election_id || !station_id) return res.status(400).json({ error: 'election_id and station_id required' });
-
-    const el = await prisma.election.findUnique({ where: { txHash: election_id } });
-    const stn = await prisma.station.findUnique({ where: { txHash: station_id } });
-    if (!el || !stn) return res.status(404).json({ error: 'Election or station not found' });
-
-    let votes = {};
-    try { votes = typeof votesRaw === 'string' ? JSON.parse(votesRaw) : (votesRaw || {}); } catch {}
-
-    const pubkey = req.user.usernode_pubkey || '';
-    let txHash;
-    if (ref_tx_id) {
-      const m = memo.resultReviseMemo(election_id, station_id, votes, ref_tx_id);
-      const result = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-      txHash = result.txHash;
-      await prisma.cachedSubmission.updateMany({ where: { txHash: ref_tx_id }, data: { status: 'revised' } });
-    } else {
-      const m = memo.resultSubmitMemo(election_id, station_id, votes);
-      const result = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-      txHash = result.txHash;
-    }
-
-    let photoFilename = null;
-    if (req.file) {
-      photoFilename = await storage.savePhoto(req.file.buffer, req.file.originalname);
-    }
-
-    await prisma.cachedSubmission.upsert({
-      where: { txHash },
-      create: {
-        txHash,
-        stationId: stn.id,
-        electionId: el.id,
-        submitterPubkey: pubkey,
-        votes,
-        refTxHash: ref_tx_id || null,
-        blockHeight: 0,
-        chainTimestamp: new Date(),
-        status: 'ok',
-      },
-      update: { votes, indexedAt: new Date() },
-    });
-
-    res.json({ txHash, photoFilename });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/evidence', upload.single('file'), requireRole('org_staff'), async (req, res) => {
-  try {
-    const { submission_id, sha256: clientSha256 } = req.body;
-    if (!submission_id) return res.status(400).json({ error: 'submission_id required' });
-
-    const sub = await prisma.cachedSubmission.findUnique({ where: { txHash: submission_id } });
-    if (!sub) return res.status(404).json({ error: 'Submission not found' });
-
-    let filePath = '';
-    let sha256 = clientSha256 || '';
-    if (req.file) {
-      filePath = await storage.savePhoto(req.file.buffer, req.file.originalname);
-      const hash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
-      sha256 = hash;
-    }
-
-    const m = memo.evidenceSubmitMemo(submission_id, sha256, '');
-    const { txHash } = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-
-    const record = await prisma.evidenceRecord.upsert({
-      where: { txHash },
-      create: {
-        txHash,
-        submissionId: sub.id,
-        electionId: sub.electionId,
-        uploaderPubkey: req.user.usernode_pubkey || '',
-        sha256,
-        ipfsCid: '',
-        ipfsStatus: 'pending',
-        filePath,
-      },
-      update: {},
-    });
-
-    res.json({ record });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/disputes', requireRole('org_staff'), async (req, res) => {
-  try {
-    const { submission_id, reason } = req.body;
-    if (!submission_id || !reason) return res.status(400).json({ error: 'submission_id and reason required' });
-
-    const sub = await prisma.cachedSubmission.findUnique({ where: { txHash: submission_id } });
-    if (!sub) return res.status(404).json({ error: 'Submission not found' });
-
-    const m = memo.disputeOpenMemo(submission_id, reason);
-    const { txHash } = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-
-    const dispute = await prisma.dispute.upsert({
-      where: { txHash },
-      create: {
-        txHash,
-        submissionId: sub.id,
-        electionId: sub.electionId,
-        filerPubkey: req.user.usernode_pubkey || '',
-        reason: String(reason).slice(0, 280),
-        status: 'open',
-      },
-      update: {},
-    });
-    await prisma.cachedSubmission.updateMany({ where: { txHash: submission_id }, data: { status: 'disputed' } });
-
-    res.json({ dispute });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Org Admin routes ─────────────────────────────────────────────────────────
-
-app.post('/api/elections', requireRole('org_admin'), async (req, res) => {
-  try {
-    const { org_id, name, visibility, aggregation } = req.body;
-    if (!org_id || !name) return res.status(400).json({ error: 'org_id and name required' });
-
-    const org = await prisma.organization.findUnique({ where: { txHash: org_id } });
-    if (!org || !req.orgIds.includes(org.id)) return res.status(403).json({ error: 'Not your org' });
-
-    const m = memo.electionCreateMemo(org_id, name, visibility || 'public', aggregation || 'first_report');
-    const { txHash } = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-
-    const election = await prisma.election.upsert({
-      where: { txHash },
-      create: { txHash, orgId: org.id, name, visibility: visibility || 'public', aggregation: aggregation || 'first_report', status: 'open' },
-      update: {},
-    });
-    res.json({ election });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.put('/api/elections/:txHash', requireRole('org_admin'), async (req, res) => {
-  try {
-    const el = await prisma.election.findUnique({ where: { txHash: req.params.txHash } });
-    if (!el || !req.orgIds.includes(el.orgId)) return res.status(403).json({ error: 'Not your election' });
-    const { visibility, aggregation, status, closedAt, manualTally } = req.body;
-    const data = {};
-    if (visibility) data.visibility = visibility;
-    if (aggregation) data.aggregation = aggregation;
-    if (status) data.status = status;
-    if (closedAt !== undefined) data.closedAt = closedAt ? new Date(closedAt) : null;
-    if (manualTally !== undefined) data.manualTally = manualTally;
-    const updated = await prisma.election.update({ where: { txHash: req.params.txHash }, data });
-    res.json({ election: updated });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/elections/:txHash/candidates', requireRole('org_admin'), async (req, res) => {
-  try {
-    const el = await prisma.election.findUnique({ where: { txHash: req.params.txHash } });
-    if (!el || !req.orgIds.includes(el.orgId)) return res.status(403).json({ error: 'Not your election' });
-    const { name, order } = req.body;
-    if (!name) return res.status(400).json({ error: 'name required' });
-    const m = memo.candidateAddMemo(req.params.txHash, name, order || 0);
-    const { txHash } = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-    const candidate = await prisma.candidate.upsert({
-      where: { txHash },
-      create: { txHash, electionId: el.id, name, displayOrder: Number(order) || 0 },
-      update: {},
-    });
-    res.json({ candidate });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/elections/:txHash/stations', requireRole('org_admin'), async (req, res) => {
-  try {
-    const el = await prisma.election.findUnique({ where: { txHash: req.params.txHash } });
-    if (!el || !req.orgIds.includes(el.orgId)) return res.status(403).json({ error: 'Not your election' });
-    const { name, region } = req.body;
-    if (!name) return res.status(400).json({ error: 'name required' });
-    const m = memo.stationAddMemo(req.params.txHash, name, region || '');
-    const { txHash } = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-    const station = await prisma.station.upsert({
-      where: { txHash },
-      create: { txHash, electionId: el.id, name, region: region || '' },
-      update: {},
-    });
-    res.json({ station });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/elections/:txHash/members', requireRole('org_admin'), async (req, res) => {
-  try {
-    const el = await prisma.election.findUnique({ where: { txHash: req.params.txHash }, include: { org: true } });
-    if (!el || !req.orgIds.includes(el.orgId)) return res.status(403).json({ error: 'Not your election' });
-    const { member_pubkey } = req.body;
-    if (!member_pubkey) return res.status(400).json({ error: 'member_pubkey required' });
-    const m = memo.orgMemberMemo(el.org.txHash, member_pubkey);
-    const { txHash } = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-    await prisma.orgMember.upsert({
-      where: { grantTxHash: txHash },
-      create: { grantTxHash: txHash, orgId: el.orgId, memberPubkey: member_pubkey },
-      update: {},
-    });
-    res.json({ ok: true, txHash });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/disputes/:txHash/resolve', requireRole('org_admin'), async (req, res) => {
-  try {
-    const dispute = await prisma.dispute.findUnique({ where: { txHash: req.params.txHash } });
-    if (!dispute) return res.status(404).json({ error: 'Not found' });
-    const el = await prisma.election.findUnique({ where: { id: dispute.electionId } });
-    const isAdmin = req.role === 'platform_admin';
-    const isOrgAdmin = el && req.orgIds.includes(el.orgId);
-    if (!isAdmin && !isOrgAdmin) return res.status(403).json({ error: 'Not authorized' });
-    const { notes } = req.body;
-    const m = memo.disputeResolveMemo(req.params.txHash, notes || '');
-    const { txHash } = await blockchain.broadcastTx({ memo: memo.encode(m), toPubkey: process.env.APP_PUBKEY || '' });
-    const updated = await prisma.dispute.update({
-      where: { txHash: req.params.txHash },
-      data: { status: 'resolved', resolvedAt: new Date(), resolvedBy: req.user.usernode_pubkey || '', resolution: notes || '', resolveTxHash: txHash },
-    });
-    res.json({ dispute: updated });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Platform Admin routes ────────────────────────────────────────────────────
-
-app.get('/api/admin/orgs', requireRole('platform_admin'), async (req, res) => {
-  try {
-    const orgs = await prisma.organization.findMany({ orderBy: { createdAt: 'desc' } });
-    res.json({ orgs });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/admin/orgs/:txHash/approve', requireRole('platform_admin'), async (req, res) => {
-  try {
-    const org = await prisma.organization.update({
-      where: { txHash: req.params.txHash },
-      data: { status: 'registered', registeredAt: new Date() },
-    });
-    res.json({ org });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/admin/orgs/:txHash/reject', requireRole('platform_admin'), async (req, res) => {
-  try {
-    const org = await prisma.organization.update({ where: { txHash: req.params.txHash }, data: { status: 'rejected' } });
-    res.json({ org });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/admin/indexer', requireRole('platform_admin'), async (req, res) => {
-  try {
-    const state = await prisma.indexerState.findUnique({ where: { id: 1 } });
-    res.json({ state });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/admin/reindex', requireRole('platform_admin'), async (req, res) => {
-  try {
-    await prisma.indexerState.upsert({ where: { id: 1 }, create: { id: 1, lastIndexedBlock: 0 }, update: { lastIndexedBlock: 0 } });
-    pollOnce(prisma).catch(console.error);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Static ───────────────────────────────────────────────────────────────────
-
+// SPA shell. The public dashboard works without a wallet, so serve index.html
+// for any GET (the auth gate above only protects non-GET / /api/* routes).
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
+// ── Boot ─────────────────────────────────────────────────────────────────────
 async function migrate() {
+  if (!pool) return;
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS elections (
-      eid TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      root_pubkey TEXT,
-      creator_pubkey TEXT,
-      tx_id TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS candidates (
-      eid TEXT NOT NULL,
-      cid INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      tx_id TEXT,
-      PRIMARY KEY (eid, cid)
-    )`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS stations (
-      eid TEXT NOT NULL,
-      sid INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      tx_id TEXT,
-      PRIMARY KEY (eid, sid)
-    )`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS results (
+    CREATE TABLE IF NOT EXISTS chain_txs (
       tx_id TEXT PRIMARY KEY,
-      eid TEXT NOT NULL,
-      sid INTEGER NOT NULL,
-      submitter_pubkey TEXT,
-      votes JSONB NOT NULL DEFAULT '{}'::jsonb,
-      tot INTEGER,
-      inv INTEGER,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS results_eid_sid_idx ON results (eid, sid)`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS watched_addresses (
-      address TEXT PRIMARY KEY,
-      cursor TEXT,
-      added_at TIMESTAMPTZ DEFAULT NOW()
+      from_addr TEXT,
+      to_addr TEXT,
+      amount NUMERIC DEFAULT 0,
+      memo TEXT,
+      created_at TIMESTAMPTZ,
+      seen_at TIMESTAMPTZ DEFAULT NOW()
     )`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS unlocks (
@@ -906,96 +508,52 @@ async function migrate() {
     )`);
 }
 
-// ── Staging seed ─────────────────────────────────────────────────────────────
-
-async function seedStaging() {
-  if (!IS_STAGING) return;
-
-  // Organizations
-  await prisma.organization.upsert({
-    where: { txHash: 'seed-org-1' },
-    create: { id: 1, txHash: 'seed-org-1', ownerPubkey: 'seed-pubkey-admin', name: 'Demo Commission', description: 'Staging demo organisation', status: 'registered', feeConfirmed: true, registeredAt: new Date() },
-    update: {},
-  });
-
-  // Elections
-  await prisma.election.upsert({
-    where: { txHash: 'seed-election-1' },
-    create: { id: 1, txHash: 'seed-election-1', orgId: 1, name: 'Staging Demo General Election', visibility: 'public', aggregation: 'first_report', status: 'open' },
-    update: {},
-  });
-
-  // Candidates
-  await prisma.candidate.upsert({ where: { txHash: 'seed-cand-1' }, create: { id: 1, txHash: 'seed-cand-1', electionId: 1, name: 'Alpha', displayOrder: 1 }, update: {} });
-  await prisma.candidate.upsert({ where: { txHash: 'seed-cand-2' }, create: { id: 2, txHash: 'seed-cand-2', electionId: 1, name: 'Beta', displayOrder: 2 }, update: {} });
-  await prisma.candidate.upsert({ where: { txHash: 'seed-cand-3' }, create: { id: 3, txHash: 'seed-cand-3', electionId: 1, name: 'Gamma', displayOrder: 3 }, update: {} });
-
-  // Stations
-  await prisma.station.upsert({ where: { txHash: 'seed-stn-1' }, create: { id: 1, txHash: 'seed-stn-1', electionId: 1, name: 'Station North 1', region: 'North' }, update: {} });
-  await prisma.station.upsert({ where: { txHash: 'seed-stn-2' }, create: { id: 2, txHash: 'seed-stn-2', electionId: 1, name: 'Station North 2', region: 'North' }, update: {} });
-  await prisma.station.upsert({ where: { txHash: 'seed-stn-3' }, create: { id: 3, txHash: 'seed-stn-3', electionId: 1, name: 'Station South 1', region: 'South' }, update: {} });
-
-  // UserRole
-  await prisma.userRole.upsert({ where: { userId: 'seed-pubkey-admin' }, create: { userId: 'seed-pubkey-admin', role: 'platform_admin' }, update: {} });
-
-  // OrgMember
-  await prisma.orgMember.upsert({ where: { grantTxHash: 'seed-member-1' }, create: { id: 1, grantTxHash: 'seed-member-1', orgId: 1, memberPubkey: 'seed-pubkey-staff' }, update: {} });
-
-  // Submissions
-  const subs = [
-    { id: 1, txHash: 'seed-sub-1', stationId: 1, votes: { 'seed-cand-1': 120, 'seed-cand-2': 85, 'seed-cand-3': 40 } },
-    { id: 2, txHash: 'seed-sub-2', stationId: 1, votes: { 'seed-cand-1': 125, 'seed-cand-2': 83, 'seed-cand-3': 42 } },
-    { id: 3, txHash: 'seed-sub-3', stationId: 2, votes: { 'seed-cand-1': 200, 'seed-cand-2': 150, 'seed-cand-3': 75 } },
-    { id: 4, txHash: 'seed-sub-4', stationId: 2, votes: { 'seed-cand-1': 198, 'seed-cand-2': 152, 'seed-cand-3': 73 } },
-    { id: 5, txHash: 'seed-sub-5', stationId: 3, votes: { 'seed-cand-1': 90, 'seed-cand-2': 60, 'seed-cand-3': 30 } },
-    { id: 6, txHash: 'seed-sub-6', stationId: 3, votes: { 'seed-cand-1': 88, 'seed-cand-2': 62, 'seed-cand-3': 31 } },
-  ];
-  for (const s of subs) {
-    await prisma.cachedSubmission.upsert({
-      where: { txHash: s.txHash },
-      create: { id: s.id, txHash: s.txHash, stationId: s.stationId, electionId: 1, submitterPubkey: 'seed-pubkey-staff', votes: s.votes, blockHeight: 100 + s.id, chainTimestamp: new Date(Date.now() - s.id * 60000), status: 'ok' },
-      update: {},
+async function loadFromDb() {
+  if (!pool) return;
+  const { rows } = await pool.query('SELECT tx_id, from_addr, to_addr, amount, memo, created_at FROM chain_txs');
+  for (const r of rows) {
+    if (seen.has(r.tx_id)) continue;
+    seen.add(r.tx_id);
+    txLog.push({
+      txId: r.tx_id, from: r.from_addr, to: r.to_addr,
+      amount: Number(r.amount) || 0, memo: r.memo,
+      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
     });
   }
+}
 
-  // Sequence resets
-  for (const table of ['Organization', 'OrgMember', 'Election', 'Candidate', 'Station', 'CachedSubmission', 'EvidenceRecord', 'Dispute', 'UserRole']) {
-    await prisma.$executeRawUnsafe(`SELECT setval('"${table}_id_seq"', COALESCE((SELECT MAX(id) FROM "${table}"), 0) + 1, false)`);
-  }
-
-  // Demo image attachments for the avatar/C1 UI: solid-colour 8×8 PNGs.
+// Staging-only demo image attachments so the avatar/C1 UI is visible in PR previews.
+// Election data is seeded into the in-memory indexer by seedDemo(); only the
+// off-chain attachments table needs direct DB rows here.
+async function seedStaging() {
+  if (!IS_STAGING || !pool) return;
   const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6aGFTEMLQkAF/tKAS/fz4YAAAAASUVORK5CYII=';
   const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQTX6NFTEMLQkADGRcwcht3uAAAAAASUVORK5CYII=';
   const GRAY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGMoLKzCihiGlgQA/HdXAZV6UO0AAAAASUVORK5CYII=';
   for (const [kind, refId, b64] of [['cand_avatar', 1, RED_PNG], ['cand_avatar', 2, BLUE_PNG], ['station_c1', 1, GRAY_PNG]]) {
     const buf = Buffer.from(b64, 'base64');
-    await prisma.$executeRawUnsafe(
+    await pool.query(
       `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
        VALUES ('demo-election', $1, $2, 'image/png', $3, $4, $5, NOW())
        ON CONFLICT (eid, kind, ref_id) DO NOTHING`,
-      kind, refId, buf, buf.length, 'seed-pubkey-admin'
+      [kind, refId, buf, buf.length, 'seed-pubkey-admin']
     );
   }
 
   console.log('[seed] staging data inserted');
 }
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
-
-async function main() {
+async function start() {
   await migrate();
+  await loadFromDb();
+  seedDemo();
   await seedStaging();
-
-  // Indexer loop
-  const indexerInterval = setInterval(() => pollOnce(prisma).catch(console.error), 10000);
-
-  app.listen(port, () => console.log(`Quick Count v3 listening on :${port}`));
-
-  process.on('SIGTERM', async () => {
-    clearInterval(indexerInterval);
-    await prisma.$disconnect();
-    process.exit(0);
-  });
+  await pollOnce();
+  const interval = LOCAL_DEV ? 2000 : 4000;
+  setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), interval);
+  app.listen(PORT, () => console.log(`Quick Count listening on :${PORT}` + (LOCAL_DEV ? ' (local-dev)' : '') + (IS_STAGING ? ' (staging)' : '')));
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+start().catch((err) => { console.error(err); process.exit(1); });
+
+module.exports = { app, indexer, buildDemoTxs };

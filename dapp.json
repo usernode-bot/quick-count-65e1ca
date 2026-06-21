@@ -8,18 +8,25 @@
       "private": false
     },
     {
-      "key": "APP_PUBKEY",
-      "description": "Platform wallet address. org_register transactions must pay 1,000 tokens to this address.",
+      "key": "TREASURY_ADDR",
+      "description": "Wallet address that receives organization registration fees. Public address — not a secret.",
+      "required": false,
+      "private": false,
+      "default": "ut1treasuryquickcount00000000000000000000"
+    },
+    {
+      "key": "ORG_FEE",
+      "description": "Minimum registration fee (smallest on-chain unit) an organization must pay to become active.",
+      "required": false,
+      "private": false,
+      "default": "100"
+    },
+    {
+      "key": "ADMIN_ADDRS",
+      "description": "Comma-separated platform-admin wallet addresses (fee waivers + admin dashboard). Public identifiers.",
       "required": false,
       "private": false,
       "default": ""
-    },
-    {
-      "key": "LOCAL_DEV",
-      "description": "Set to false in production to enable live chain calls. Default true stubs all blockchain operations.",
-      "required": false,
-      "private": false,
-      "default": "true"
     },
     {
       "key": "UNLOCK_RECIPIENT_ADDRESS",
@@ -40,24 +47,19 @@
   ],
   "tests": [
     {
-      "name": "Dashboard loads with app name",
-      "path": "/",
-      "expectText": "Quick Count"
+      "name": "Dashboard renders demo election",
+      "path": "/#/dashboard",
+      "expectText": "Staging demo"
     },
     {
       "name": "Elections list renders",
-      "path": "/#elections",
-      "expectSelector": "#screen-elections"
+      "path": "/#/elections",
+      "expectText": "Elections"
     },
     {
-      "name": "Organizations screen renders",
-      "path": "/#orgs",
-      "expectSelector": "#screen-orgs"
-    },
-    {
-      "name": "Staging election visible on dashboard",
-      "path": "/",
-      "expectText": "Staging Demo General Election"
+      "name": "Evidence gallery renders",
+      "path": "/#/evidence",
+      "expectText": "Evidence"
     },
     {
       "name": "Demo election shows reporting progress",
