@@ -89,6 +89,16 @@
       "name": "Theme toggle button present on public dashboard",
       "path": "/dashboard.html?eid=demo-election",
       "expectSelector": "#theme-btn"
+    },
+    {
+      "name": "My Profile page renders",
+      "path": "/#/profile",
+      "expectText": "My Profile"
+    },
+    {
+      "name": "Settings page renders the language selector",
+      "path": "/#/settings",
+      "expectText": "Language"
     }
   ]
 }

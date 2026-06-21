@@ -79,8 +79,11 @@
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 font-medium" title="Toggle theme">☀️</button>
-        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 outline-none"></select>
-        <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 font-medium">Connect wallet</button>
+        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
+        <div id="wallet-wrap" class="relative">
+          <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Connect wallet</button>
+          <div id="wallet-menu" class="hidden absolute end-0 mt-2 w-52 rounded-xl bg-zinc-900 border border-zinc-800 shadow-xl z-30 overflow-hidden text-sm"></div>
+        </div>
       </div>
     </div>
   </header>
@@ -102,6 +105,9 @@
     method: 'latest',
     wallet: { connected: false, address: null },
     refreshTimer: null,
+    me: null,           // last /api/me response
+    lang: 'en',         // active UI language
+    menuOpen: false,    // wallet dropdown menu open?
   };
 
   const TABS = [
@@ -114,6 +120,230 @@
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' };
   const COLORS = ['bg-rose-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-violet-500','bg-pink-500','bg-teal-500'];
+
+  // ───────────────────────── i18n (Profile + Settings slice) ─────────────────────────
+  // Mirrors lib/profile.js (LANGS + display-name regex). Translations are
+  // idiomatic per locale, not word-for-word. Scope: Profile + Settings only;
+  // the rest of the app stays English for now (deferred follow-up).
+  const LANGS = ['en', 'id', 'zh-Hans', 'es', 'hi', 'ar', 'fr'];
+  const LANG_NAMES = { en: 'English', id: 'Bahasa Indonesia', 'zh-Hans': '简体中文', es: 'Español', hi: 'हिन्दी', ar: 'العربية', fr: 'Français' };
+  const RTL_LANGS = ['ar'];
+  const NAME_RE = /^[A-Za-z0-9_]{3,20}$/;
+
+  const I18N = {
+    en: {
+      menu_profile: 'My Profile', menu_settings: 'Settings', menu_connected: 'Signed in as',
+      title_profile: 'My Profile', title_settings: 'Settings',
+      label_username: 'Username', hint_username: 'Managed by Usernode',
+      label_wallet: 'Wallet address', action_copy: 'Copy', copied: 'Copied',
+      label_display_name: 'Display name',
+      hint_display_name: '3–20 characters · letters, numbers, and underscores',
+      action_save: 'Save', saving: 'Saving…', saved: 'Display name updated',
+      save_failed: 'Could not save display name', invalid_name: 'Use 3–20 letters, numbers, or underscores.',
+      label_joined: 'Joined', joined_unknown: 'Unknown',
+      label_language: 'Language',
+      desc_language: 'Choose the language for your profile and settings. Your choice is saved on this device and to your profile.',
+      readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
+      no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
+      not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
+    },
+    id: {
+      menu_profile: 'Profil Saya', menu_settings: 'Pengaturan', menu_connected: 'Masuk sebagai',
+      title_profile: 'Profil Saya', title_settings: 'Pengaturan',
+      label_username: 'Nama pengguna', hint_username: 'Dikelola oleh Usernode',
+      label_wallet: 'Alamat dompet', action_copy: 'Salin', copied: 'Tersalin',
+      label_display_name: 'Nama tampilan',
+      hint_display_name: '3–20 karakter · huruf, angka, dan garis bawah',
+      action_save: 'Simpan', saving: 'Menyimpan…', saved: 'Nama tampilan diperbarui',
+      save_failed: 'Gagal menyimpan nama tampilan', invalid_name: 'Gunakan 3–20 huruf, angka, atau garis bawah.',
+      label_joined: 'Bergabung', joined_unknown: 'Tidak diketahui',
+      label_language: 'Bahasa',
+      desc_language: 'Pilih bahasa untuk profil dan pengaturan Anda. Pilihan Anda disimpan di perangkat ini dan ke profil Anda.',
+      readonly_note: 'Nama pengguna dan dompet Anda dikelola oleh Usernode dan hanya bisa dibaca. Hanya nama tampilan yang dapat diubah.',
+      no_wallet_note: 'Tautkan dompet Usernode untuk mengatur nama tampilan. Pilihan bahasa Anda tetap disimpan di perangkat ini.',
+      not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
+    },
+    'zh-Hans': {
+      menu_profile: '我的资料', menu_settings: '设置', menu_connected: '当前登录',
+      title_profile: '我的资料', title_settings: '设置',
+      label_username: '用户名', hint_username: '由 Usernode 管理',
+      label_wallet: '钱包地址', action_copy: '复制', copied: '已复制',
+      label_display_name: '显示名称',
+      hint_display_name: '3–20 个字符 · 仅限字母、数字和下划线',
+      action_save: '保存', saving: '保存中…', saved: '显示名称已更新',
+      save_failed: '无法保存显示名称', invalid_name: '请使用 3–20 个字母、数字或下划线。',
+      label_joined: '加入时间', joined_unknown: '未知',
+      label_language: '语言',
+      desc_language: '选择您的资料和设置所用的语言。您的选择会保存在本设备并同步到您的资料。',
+      readonly_note: '您的用户名和钱包由 Usernode 管理，此处仅供查看。只有显示名称可以修改。',
+      no_wallet_note: '关联 Usernode 钱包以设置显示名称。您的语言选择仍会保存在本设备。',
+      not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
+    },
+    es: {
+      menu_profile: 'Mi perfil', menu_settings: 'Configuración', menu_connected: 'Sesión de',
+      title_profile: 'Mi perfil', title_settings: 'Configuración',
+      label_username: 'Nombre de usuario', hint_username: 'Gestionado por Usernode',
+      label_wallet: 'Dirección de la billetera', action_copy: 'Copiar', copied: 'Copiado',
+      label_display_name: 'Nombre visible',
+      hint_display_name: '3–20 caracteres · letras, números y guiones bajos',
+      action_save: 'Guardar', saving: 'Guardando…', saved: 'Nombre visible actualizado',
+      save_failed: 'No se pudo guardar el nombre visible', invalid_name: 'Usa 3–20 letras, números o guiones bajos.',
+      label_joined: 'Te uniste', joined_unknown: 'Desconocido',
+      label_language: 'Idioma',
+      desc_language: 'Elige el idioma de tu perfil y tu configuración. Tu elección se guarda en este dispositivo y en tu perfil.',
+      readonly_note: 'Tu nombre de usuario y tu billetera los gestiona Usernode y aquí son de solo lectura. Solo puedes cambiar tu nombre visible.',
+      no_wallet_note: 'Vincula una billetera de Usernode para definir un nombre visible. Tu idioma se guarda igualmente en este dispositivo.',
+      not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
+    },
+    hi: {
+      menu_profile: 'मेरी प्रोफ़ाइल', menu_settings: 'सेटिंग्स', menu_connected: 'साइन इन',
+      title_profile: 'मेरी प्रोफ़ाइल', title_settings: 'सेटिंग्स',
+      label_username: 'उपयोगकर्ता नाम', hint_username: 'Usernode द्वारा प्रबंधित',
+      label_wallet: 'वॉलेट पता', action_copy: 'कॉपी करें', copied: 'कॉपी हो गया',
+      label_display_name: 'प्रदर्शित नाम',
+      hint_display_name: '3–20 अक्षर · केवल अक्षर, अंक और अंडरस्कोर',
+      action_save: 'सहेजें', saving: 'सहेजा जा रहा है…', saved: 'प्रदर्शित नाम अपडेट हुआ',
+      save_failed: 'प्रदर्शित नाम सहेजा नहीं जा सका', invalid_name: '3–20 अक्षर, अंक या अंडरस्कोर का उपयोग करें।',
+      label_joined: 'शामिल हुए', joined_unknown: 'अज्ञात',
+      label_language: 'भाषा',
+      desc_language: 'अपनी प्रोफ़ाइल और सेटिंग्स के लिए भाषा चुनें। आपका चयन इस डिवाइस और आपकी प्रोफ़ाइल में सहेजा जाता है।',
+      readonly_note: 'आपका उपयोगकर्ता नाम और वॉलेट Usernode द्वारा प्रबंधित हैं और यहाँ केवल पढ़े जा सकते हैं। केवल प्रदर्शित नाम बदला जा सकता है।',
+      no_wallet_note: 'प्रदर्शित नाम सेट करने के लिए Usernode वॉलेट लिंक करें। आपकी भाषा का चयन फिर भी इस डिवाइस पर सहेजा जाता है।',
+      not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
+    },
+    ar: {
+      menu_profile: 'ملفي الشخصي', menu_settings: 'الإعدادات', menu_connected: 'تسجيل الدخول باسم',
+      title_profile: 'ملفي الشخصي', title_settings: 'الإعدادات',
+      label_username: 'اسم المستخدم', hint_username: 'تُدار بواسطة Usernode',
+      label_wallet: 'عنوان المحفظة', action_copy: 'نسخ', copied: 'تم النسخ',
+      label_display_name: 'الاسم المعروض',
+      hint_display_name: '٣–٢٠ حرفًا · أحرف وأرقام وشرطة سفلية فقط',
+      action_save: 'حفظ', saving: 'جارٍ الحفظ…', saved: 'تم تحديث الاسم المعروض',
+      save_failed: 'تعذّر حفظ الاسم المعروض', invalid_name: 'استخدم 3–20 حرفًا أو رقمًا أو شرطة سفلية.',
+      label_joined: 'انضم في', joined_unknown: 'غير معروف',
+      label_language: 'اللغة',
+      desc_language: 'اختر لغة ملفك الشخصي وإعداداتك. يُحفظ اختيارك على هذا الجهاز وفي ملفك الشخصي.',
+      readonly_note: 'اسم المستخدم والمحفظة يُداران بواسطة Usernode ويظهران للقراءة فقط. يمكنك تغيير الاسم المعروض فقط.',
+      no_wallet_note: 'اربط محفظة Usernode لتعيين اسم معروض. سيظل اختيار اللغة محفوظًا على هذا الجهاز.',
+      not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
+    },
+    fr: {
+      menu_profile: 'Mon profil', menu_settings: 'Paramètres', menu_connected: 'Connecté en tant que',
+      title_profile: 'Mon profil', title_settings: 'Paramètres',
+      label_username: "Nom d'utilisateur", hint_username: 'Géré par Usernode',
+      label_wallet: 'Adresse du portefeuille', action_copy: 'Copier', copied: 'Copié',
+      label_display_name: "Nom d'affichage",
+      hint_display_name: '3–20 caractères · lettres, chiffres et traits de soulignement',
+      action_save: 'Enregistrer', saving: 'Enregistrement…', saved: "Nom d'affichage mis à jour",
+      save_failed: "Impossible d'enregistrer le nom d'affichage", invalid_name: '3 à 20 lettres, chiffres ou traits de soulignement.',
+      label_joined: 'Inscrit le', joined_unknown: 'Inconnu',
+      label_language: 'Langue',
+      desc_language: 'Choisissez la langue de votre profil et de vos paramètres. Votre choix est enregistré sur cet appareil et dans votre profil.',
+      readonly_note: "Votre nom d'utilisateur et votre portefeuille sont gérés par Usernode et affichés en lecture seule. Seul votre nom d'affichage est modifiable.",
+      no_wallet_note: "Liez un portefeuille Usernode pour définir un nom d'affichage. Votre choix de langue reste enregistré sur cet appareil.",
+      not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
+    },
+  };
+
+  function t(key) {
+    const table = I18N[App.lang] || I18N.en;
+    return (table && table[key] != null) ? table[key] : (I18N.en[key] != null ? I18N.en[key] : key);
+  }
+  function isRTL(lang) { return RTL_LANGS.indexOf(lang || App.lang) !== -1; }
+
+  // Resolve a browser tag (e.g. "zh-CN") to a supported code, or null.
+  function matchBrowserLang(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    const low = raw.toLowerCase();
+    const base = low.split('-')[0];
+    for (const l of LANGS) {
+      const ll = l.toLowerCase();
+      if (ll === low || ll.split('-')[0] === base) return l;
+    }
+    return null;
+  }
+  // Priority: saved profile pref > device-local pref > browser languages > English.
+  function resolveLang(profilePref, localPref) {
+    if (LANGS.indexOf(profilePref) !== -1) return profilePref;
+    if (LANGS.indexOf(localPref) !== -1) return localPref;
+    const browser = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language];
+    for (const raw of browser) { const m = matchBrowserLang(raw); if (m) return m; }
+    return 'en';
+  }
+  function applyDir() {
+    const el = document.documentElement;
+    el.setAttribute('lang', App.lang);
+    el.setAttribute('dir', isRTL(App.lang) ? 'rtl' : 'ltr');
+  }
+  // Change language: persist locally + (when linked) to the profile, flip
+  // direction, and re-render instantly with no page reload.
+  async function setLang(code, opts) {
+    if (LANGS.indexOf(code) === -1) code = 'en';
+    App.lang = code;
+    try { localStorage.setItem('qc_lang', code); } catch (_) {}
+    applyDir();
+    render();
+    if (!(opts && opts.skipPersist) && App.wallet.connected) {
+      try { await putProfile({ preferred_lang: code }); } catch (_) { /* local persist already done */ }
+    }
+  }
+  function fmtJoined(iso) {
+    if (!iso) return t('joined_unknown');
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return t('joined_unknown');
+    try { return new Intl.DateTimeFormat(App.lang, { year: 'numeric', month: 'long', day: 'numeric' }).format(d); }
+    catch (_) { return d.toISOString().slice(0, 10); }
+  }
+
+  // ───────────────────────── Profile API (token-forwarded) ─────────────────────────
+  // The platform shell injects ?token=… on the iframe load; forward it as
+  // x-usernode-token (same pattern as dashboard.html).
+  const AUTH_TOKEN = (function () { try { return new URLSearchParams(location.search).get('token') || ''; } catch (_) { return ''; } })();
+  // Optional ?viewer= override (local-dev / staging only on the server) so a
+  // wallet-less reviewer can open the seeded demo profile via a deep link.
+  const URL_VIEWER = (function () { try { return new URLSearchParams(location.search).get('viewer') || ''; } catch (_) { return ''; } })();
+  function authHeaders(extra) {
+    const h = Object.assign({}, extra || {});
+    if (AUTH_TOKEN) h['x-usernode-token'] = AUTH_TOKEN;
+    return h;
+  }
+  function viewerAddr() { return App.wallet.address || URL_VIEWER || ''; }
+  function viewerQS() {
+    // In local-dev / staging there's no JWT; pass the connected address (or a
+    // ?viewer= deep-link override) so the server can resolve the profile.
+    // Harmless (ignored) in production, where the server uses req.user only.
+    const a = viewerAddr();
+    return a ? ('?viewer=' + encodeURIComponent(a)) : '';
+  }
+  async function loadMe() {
+    try {
+      const r = await fetch('/api/me' + viewerQS(), { headers: authHeaders() });
+      if (!r.ok) return null;
+      App.me = await r.json();
+      return App.me;
+    } catch (_) { return null; }
+  }
+  async function putProfile(patch) {
+    const body = Object.assign({}, patch);
+    if (!AUTH_TOKEN && viewerAddr()) body.viewer = viewerAddr();
+    const r = await fetch('/api/me/profile', {
+      method: 'PUT',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    if (App.me && j.profile) App.me.profile = j.profile;
+    return j;
+  }
+  // Label for the wallet button: app-local display name if set, else the
+  // platform username / short address resolved by QCNames.
+  function walletLabel() {
+    const p = App.me && App.me.profile;
+    if (p && p.display_name) return p.display_name;
+    if (App.me && App.me.username) return App.me.username;
+    return nm(App.wallet.address);
+  }
 
   // ───────────────────────── Memo builders (mirror lib/memo.js) ─────────────────────────
   const APP = 'quickcount', V = 1;
@@ -201,6 +431,10 @@
       App.wallet.address = addr;
       App.wallet.connected = true;
     }
+    await loadMe();
+    // A saved profile language preference wins over the device default.
+    const pref = App.me && App.me.profile && App.me.profile.preferred_lang;
+    if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
     await refresh();
     renderChrome();
   }
@@ -241,8 +475,24 @@
         <span class="text-base leading-none">${t.icon}</span>${t.label}</a>`).join('');
 
     const wb = document.getElementById('wallet-btn');
-    if (App.wallet.connected) { wb.textContent = nm(App.wallet.address); wb.title = App.wallet.address; }
-    else { wb.textContent = 'Connect wallet'; wb.title = ''; }
+    const menu = document.getElementById('wallet-menu');
+    if (App.wallet.connected) {
+      wb.textContent = walletLabel();
+      wb.title = App.wallet.address;
+      menu.innerHTML =
+        `<div class="px-3 py-2 border-b border-zinc-800">
+           <div class="text-[0.65rem] uppercase tracking-wide text-zinc-500">${esc(t('menu_connected'))}</div>
+           <div class="font-mono text-xs text-zinc-300 truncate" title="${esc(App.wallet.address)}">${esc(shortAddr(App.wallet.address))}</div>
+         </div>
+         <a href="#/profile" class="wallet-menu-item block px-3 py-2 hover:bg-zinc-800">${esc(t('menu_profile'))}</a>
+         <a href="#/settings" class="wallet-menu-item block px-3 py-2 hover:bg-zinc-800">${esc(t('menu_settings'))}</a>`;
+      menu.classList.toggle('hidden', !App.menuOpen);
+    } else {
+      wb.textContent = t('connect_wallet');
+      wb.title = '';
+      menu.classList.add('hidden');
+      App.menuOpen = false;
+    }
 
     const ps = document.getElementById('persona-select');
     if (App.cfg && App.cfg.localDev && App.cfg.personas) {
@@ -256,6 +506,7 @@
 
   // ───────────────────────── Render dispatch ─────────────────────────
   function render() {
+    App.menuOpen = false; // navigation closes the wallet dropdown
     renderChrome();
     const route = currentRoute();
     const v = document.getElementById('view');
@@ -267,6 +518,8 @@
       case 'evidence': return renderEvidence(v);
       case 'disputes': return renderDisputes(v);
       case 'admin': return renderAdmin(v);
+      case 'profile': return renderProfile(v);
+      case 'settings': return renderSettings(v);
       default: return renderDashboard(v);
     }
   }
@@ -759,6 +1012,141 @@
     });
   }
 
+  // ───────────────────────── Profile & Settings ─────────────────────────
+  function langSelect(id) {
+    const opts = LANGS.map((l) => `<option value="${l}" ${l === App.lang ? 'selected' : ''}>${esc(LANG_NAMES[l])}</option>`).join('');
+    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm">${opts}</select>`;
+  }
+  function wireLangSelect(id) {
+    const el = document.getElementById(id);
+    if (el) el.onchange = () => setLang(el.value);
+  }
+  function identicon(seed) {
+    const s = String(seed || '?');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const hue = h % 360;
+    const initials = (function () {
+      const str = s.replace(/^ut1/, '');
+      return (str[0] || '?').toUpperCase() + (str[1] || '').toUpperCase();
+    })();
+    return `<div class="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-inner"
+      style="background:linear-gradient(135deg,hsl(${hue},65%,45%),hsl(${(hue + 40) % 360},65%,35%))">${esc(initials)}</div>`;
+  }
+
+  function renderProfile(v) {
+    const me = App.me || {};
+    const prof = me.profile || {};
+    const addr = me.usernode_pubkey || App.wallet.address || '';
+    const linked = !!addr;
+    const username = me.username || null;
+    const currentName = prof.display_name || username || (addr ? shortAddr(addr) : '');
+    const seed = username || addr || 'guest';
+
+    v.innerHTML = `
+      <div class="max-w-xl">
+        <h2 class="text-xl font-bold mb-1">${esc(t('title_profile'))}</h2>
+        <p class="text-xs text-zinc-500 mb-5">${esc(t('readonly_note'))}</p>
+
+        <div class="flex items-center gap-4 mb-6">
+          ${identicon(seed)}
+          <div class="min-w-0">
+            <div class="text-lg font-semibold truncate">${esc(prof.display_name || username || (addr ? shortAddr(addr) : t('not_linked')))}</div>
+            <div class="text-xs text-zinc-500">${esc(t('label_joined'))}: ${esc(fmtJoined(prof.created_at))}</div>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_username'))} <span class="text-zinc-600">· ${esc(t('hint_username'))}</span></label>
+            <div class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm ${username ? '' : 'text-zinc-500'}">${esc(username || t('not_linked'))}</div>
+          </div>
+
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_wallet'))}</label>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono break-all ${addr ? '' : 'text-zinc-500'}">${esc(addr || t('not_linked'))}</div>
+              ${addr ? `<button id="copy-addr" class="text-xs px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 whitespace-nowrap">${esc(t('action_copy'))}</button>` : ''}
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_display_name'))}</label>
+            ${linked ? `
+            <div class="flex items-center gap-2">
+              <input id="dn-input" maxlength="20" value="${esc(currentName)}" class="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm" />
+              <button id="dn-save" class="text-sm px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed">${esc(t('action_save'))}</button>
+            </div>
+            <p id="dn-err" class="hidden mt-1 text-xs text-rose-400"></p>
+            <p class="mt-1 text-xs text-zinc-500">${esc(t('hint_display_name'))}</p>
+            ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
+          </div>
+
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_language'))}</label>
+            ${langSelect('profile-lang')}
+          </div>
+        </div>
+      </div>`;
+
+    wireLangSelect('profile-lang');
+
+    const copyBtn = document.getElementById('copy-addr');
+    if (copyBtn) copyBtn.onclick = async () => {
+      try { await navigator.clipboard.writeText(addr); toast(t('copied')); }
+      catch (_) { toast(addr, 'warn'); }
+    };
+
+    if (linked) {
+      const input = document.getElementById('dn-input');
+      const save = document.getElementById('dn-save');
+      const err = document.getElementById('dn-err');
+      const validate = () => {
+        const val = input.value.trim();
+        const ok = NAME_RE.test(val);
+        if (val && !ok) { err.textContent = t('invalid_name'); err.classList.remove('hidden'); }
+        else { err.classList.add('hidden'); }
+        save.disabled = !ok;
+        return ok;
+      };
+      input.oninput = validate;
+      validate();
+      save.onclick = async () => {
+        const val = input.value.trim();
+        if (!NAME_RE.test(val)) { validate(); return; }
+        save.disabled = true;
+        const prev = save.textContent;
+        save.textContent = t('saving');
+        try {
+          await putProfile({ display_name: val });
+          toast(t('saved'));
+          renderChrome(); // refresh the wallet button label
+          save.textContent = prev;
+          validate();
+        } catch (e) {
+          save.textContent = prev;
+          save.disabled = false;
+          err.textContent = e.message || t('save_failed');
+          err.classList.remove('hidden');
+          toast(t('save_failed'), 'error');
+        }
+      };
+    }
+  }
+
+  function renderSettings(v) {
+    v.innerHTML = `
+      <div class="max-w-xl">
+        <h2 class="text-xl font-bold mb-5">${esc(t('title_settings'))}</h2>
+        <div class="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+          <label class="block text-sm font-medium mb-1">${esc(t('label_language'))}</label>
+          <p class="text-xs text-zinc-500 mb-3">${esc(t('desc_language'))}</p>
+          ${langSelect('settings-lang')}
+        </div>
+      </div>`;
+    wireLangSelect('settings-lang');
+  }
+
   // ───────────────────────── Boot ─────────────────────────
   function refreshSoon() { setTimeout(() => refresh(), App.cfg.localDev ? 400 : 2500); }
   function startAutoRefresh() {
@@ -785,10 +1173,44 @@
       App.wallet.address = window.QCMock.address(); App.wallet.connected = true;
     } else {
       // Try a silent wallet connect inside the platform.
-      bridgeReady().then(async (ok) => { if (ok) { try { const a = await window.getNodeAddress(); if (a) { App.wallet.address = a; App.wallet.connected = true; renderChrome(); refresh(); } } catch (_) {} } });
+      bridgeReady().then(async (ok) => {
+        if (!ok) return;
+        try {
+          const a = await window.getNodeAddress();
+          if (!a) return;
+          App.wallet.address = a; App.wallet.connected = true;
+          await loadMe();
+          const pref = App.me && App.me.profile && App.me.profile.preferred_lang;
+          if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
+          renderChrome(); refresh();
+        } catch (_) {}
+      });
     }
-    document.getElementById('wallet-btn').onclick = () => connectWallet();
+    // Wallet button: when connected it toggles the Profile/Settings menu;
+    // when not, it connects.
+    document.getElementById('wallet-btn').onclick = (e) => {
+      e.stopPropagation();
+      if (App.wallet.connected) { App.menuOpen = !App.menuOpen; renderChrome(); }
+      else connectWallet();
+    };
+    // Close the dropdown on any outside click.
+    document.addEventListener('click', (e) => {
+      if (App.menuOpen && !document.getElementById('wallet-wrap').contains(e.target)) {
+        App.menuOpen = false; renderChrome();
+      }
+    });
     window.addEventListener('hashchange', render);
+
+    // Resolve language: saved profile pref > device-local > browser > English.
+    let localPref = null;
+    try { localPref = localStorage.getItem('qc_lang'); } catch (_) {}
+    await loadMe();
+    const profilePref = App.me && App.me.profile && App.me.profile.preferred_lang;
+    App.lang = resolveLang(profilePref, localPref);
+    applyDir();
+    // Persist an auto-detected choice locally so it's stable next visit.
+    try { if (!localPref) localStorage.setItem('qc_lang', App.lang); } catch (_) {}
+
     await refresh();
     startAutoRefresh();
   }
