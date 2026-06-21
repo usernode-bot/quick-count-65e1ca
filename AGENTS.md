@@ -28,7 +28,10 @@ is no server-side login.
   never vendor the real bridge). `public/usernode-bridge.js` is a **local-dev
   mock only**, active when the server reports `localDev`.
 - All `/__quickcount/*` read endpoints are public by design (read-only,
-  chain-sourced). `/__mock/*` exists only in `--local-dev`.
+  chain-sourced). `/__mock/*` exists only in `--local-dev`. The hosted bridge
+  probes `GET /__mock/enabled` to decide whether to enter mock mode — it must
+  return 200 in local-dev (it does, mounted in the `LOCAL_DEV` block) or the
+  bridge fails transactions with "Mock API not enabled".
 - Demo data is seeded when `USERNODE_ENV=staging` **or** `--local-dev` so every
   screen renders; the seed is idempotent, obviously fake ("Staging demo —"),
   and a strict no-op in production.

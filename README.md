@@ -29,6 +29,10 @@ Local-dev (offline, mock ledger, demo data, persona switcher):
     npm install
     npm run dev          # http://localhost:3000  (--local-dev)
 
+In `--local-dev` the server serves `GET /__mock/enabled` (200) — the endpoint
+the hosted wallet bridge probes to enter mock mode. Without it the bridge fails
+every transaction with "Mock API not enabled".
+
 Or with Docker:
 
     docker compose -f docker-compose.dev.yml up --build   # offline, mock ledger
