@@ -101,6 +101,26 @@
       "expectText": "Language"
     },
     {
+      "name": "Bridge classifier asset serves",
+      "path": "/usernode-bridge-classify.js",
+      "expectText": "classifyBridgeError"
+    },
+    {
+      "name": "Bridge resilience asset serves",
+      "path": "/usernode-resilience.js",
+      "expectText": "QCBridge"
+    },
+    {
+      "name": "Main app boots cleanly with bridge fault injection",
+      "path": "/?bridgefault=timeout#/elections",
+      "expectText": "Elections"
+    },
+    {
+      "name": "Public dashboard boots cleanly with bridge fault injection",
+      "path": "/dashboard.html?eid=demo-election&bridgefault=timeout",
+      "expectText": "Quick Count"
+    },
+    {
       "name": "Public profile API returns profile data",
       "path": "/api/public/profiles/ut1stagingdemo00000000000000000000000000",
       "expectText": "Staging_demo_user"
