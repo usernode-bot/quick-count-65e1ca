@@ -58,6 +58,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
   <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
+  <!-- App-side bridge resilience (shared with the main app). Loads after the
+       hosted bridge tag above. -->
+  <script src="/usernode-bridge-classify.js"></script>
+  <script src="/usernode-resilience.js"></script>
 </head>
 <body class="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 min-h-screen">
   <div class="max-w-3xl mx-auto p-4 sm:p-6">
@@ -113,29 +117,9 @@
       return p + ' test token' + (p === 1 ? '' : 's');
     }
 
-    // ── Bridge helpers (mirror index.html) ───────────────────────────
-    function bridgeReady() {
-      return new Promise((resolve) => {
-        let tries = 0;
-        (function poll() {
-          if (typeof window.sendTransaction === 'function' && typeof window.getNodeAddress === 'function') return resolve(true);
-          if (tries++ > 100) return resolve(false);
-          setTimeout(poll, 100);
-        })();
-      });
-    }
-    function extractTxId(res) {
-      if (!res) return null;
-      const cands = [];
-      const probe = (o) => {
-        if (!o || typeof o !== 'object') return;
-        for (const k of ['txId', 'tx_id', 'id', 'txid', 'hash', 'tx_hash', 'txHash']) {
-          if (typeof o[k] === 'string' && o[k].trim()) cands.push(o[k].trim());
-        }
-      };
-      probe(res); probe(res.matchedTx); probe(res.tx); probe(res.transaction);
-      return cands[0] || null;
-    }
+    // ── Bridge helpers — now delegated to the shared resilience layer
+    // (window.QCBridge, see public/usernode-resilience.js). The duplicated
+    // bridgeReady()/extractTxId() that lived here were removed in favour of it.
 
     // ── Chart rendering ──────────────────────────────────────────────
     function pieGradient(entries) {
@@ -269,13 +253,12 @@
           // Staging has no live chain — the server records a demo unlock.
           setStatus('Unlocking (staging demo)…');
         } else {
-          const ready = await bridgeReady();
-          if (!ready) { setStatus('Wallet bridge unavailable — open inside Usernode.'); return; }
-          const addr = await window.getNodeAddress();
+          const addr = await window.QCBridge.getAddress();
           if (!addr) throw new Error('No wallet address');
           setStatus('Awaiting wallet approval…');
-          const res = await window.sendTransaction(cfg.unlock.recipient, cfg.unlock.price, UNLOCK_MEMO);
-          txId = extractTxId(res);
+          // Unlock payment is NOT idempotent — never auto-resend an ambiguous
+          // relay timeout; surface it so the viewer can retry deliberately.
+          txId = await window.QCBridge.send(cfg.unlock.recipient, cfg.unlock.price, UNLOCK_MEMO);
           if (!txId) throw new Error('Could not read the payment transaction id');
           setStatus('Confirming payment…');
         }
@@ -290,7 +273,11 @@
         unlocking = false;
         await render();
       } catch (e) {
-        setStatus('Failed: ' + (e.message || e));
+        // Recoverable failures (bridge slow / relay timeout) → friendly,
+        // retry-by-clicking-again message; terminal ones show the raw reason.
+        const kind = (window.QCBridgeClassify && (e && e.qcKind ? e.qcKind : window.QCBridgeClassify.classifyBridgeError(e))) || 'unknown';
+        if (kind === 'terminal') setStatus('Failed: ' + (e.message || e));
+        else setStatus("Couldn't reach the wallet service — tap Unlock to try again.");
       } finally {
         unlocking = false;
         if (btn) btn.disabled = false;
@@ -357,6 +344,12 @@
     async function loadConfig() {
       try { cfg = await (await fetch('/api/public/config')).json(); } catch (_) {}
       if (cfg && cfg.staging) document.getElementById('staging-badge').classList.remove('hidden');
+      // Fault-injection hook — staging ONLY (no-op in production) — so reviewers
+      // can exercise the unlock resilience path (?bridgefault=timeout|notready|reject).
+      if (cfg && cfg.staging && window.QCBridge) {
+        const fault = new URLSearchParams(location.search).get('bridgefault');
+        if (fault) window.QCBridge.setFault(fault);
+      }
     }
 
     // ── Theme toggle ─────────────────────────────────────────────────

@@ -64,6 +64,10 @@
   <script src="/usernode-loading.js"></script>
   <script src="/usernode-usernames.js"></script>
   <script src="/usernode-bridge.js"></script>
+  <!-- App-side bridge resilience: classifier (pure) then retry/notice layer.
+       Must load AFTER the hosted bridge tag above. -->
+  <script src="/usernode-bridge-classify.js"></script>
+  <script src="/usernode-resilience.js"></script>
   <style>
     .tab-on { background:#7c3aed; color:#fff; }
     .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
@@ -154,6 +158,7 @@
       disputes_heading: 'Disputes', disputes_no_disputes: 'No disputes filed for this election.', disputes_file: 'File a dispute', disputes_resolve: 'Resolve disputes', disputes_uphold: 'Uphold', disputes_reject: 'Reject',
       admin_heading: 'Platform admin', admin_waive_fee: 'Waive fee',
       toast_election_published: 'Election published ✓', toast_submit_result: 'Result submitted ✓', toast_station_added: 'Station added ✓', toast_observer_authorized: 'Observer authorized ✓', toast_dispute_filed: 'Dispute filed ✓', toast_dispute_upheld: 'Dispute upheld ✓', toast_dispute_rejected: 'Dispute rejected ✓', toast_org_registered: 'Organization registered ✓', toast_fee_paid: 'Fee paid ✓', toast_fee_waived: 'Fee waived ✓', toast_failed: 'Failed:', toast_wallet_unavailable: 'Wallet bridge unavailable — open inside Usernode.', toast_no_wallet: 'No wallet address linked.', toast_add_candidate: 'Add a name and at least one candidate.', toast_nothing_to_import: 'Nothing to import', toast_enter_reason: 'Enter a reason', toast_enter_org_name: 'Enter an organization name', toast_enter_station_name: 'Enter a station name', toast_enter_observer_addr: 'Enter an observer address',
+      notice_wallet_unreachable: "Couldn't reach the wallet service. Your entries were kept.", notice_action_failed: "That didn't go through. Your entries were kept.", notice_connecting: 'Connecting to your wallet…', action_try_again: 'Try again', partial_candidates: 'Election published; {done} of {total} candidates added.', partial_stations: '{done} of {total} stations imported.', partial_generic: '{done} of {total} steps completed.',
       loading_submitting: 'Submitting result…', loading_adding_station: 'Adding station…', loading_authorizing: 'Authorizing observer…', loading_filing: 'Filing dispute…', loading_resolving: 'Resolving…', loading_registering: 'Registering & paying fee…', loading_paying: 'Paying fee…', loading_waiving: 'Waiving fee…', loading_importing: 'Importing station',
       loading_creating_election: 'Creating election…', loading_adding_candidate: 'Adding candidate {i}/{n}…', loading_importing_station: 'Importing station {i}/{n}…',
       timeago_s: '{n}s ago', timeago_m: '{n}m ago', timeago_h: '{n}h ago', timeago_d: '{n}d ago',
@@ -597,31 +602,79 @@
   }
 
   // ───────────────────────── Wallet ─────────────────────────
-  function bridgeReady() {
-    return new Promise((resolve) => {
-      let n = 0;
-      (function poll() {
-        if (typeof window.sendTransaction === 'function' && typeof window.getNodeAddress === 'function') return resolve(true);
-        if (n++ > 60) return resolve(false);
-        setTimeout(poll, 100);
-      })();
+  // Readiness, tx-id extraction and classified retry all live in the shared
+  // resilience layer (window.QCBridge, public/usernode-resilience.js).
+  //
+  // Centralised failure handler. Terminal failures (user rejected, bad input)
+  // surface as a plain error toast — repeating won't help. Everything else is
+  // recoverable: clear the overlay, keep the user's typed input, and offer a
+  // non-blocking Try-again that re-invokes the SAME closure (so nothing has to
+  // be re-entered). `partial` is an already-formatted "got this far" prefix.
+  function handleTxFailure(err, o) {
+    o = o || {};
+    QCLoading.hide();
+    const kind = (window.QCBridgeClassify && window.QCBridgeClassify.classifyBridgeError)
+      ? (err && err.qcKind ? err.qcKind : window.QCBridgeClassify.classifyBridgeError(err)) : 'unknown';
+    if (kind === 'terminal') {
+      toast((o.partial ? o.partial + ' ' : '') + t('toast_failed') + ' ' + (err && err.message || ''), 'error');
+      return;
+    }
+    const base = (kind === 'transient') ? t('notice_wallet_unreachable') : t('notice_action_failed');
+    window.QCNotice.show({
+      message: (o.partial ? o.partial + ' ' : '') + base,
+      actionLabel: typeof o.onRetry === 'function' ? t('action_try_again') : null,
+      onAction: o.onRetry,
     });
   }
-  function extractTxId(res) {
-    if (!res) return null;
-    if (typeof res === 'string') return res;
-    for (const k of ['txId', 'tx_id', 'id', 'txid', 'hash', 'tx_hash', 'txHash']) if (typeof res[k] === 'string') return res[k];
-    for (const sub of [res.matchedTx, res.tx, res.transaction]) if (sub) { const v = extractTxId(sub); if (v) return v; }
-    return null;
+
+  // Run a sequence of transactions, stopping at the first failure and reporting
+  // partial progress. On Try-again it RESUMES from the failed step (carrying the
+  // results of completed steps) rather than restarting — so we never re-submit a
+  // step that already landed on-chain. Each step: { loading(i,n)|string,
+  // build(results) -> { to, amount, memo, idempotent, require } }.
+  async function runTxSteps(steps, opts) {
+    opts = opts || {};
+    const results = opts._results || [];
+    const start = opts._from || 0;
+    for (let i = start; i < steps.length; i++) {
+      const spec = steps[i].build(results);
+      const lbl = typeof steps[i].loading === 'function' ? steps[i].loading(i, steps.length) : steps[i].loading;
+      QCLoading.show(lbl);
+      try {
+        const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+        if (spec.require && !r) throw new Error(spec.require);
+        results[i] = r;
+      } catch (e) {
+        const done = i; // count of steps that completed before this one
+        handleTxFailure(e, {
+          partial: (done > 0 && opts.partial) ? opts.partial(done, steps.length) : null,
+          onRetry: () => runTxSteps(steps, { _from: i, _results: results, partial: opts.partial, success: opts.success }),
+        });
+        return;
+      }
+    }
+    QCLoading.hide();
+    if (opts.success) opts.success(results);
   }
+
+  // Single-transaction convenience wrapper over runTxSteps.
+  function runTx(spec, opts) {
+    opts = opts || {};
+    return runTxSteps([{ loading: opts.loading, build: () => spec }], { success: opts.success });
+  }
+
   async function connectWallet() {
     if (App.cfg.localDev) {
       App.wallet.address = window.QCMock.address();
       App.wallet.connected = true;
     } else {
-      const ok = await bridgeReady();
-      if (!ok) { toast(t('toast_wallet_unavailable'), 'error'); return; }
-      const addr = await window.getNodeAddress();
+      let addr;
+      try {
+        addr = await window.QCBridge.getAddress();
+      } catch (e) {
+        handleTxFailure(e, { onRetry: connectWallet });
+        return;
+      }
       if (!addr) { toast(t('toast_no_wallet'), 'error'); return; }
       App.wallet.address = addr;
       App.wallet.connected = true;
@@ -633,13 +686,19 @@
     await refresh();
     renderChrome();
   }
-  async function sendTx(to, amount, memoObj) {
+  // Low-level send. local-dev routes through the mock via an injected sender so
+  // the resilience layer (retry + fault injection) still applies without ever
+  // touching the real bridge. opts.idempotent is OFF unless the caller opts in.
+  function sendTx(to, amount, memoObj, opts) {
+    opts = opts || {};
     const memoStr = JSON.stringify(memoObj);
-    if (App.cfg.localDev) return window.QCMock.send(to, amount, memoStr);
-    const ok = await bridgeReady();
-    if (!ok) throw new Error('Wallet bridge unavailable');
-    const res = await window.sendTransaction(to, amount || 0, memoStr);
-    return extractTxId(res);
+    if (App.cfg.localDev) {
+      return window.QCBridge.send(to, amount, memoStr, {
+        idempotent: opts.idempotent,
+        sender: (a, b, c) => window.QCMock.send(a, b, c),
+      });
+    }
+    return window.QCBridge.send(to, amount || 0, memoStr, { idempotent: opts.idempotent });
   }
 
   // ───────────────────────── Data ─────────────────────────
@@ -868,19 +927,23 @@
     document.getElementById('nel-create').onclick = createElection;
   }
   async function createElection() {
+    // Capture the typed values up front so Try-again can resume without
+    // re-reading inputs (which may have been cleared by a re-render).
     const name = document.getElementById('nel-name').value.trim();
     const cands = Array.from(document.querySelectorAll('.nel-c')).map((i) => i.value.trim()).filter(Boolean);
     if (!name || !cands.length) return toast(t('toast_add_candidate'), 'warn');
     const me = App.wallet.address;
-    try {
-      QCLoading.show(t('loading_creating_election'));
-      const eid = await sendTx(me, 0, QC.el(name));
-      if (!eid) throw new Error('No election tx id');
-      for (let i = 0; i < cands.length; i++) { QCLoading.show(t('loading_adding_candidate').replace('{i}', i + 1).replace('{n}', cands.length)); await sendTx(me, 0, QC.cand(eid, i + 1, cands[i])); }
-      QCLoading.hide();
-      toast(t('toast_election_published'));
-      App.eid = eid; location.hash = '#/election/' + eid; await refresh();
-    } catch (e) { QCLoading.hide(); toast('Failed: ' + e.message, 'error'); }
+    // Step 0 publishes the election (NOT idempotent — never auto-resend); each
+    // later step adds one candidate, keyed off the election id from step 0.
+    const steps = [{ loading: t('loading_creating_election'), build: () => ({ to: me, amount: 0, memo: QC.el(name), require: 'No election tx id' }) }];
+    cands.forEach((c, idx) => steps.push({
+      loading: () => t('loading_adding_candidate').replace('{i}', idx + 1).replace('{n}', cands.length),
+      build: (results) => ({ to: me, amount: 0, memo: QC.cand(results[0], idx + 1, c) }),
+    }));
+    await runTxSteps(steps, {
+      partial: (done) => done >= 1 ? t('partial_candidates').replace('{done}', done - 1).replace('{total}', cands.length) : null,
+      success: (results) => { toast(t('toast_election_published')); App.eid = results[0]; location.hash = '#/election/' + results[0]; refresh(); },
+    });
   }
 
   // ───────────────────────── Election detail / workspace ─────────────────────────
@@ -948,15 +1011,15 @@
         const f = e.target.files[0]; if (!f) { evHash = ''; p.querySelector('#ob-hash').textContent = ''; return; }
         evHash = await sha256File(f); p.querySelector('#ob-hash').textContent = 'sha256: ' + evHash;
       };
-      p.querySelector('#ob-submit').onclick = async () => {
+      p.querySelector('#ob-submit').onclick = () => {
+        // Capture the form values up front so Try-again resends exactly these.
         const sid = Number(p.querySelector('#ob-station').value);
         const votes = {}; p.querySelectorAll('.ob-v').forEach((i) => votes[i.dataset.cid] = Number(i.value) || 0);
         const tot = p.querySelector('#ob-tot').value, inv = p.querySelector('#ob-inv').value;
-        try {
-          QCLoading.show(t('loading_submitting'));
-          await sendTx(d.election.orgAddr, 0, QC.res(d.election.eid, sid, votes, tot, inv, evHash));
-          QCLoading.hide(); toast(t('toast_submit_result')); refreshSoon();
-        } catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+        // Result submission is latest-wins (the aggregate methods collapse
+        // repeats), so it is safe to auto-retry an ambiguous relay timeout.
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.res(d.election.eid, sid, votes, tot, inv, evHash), idempotent: true },
+          { loading: t('loading_submitting'), success: () => { toast(t('toast_submit_result')); refreshSoon(); } });
       };
     });
     return p;
@@ -981,21 +1044,28 @@
     const p = panel(t('election_stations_title'), inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
-      p.querySelector('#st-add').onclick = async () => {
+      p.querySelector('#st-add').onclick = () => {
         const name = p.querySelector('#st-name').value.trim(); if (!name) return toast(t('toast_enter_station_name'), 'warn');
         const label = p.querySelector('#st-label').value.trim();
-        try { QCLoading.show(t('loading_adding_station')); await sendTx(d.election.orgAddr, 0, QC.stn(d.election.eid, nextSid(), name, label)); QCLoading.hide(); toast(t('toast_station_added')); refreshSoon(); }
-        catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+        const sid = nextSid(); // capture so Try-again reuses the same sid
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.stn(d.election.eid, sid, name, label) },
+          { loading: t('loading_adding_station'), success: () => { toast(t('toast_station_added')); refreshSoon(); } });
       };
       const parseCsv = (text) => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => { const [name, ...rest] = l.split(','); return { name: (name || '').trim(), label: rest.join(',').trim() }; }).filter((r) => r.name);
       const preview = () => { const rows = parseCsv(p.querySelector('#st-csv').value); p.querySelector('#st-csv-preview').textContent = rows.length ? t('election_station_preview').replace('{n}', rows.length) : ''; return rows; };
       p.querySelector('#st-csv').oninput = preview;
       p.querySelector('#st-csv-file').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { p.querySelector('#st-csv').value = r.result; preview(); }; r.readAsText(f); };
-      p.querySelector('#st-csv-import').onclick = async () => {
+      p.querySelector('#st-csv-import').onclick = () => {
         const rows = preview(); if (!rows.length) return toast(t('toast_nothing_to_import'), 'warn');
-        let sid = nextSid();
-        try { for (let i = 0; i < rows.length; i++) { QCLoading.show(t('loading_importing_station').replace('{i}', i + 1).replace('{n}', rows.length)); await sendTx(d.election.orgAddr, 0, QC.stn(d.election.eid, sid++, rows[i].name, rows[i].label)); } QCLoading.hide(); toast(t('toast_stations_imported').replace('{n}', rows.length)); refreshSoon(); }
-        catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+        const baseSid = nextSid(); // capture so Try-again resumes with stable sids
+        const steps = rows.map((row, i) => ({
+          loading: () => t('loading_importing_station').replace('{i}', i + 1).replace('{n}', rows.length),
+          build: () => ({ to: d.election.orgAddr, amount: 0, memo: QC.stn(d.election.eid, baseSid + i, row.name, row.label) }),
+        }));
+        runTxSteps(steps, {
+          partial: (done, total) => t('partial_stations').replace('{done}', done).replace('{total}', total),
+          success: () => { toast(t('toast_stations_imported').replace('{n}', rows.length)); refreshSoon(); },
+        });
       };
     });
     return p;
@@ -1014,11 +1084,11 @@
       <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('election_observer_count').replace('{n}', d.observers.length)} ${d.observers.map((o) => `${esc(nm(o.addr))}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
     const p = panel(t('election_observers_title'), inner);
     setTimeout(() => {
-      p.querySelector('#ob-add').onclick = async () => {
+      p.querySelector('#ob-add').onclick = () => {
         const addr = p.querySelector('#ob-addr').value.trim(); if (!addr) return toast(t('toast_enter_observer_addr'), 'warn');
         const scope = p.querySelector('#ob-scope').value;
-        try { QCLoading.show(t('loading_authorizing')); await sendTx(d.election.orgAddr, 0, QC.obs(d.election.eid, addr, scope || null)); QCLoading.hide(); toast(t('toast_observer_authorized')); refreshSoon(); }
-        catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.obs(d.election.eid, addr, scope || null) },
+          { loading: t('loading_authorizing'), success: () => { toast(t('toast_observer_authorized')); refreshSoon(); } });
       };
     });
     return p;
@@ -1037,11 +1107,11 @@
     const p = panel(t('disputes_file'), inner);
     setTimeout(() => {
       const b = p.querySelector('#dp-file'); if (!b) return;
-      b.onclick = async () => {
+      b.onclick = () => {
         const target = p.querySelector('#dp-target').value, reason = p.querySelector('#dp-reason').value.trim();
         if (!reason) return toast(t('toast_enter_reason'), 'warn');
-        try { QCLoading.show(t('loading_filing')); await sendTx(d.election.orgAddr, 0, QC.disp(d.election.eid, target, reason)); QCLoading.hide(); toast(t('toast_dispute_filed')); refreshSoon(); }
-        catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.disp(d.election.eid, target, reason) },
+          { loading: t('loading_filing'), success: () => { toast(t('toast_dispute_filed')); refreshSoon(); } });
       };
     });
     return p;
@@ -1058,9 +1128,10 @@
       </div>`).join('') : `<p class="text-sm text-zinc-600 dark:text-zinc-500">${t('disputes_no_open')}</p>`;
     const p = panel(t('disputes_resolve'), inner);
     setTimeout(() => {
-      p.querySelectorAll('.dres-btn').forEach((b) => b.onclick = async () => {
-        try { QCLoading.show(t('loading_resolving')); await sendTx(d.election.orgAddr, 0, QC.dres(d.election.eid, b.dataset.disp, b.dataset.v)); QCLoading.hide(); toast(b.dataset.v === 'uphold' ? t('toast_dispute_upheld') : t('toast_dispute_rejected')); refreshSoon(); }
-        catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+      p.querySelectorAll('.dres-btn').forEach((b) => b.onclick = () => {
+        const disp = b.dataset.disp, verdict = b.dataset.v;
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.dres(d.election.eid, disp, verdict) },
+          { loading: t('loading_resolving'), success: () => { toast(verdict === 'uphold' ? t('toast_dispute_upheld') : t('toast_dispute_rejected')); refreshSoon(); } });
       });
     });
     return p;
@@ -1107,12 +1178,14 @@
     const name = document.getElementById('org-name').value.trim();
     const jur = document.getElementById('org-jur').value.trim();
     if (!name) return toast(t('toast_enter_org_name'), 'warn');
-    try { QCLoading.show(t('loading_registering')); await sendTx(App.cfg.treasury, App.cfg.orgFee, QC.org(name, jur)); QCLoading.hide(); toast(t('toast_org_registered')); refreshSoon(); }
-    catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+    // Fee payment is NOT idempotent — a relay timeout shows Try-again, never a
+    // silent re-charge.
+    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, memo: QC.org(name, jur) },
+      { loading: t('loading_registering'), success: () => { toast(t('toast_org_registered')); refreshSoon(); } });
   }
-  async function payOrgFee() {
-    try { QCLoading.show(t('loading_paying')); await sendTx(App.cfg.treasury, App.cfg.orgFee, QC.org(App.role.org.name, App.role.org.jur || '')); QCLoading.hide(); toast(t('toast_fee_paid')); refreshSoon(); }
-    catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+  function payOrgFee() {
+    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, memo: QC.org(App.role.org.name, App.role.org.jur || '') },
+      { loading: t('loading_paying'), success: () => { toast(t('toast_fee_paid')); refreshSoon(); } });
   }
 
   // ───────────────────────── Evidence gallery ─────────────────────────
@@ -1201,9 +1274,10 @@
           ${o.active ? `<span class="badge bg-emerald-500/20 text-emerald-300">${t('orgs_active_badge')}</span>`
             : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">${t('admin_waive_fee')}</button>`}
         </div>`).join('')}</div>`;
-    v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = async () => {
-      try { QCLoading.show(t('loading_waiving')); await sendTx(App.wallet.address, 0, QC.adm('waive', b.dataset.org)); QCLoading.hide(); toast(t('toast_fee_waived')); refreshSoon(); }
-      catch (e) { QCLoading.hide(); toast(t('toast_failed') + ' ' + e.message, 'error'); }
+    v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
+      const org = b.dataset.org;
+      runTx({ to: App.wallet.address, amount: 0, memo: QC.adm('waive', org) },
+        { loading: t('loading_waiving'), success: () => { toast(t('toast_fee_waived')); refreshSoon(); } });
     });
   }
 
@@ -1361,6 +1435,13 @@
   async function boot() {
     App.cfg = await api('/__quickcount/config');
     App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
+    // Fault-injection hook — local-dev / staging ONLY — so reviewers can
+    // exercise the resilience paths (?bridgefault=timeout|notready|reject).
+    // A strict no-op in production.
+    if (App.cfg.localDev || App.cfg.staging) {
+      const fault = new URLSearchParams(location.search).get('bridgefault');
+      if (fault && window.QCBridge) window.QCBridge.setFault(fault);
+    }
     if (App.cfg.localDev && !window.QCMock) {
       // Server is in local-dev but the mock wallet shim never loaded. Falling
       // through to the hosted-bridge path here is exactly what surfaces the
@@ -1374,19 +1455,21 @@
       // Auto-connect a persona in local-dev for a friction-free demo.
       App.wallet.address = window.QCMock.address(); App.wallet.connected = true;
     } else {
-      // Try a silent wallet connect inside the platform.
-      bridgeReady().then(async (ok) => {
-        if (!ok) return;
-        try {
-          const a = await window.getNodeAddress();
-          if (!a) return;
-          App.wallet.address = a; App.wallet.connected = true;
-          await loadMe();
-          const pref = App.me && App.me.profile && App.me.profile.preferred_lang;
-          if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
-          renderChrome(); refresh();
-        } catch (_) {}
-      });
+      // Try a silent wallet connect inside the platform. Non-blocking: the
+      // read-only data (/__quickcount/state) renders regardless. If the bridge
+      // is unusually slow, show a small "Connecting…" hint that clears the
+      // instant we connect (or quietly disappears if it never does).
+      let hintShown = false;
+      const hintTimer = setTimeout(() => { hintShown = true; window.QCNotice.show({ message: t('notice_connecting') }); }, 2000);
+      window.QCBridge.getAddress().then(async (a) => {
+        clearTimeout(hintTimer); if (hintShown) window.QCNotice.hide();
+        if (!a) return;
+        App.wallet.address = a; App.wallet.connected = true;
+        await loadMe();
+        const pref = App.me && App.me.profile && App.me.profile.preferred_lang;
+        if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
+        renderChrome(); refresh();
+      }).catch(() => { clearTimeout(hintTimer); if (hintShown) window.QCNotice.hide(); });
     }
     // Wallet button: when connected it toggles the Profile/Settings menu;
     // when not, it connects.
