@@ -44,6 +44,13 @@ function req(method, path, body) {
   });
 }
 
+test('GET /__mock/enabled is absent (404) outside local-dev', async () => {
+  // LOCAL_DEV is false here (no --local-dev / APP_MODE), so the whole /__mock/*
+  // block — including the bridge probe — is never mounted.
+  const { status } = await req('GET', '/__mock/enabled');
+  assert.strictEqual(status, 404);
+});
+
 test('GET /api/me without auth returns null identity (no 401)', async () => {
   const { status, json } = await req('GET', '/api/me');
   assert.strictEqual(status, 200);

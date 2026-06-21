@@ -1361,6 +1361,13 @@
   async function boot() {
     App.cfg = await api('/__quickcount/config');
     App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
+    if (App.cfg.localDev && !window.QCMock) {
+      // Server is in local-dev but the mock wallet shim never loaded. Falling
+      // through to the hosted-bridge path here is exactly what surfaces the
+      // confusing "Mock API not enabled" error, so make the misconfiguration
+      // explicit instead of silently degrading.
+      console.error('local-dev config reported but window.QCMock is missing — public/usernode-bridge.js failed to load; transactions will not work.');
+    }
     if (App.cfg.localDev && window.QCMock) {
       window.QCMock.init(App.cfg.personas || []);
       document.getElementById('persona-select').onchange = async (e) => { window.QCMock.setPersona(Number(e.target.value)); await connectWallet(); };

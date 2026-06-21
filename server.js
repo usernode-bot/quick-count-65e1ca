@@ -173,18 +173,36 @@ app.use(express.json({ limit: '256kb' }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
+// Stable fallback sender for mock submissions that omit `from`. The hosted
+// bridge's mock mode derives the sender from its own configured identity and
+// may POST only { to, amount, memo }; the app's own QCMock always sends `from`.
+const MOCK_FALLBACK_ADDR = 'ut1mockwallet000000000000000000000000000000';
+
 // Local-dev mock chain endpoints — mounted BEFORE the auth gate, 404 otherwise.
 if (LOCAL_DEV) {
+  // Probed by the hosted bridge to decide whether to enter mock mode. A 200
+  // here makes the bridge route transactions through /__mock/* instead of
+  // failing with "Mock API not enabled". Only mounted in local-dev, so it 404s
+  // (mock mode off) under staging/production, exactly as intended.
+  app.get('/__mock/enabled', (_req, res) => res.json({ enabled: true }));
   app.post('/__mock/submit', async (req, res) => {
     const { from, to, amount, memo: m } = req.body || {};
-    if (!from) return res.status(400).json({ error: 'from required' });
-    const tx = mock.append({ from, to: to || from, amount: amount || 0, memo: m });
+    // `from` defaults to a stable mock address so the hosted bridge's mock
+    // submit (which omits it) works end-to-end; QCMock still sends its own.
+    const sender = from || MOCK_FALLBACK_ADDR;
+    const tx = mock.append({ from: sender, to: to || sender, amount: amount || 0, memo: m });
     await pollOnce();
     res.json({ txId: tx.txId, ok: true });
   });
   app.get('/__mock/transactions', (_req, res) => res.json({ transactions: mock.all() }));
   app.post('/__mock/reset', async (_req, res) => { mock.reset(); txLog.length = 0; seen.clear(); rebuild(); res.json({ ok: true }); });
   app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
+} else {
+  // Outside local-dev the mock surface must be genuinely absent: explicitly
+  // 404 every /__mock/* path so the SPA catch-all (app.get('*')) can't answer
+  // the bridge's GET /__mock/enabled probe with a 200 index.html — which would
+  // wrongly switch the bridge into mock mode in staging/production.
+  app.all('/__mock/*', (_req, res) => res.status(404).json({ error: 'mock disabled' }));
 }
 
 // ── Pay-to-unlock config ─────────────────────────────────────────────────────
