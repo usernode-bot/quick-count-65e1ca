@@ -83,3 +83,15 @@ test('PUT /api/me/profile with a valid payload but no DB reports unavailable', a
   const { status } = await req('PUT', '/api/me/profile?viewer=ut1tester000000000000000000000000000000', { display_name: 'valid_name', preferred_lang: 'fr' });
   assert.strictEqual(status, 503);
 });
+
+test('PUT /api/me/profile rejects an overlong bio', async () => {
+  const longBio = 'a'.repeat(281);
+  const { status, json } = await req('PUT', '/api/me/profile?viewer=ut1tester000000000000000000000000000000', { bio: longBio });
+  assert.strictEqual(status, 400);
+  assert.match(json.error, /280/i);
+});
+
+test('PUT /api/me/profile accepts a valid bio (falls through to no-DB 503)', async () => {
+  const { status } = await req('PUT', '/api/me/profile?viewer=ut1tester000000000000000000000000000000', { bio: 'A short bio.' });
+  assert.strictEqual(status, 503);
+});

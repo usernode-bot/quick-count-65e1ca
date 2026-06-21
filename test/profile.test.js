@@ -5,7 +5,9 @@ const assert = require('node:assert');
 
 const {
   LANGS,
+  BIO_MAX_LEN,
   isValidDisplayName,
+  isValidBio,
   isSupportedLang,
   matchBrowserLang,
   resolveLang,
@@ -54,6 +56,28 @@ test('matchBrowserLang maps regional tags to supported codes', () => {
   assert.strictEqual(matchBrowserLang('de-DE'), null);
   assert.strictEqual(matchBrowserLang(''), null);
   assert.strictEqual(matchBrowserLang(null), null);
+});
+
+// ── Bio validator (null / '' / string ≤ 280 chars) ───────────────────────────
+test('isValidBio accepts null and empty string', () => {
+  assert.ok(isValidBio(null));
+  assert.ok(isValidBio(''));
+  assert.ok(isValidBio(undefined));
+});
+
+test('isValidBio accepts strings within the limit', () => {
+  assert.ok(isValidBio('Hello, world!'));
+  assert.ok(isValidBio('a'.repeat(BIO_MAX_LEN)));
+});
+
+test('isValidBio rejects overlong strings', () => {
+  assert.ok(!isValidBio('a'.repeat(BIO_MAX_LEN + 1)));
+});
+
+test('isValidBio rejects non-string non-null values', () => {
+  assert.ok(!isValidBio(123));
+  assert.ok(!isValidBio([]));
+  assert.ok(!isValidBio({}));
 });
 
 // ── Resolution priority: profile > local > browser > English ─────────────────

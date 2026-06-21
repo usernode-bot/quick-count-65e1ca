@@ -119,6 +119,16 @@
       "name": "Public dashboard boots cleanly with bridge fault injection",
       "path": "/dashboard.html?eid=demo-election&bridgefault=timeout",
       "expectText": "Quick Count"
+    },
+    {
+      "name": "Public profile API returns profile data",
+      "path": "/api/public/profiles/ut1stagingdemo00000000000000000000000000",
+      "expectText": "Staging_demo_user"
+    },
+    {
+      "name": "Public user profile page loads without error",
+      "path": "/#/user/ut1stagingdemo00000000000000000000000000",
+      "expectText": "Activity"
     }
   ]
 }
