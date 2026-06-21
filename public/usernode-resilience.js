@@ -173,7 +173,7 @@
     msg.id = 'qc-notice-msg'; msg.style.cssText = 'flex:1';
     var action = document.createElement('button');
     action.id = 'qc-notice-action';
-    action.style.cssText = 'flex:none;font-weight:600;padding:.3rem .6rem;border-radius:.5rem;border:0;cursor:pointer;background:#7c3aed;color:#fff';
+    action.style.cssText = 'flex:none;font-weight:600;padding:.3rem .6rem;border-radius:.5rem;border:0;cursor:pointer;background:#4f46e5;color:#fff';
     var close = document.createElement('button');
     close.id = 'qc-notice-close';
     close.setAttribute('aria-label', 'Dismiss');
@@ -186,9 +186,9 @@
   }
   function themeNotice(e) {
     var dark = document.documentElement.classList.contains('dark');
-    e.style.background = dark ? '#27272a' : '#ffffff';
-    e.style.color = dark ? '#e4e4e7' : '#18181b';
-    e.style.border = '1px solid ' + (dark ? '#3f3f46' : '#e4e4e7');
+    e.style.background = dark ? '#1e293b' : '#ffffff';
+    e.style.color = dark ? '#e2e8f0' : '#0f172a';
+    e.style.border = '1px solid ' + (dark ? '#334155' : '#e2e8f0');
   }
   function showNotice(opts) {
     opts = opts || {};

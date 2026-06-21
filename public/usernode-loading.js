@@ -17,13 +17,13 @@
   }
   function applyTheme(e) {
     var dark = document.documentElement.classList.contains('dark');
-    e.style.background = dark ? 'rgba(9,9,11,0.7)' : 'rgba(255,255,255,0.7)';
+    e.style.background = dark ? 'rgba(2,6,23,0.7)' : 'rgba(255,255,255,0.7)';
     var inner = e.querySelector('#qc-loading-inner');
-    if (inner) inner.style.color = dark ? '#e4e4e7' : '#18181b';
+    if (inner) inner.style.color = dark ? '#e2e8f0' : '#0f172a';
     var spinner = e.querySelector('#qc-loading-spinner');
-    if (spinner) { spinner.style.borderColor = dark ? '#3f3f46' : '#d4d4d8'; spinner.style.borderTopColor = '#8b5cf6'; }
+    if (spinner) { spinner.style.borderColor = dark ? '#334155' : '#cbd5e1'; spinner.style.borderTopColor = '#6366f1'; }
     var msg = e.querySelector('#qc-loading-msg');
-    if (msg) msg.style.color = dark ? '#a1a1aa' : '#52525b';
+    if (msg) msg.style.color = dark ? '#94a3b8' : '#475569';
   }
   window.QCLoading = {
     show: function (msg) { var e = ensure(); applyTheme(e); e.querySelector('#qc-loading-msg').textContent = msg || 'Working…'; e.style.display = 'flex'; },
