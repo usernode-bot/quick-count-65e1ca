@@ -30,7 +30,7 @@
           if (val instanceof Error) return val.stack || (val.name + ': ' + val.message);
           return val;
         });
-      } catch (e) { try { return String(v); } catch (_) { return '[unserializable]'; } }
+      } catch (e) { try { return String(e); } catch (_) { return '[unserializable]'; } }
     }
     function post(level, args, meta) {
       try {
@@ -56,6 +56,7 @@
   </script>
 
   <title>Quick Count</title>
+  <script>(function() { if (localStorage.getItem('qc-theme') === 'light') document.documentElement.classList.remove('dark'); })();</script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
   <!-- Hosted bridge (used inside Usernode). Harmless if unreachable in local-dev. -->
@@ -68,15 +69,16 @@
     .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
   </style>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen pb-20 sm:pb-0">
+<body class="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 min-h-screen pb-20 sm:pb-0">
 
   <!-- Top bar -->
-  <header class="sticky top-0 z-20 bg-zinc-950/90 backdrop-blur border-b border-zinc-800">
+  <header class="sticky top-0 z-20 bg-white/90 dark:bg-zinc-950/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-800">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
       <h1 class="text-lg font-bold tracking-tight">Quick&nbsp;Count</h1>
       <span id="staging-badge" class="hidden badge bg-amber-500/20 text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
+        <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 font-medium" title="Toggle theme">☀️</button>
         <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
         <div id="wallet-wrap" class="relative">
           <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Connect wallet</button>
@@ -89,7 +91,7 @@
   <main id="view" class="max-w-5xl mx-auto px-4 py-5"></main>
 
   <!-- Mobile bottom tab bar -->
-  <nav id="bottom-tabs" class="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-zinc-950/95 backdrop-blur border-t border-zinc-800 flex"></nav>
+  <nav id="bottom-tabs" class="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 dark:bg-zinc-950/95 backdrop-blur border-t border-zinc-200 dark:border-zinc-800 flex"></nav>
 
   <div id="toast" class="fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 hidden px-4 py-2 rounded-lg text-sm font-medium shadow-lg"></div>
 
@@ -466,10 +468,10 @@
   function renderChrome() {
     const route = currentRoute();
     const tabs = TABS.filter((t) => !t.adminOnly || App.role.isAdmin);
-    const topHtml = tabs.map((t) => `<a href="#/${t.id}" class="px-3 py-1.5 rounded-lg ${route.tab === t.id ? 'tab-on' : 'text-zinc-400 hover:text-zinc-100'}">${t.label}</a>`).join('');
+    const topHtml = tabs.map((t) => `<a href="#/${t.id}" class="px-3 py-1.5 rounded-lg ${route.tab === t.id ? 'tab-on' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}">${t.label}</a>`).join('');
     document.getElementById('top-tabs').innerHTML = topHtml;
     document.getElementById('bottom-tabs').innerHTML = tabs.map((t) =>
-      `<a href="#/${t.id}" class="flex-1 py-2 flex flex-col items-center gap-0.5 text-[0.62rem] ${route.tab === t.id ? 'text-violet-400' : 'text-zinc-500'}">
+      `<a href="#/${t.id}" class="flex-1 py-2 flex flex-col items-center gap-0.5 text-[0.62rem] ${route.tab === t.id ? 'text-violet-400' : 'text-zinc-600 dark:text-zinc-500'}">
         <span class="text-base leading-none">${t.icon}</span>${t.label}</a>`).join('');
 
     const wb = document.getElementById('wallet-btn');
@@ -524,12 +526,12 @@
 
   function electionPicker() {
     const els = (App.state && App.state.elections) || [];
-    if (!els.length) return '<p class="text-zinc-500 text-sm">No elections published yet.</p>';
+    if (!els.length) return '<p class="text-zinc-600 dark:text-zinc-500 text-sm">No elections published yet.</p>';
     return `<div class="flex flex-wrap items-center gap-2 mb-4">
-      <select id="el-picker" class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-sm">
+      <select id="el-picker" class="px-3 py-2 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 outline-none text-sm">
         ${els.map((e) => `<option value="${e.eid}" ${e.eid === App.eid ? 'selected' : ''}>${esc(e.name)}${e.orgActive ? '' : ' (pending)'}</option>`).join('')}
       </select>
-      <select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-sm">
+      <select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 outline-none text-sm">
         ${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${METHOD_LABELS[m]}</option>`).join('')}
       </select>
     </div>`;
@@ -550,26 +552,26 @@
         const pct = Math.round((votes / total) * 100);
         return `<div class="mb-3">
           <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-          <span class="font-mono text-zinc-300">${votes.toLocaleString()} <span class="text-zinc-500">(${pct}%)</span></span></div>
-          <div class="h-3 rounded bg-zinc-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
+          <span class="font-mono text-zinc-700 dark:text-zinc-300">${votes.toLocaleString()} <span class="text-zinc-600 dark:text-zinc-500">(${pct}%)</span></span></div>
+          <div class="h-3 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
         </div>`;
       }).join('');
   }
   function stationTable(d) {
-    const head = d.candidates.map((c) => `<th class="py-2 px-2 text-right font-medium text-zinc-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
+    const head = d.candidates.map((c) => `<th class="py-2 px-2 text-right font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
     const rows = d.stations.map((s) => {
       const badges = [];
       if (s.invalid) badges.push('<span class="badge bg-rose-500/20 text-rose-300">invalidated</span>');
       else if (s.disputed) badges.push('<span class="badge bg-amber-500/20 text-amber-300">disputed</span>');
       if (s.needsReview && !s.invalid) badges.push('<span class="badge bg-orange-500/20 text-orange-300">review</span>');
-      if (s.sources > 1) badges.push(`<span class="badge bg-zinc-700 text-zinc-300">${s.sources} reports</span>`);
-      const label = `<td class="py-2 pr-2"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-zinc-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
-      if (!s.reported) return `<tr class="border-t border-zinc-800">${label}<td class="py-2 text-zinc-500" colspan="${d.candidates.length + 1}">Awaiting result</td></tr>`;
+      if (s.sources > 1) badges.push(`<span class="badge bg-zinc-300 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">${s.sources} reports</span>`);
+      const label = `<td class="py-2 pr-2"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-zinc-600 dark:text-zinc-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
+      if (!s.reported) return `<tr class="border-t border-zinc-200 dark:border-zinc-800">${label}<td class="py-2 text-zinc-600 dark:text-zinc-500" colspan="${d.candidates.length + 1}">Awaiting result</td></tr>`;
       const cells = d.candidates.map((c) => `<td class="py-2 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
-      return `<tr class="border-t border-zinc-800">${label}${cells}<td class="py-2 pl-2 text-right text-xs text-zinc-500 whitespace-nowrap">${timeAgo(s.at)}</td></tr>`;
+      return `<tr class="border-t border-zinc-200 dark:border-zinc-800">${label}${cells}<td class="py-2 pl-2 text-right text-xs text-zinc-600 dark:text-zinc-500 whitespace-nowrap">${timeAgo(s.at)}</td></tr>`;
     }).join('');
     return `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[480px]">
-      <thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-zinc-400">Station</th>${head}<th class="py-2 pl-2 text-right font-medium text-zinc-400">Updated</th></tr></thead>
+      <thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-zinc-500 dark:text-zinc-400">Station</th>${head}<th class="py-2 pl-2 text-right font-medium text-zinc-500 dark:text-zinc-400">Updated</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }
   function marginBanner(d) {
@@ -586,22 +588,22 @@
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('dash-body');
-    if (!d) { body.innerHTML = '<p class="text-zinc-500 text-sm">Select an election to view live results.</p>'; return; }
+    if (!d) { body.innerHTML = '<p class="text-zinc-600 dark:text-zinc-500 text-sm">Select an election to view live results.</p>'; return; }
     const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0);
     body.innerHTML =
       `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
         <h2 class="text-lg font-semibold">${esc(d.election.name)}</h2>
         <div class="flex gap-2">
-          <button id="exp-csv" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700">Export CSV</button>
-          <button id="exp-json" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700">Export JSON</button>
+          <button id="exp-csv" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">Export CSV</button>
+          <button id="exp-json" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">Export JSON</button>
         </div>
       </div>
-      <p class="text-sm text-zinc-400 mb-3">by ${esc(d.election.orgName || '—')} · ${d.reporting.reported} of ${d.reporting.total} stations reported · ${totalVotes.toLocaleString()} votes · method: ${METHOD_LABELS[d.method]}</p>
+      <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-3">by ${esc(d.election.orgName || '—')} · ${d.reporting.reported} of ${d.reporting.total} stations reported · ${totalVotes.toLocaleString()} votes · method: ${METHOD_LABELS[d.method]}</p>
       ${marginBanner(d)}
-      <div class="mb-6">${tallyBars(d) || '<p class="text-zinc-500 text-sm">No candidates.</p>'}</div>
-      <h3 class="text-sm font-medium text-zinc-400 mb-2">By station</h3>
+      <div class="mb-6">${tallyBars(d) || '<p class="text-zinc-600 dark:text-zinc-500 text-sm">No candidates.</p>'}</div>
+      <h3 class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">By station</h3>
       ${stationTable(d)}
-      <p class="mt-4 text-xs text-zinc-600">${d.lastUpdated ? 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing' : 'No submissions yet'}</p>
+      <p class="mt-4 text-xs text-zinc-700 dark:text-zinc-600">${d.lastUpdated ? 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing' : 'No submissions yet'}</p>
       <p class="mt-3 text-xs"><a class="text-violet-400 hover:underline" href="#/election/${d.election.eid}">Open election workspace →</a></p>`;
     document.getElementById('exp-csv').onclick = () => exportCsv(d);
     document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
@@ -631,38 +633,38 @@
     let html = '<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-semibold">Elections</h2>'
       + (canCreate ? '<button id="new-el" class="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">+ New election</button>' : '')
       + '</div>';
-    if (!App.role.org) html += '<p class="text-sm text-zinc-500 mb-4">Connect an organization wallet to create elections. Register one under the <a href="#/orgs" class="text-violet-400 hover:underline">Orgs</a> tab.</p>';
+    if (!App.role.org) html += '<p class="text-sm text-zinc-600 dark:text-zinc-500 mb-4">Connect an organization wallet to create elections. Register one under the <a href="#/orgs" class="text-violet-400 hover:underline">Orgs</a> tab.</p>';
     else if (!App.role.org.active) html += '<p class="text-sm text-amber-300 mb-4">Your organization is pending — pay the registration fee under <a href="#/orgs" class="text-violet-400 hover:underline">Orgs</a> to publish elections.</p>';
 
     html += '<div id="new-el-form"></div>';
     html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => `
-      <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-violet-600/60">
+      <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-zinc-100 border border-zinc-200 hover:border-violet-600/60 dark:bg-zinc-900 dark:border-zinc-800">
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold">${esc(e.name)}</h3>
           ${e.orgActive ? '' : '<span class="badge bg-amber-500/20 text-amber-300">pending</span>'}
         </div>
-        <p class="text-xs text-zinc-500 mt-1">${esc(e.orgName || '—')}</p>
-        <p class="text-sm text-zinc-400 mt-2">${e.reportedCount}/${e.stationCount} stations · ${e.candidateCount} candidates · ${e.disputeCount} disputes</p>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-1">${esc(e.orgName || '—')}</p>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-2">${e.reportedCount}/${e.stationCount} stations · ${e.candidateCount} candidates · ${e.disputeCount} disputes</p>
       </a>`).join('') + '</div>'
-      : '<p class="text-zinc-500 text-sm">No elections yet.</p>';
+      : '<p class="text-zinc-600 dark:text-zinc-500 text-sm">No elections yet.</p>';
     v.innerHTML = html;
 
     if (canCreate) document.getElementById('new-el').onclick = () => showNewElectionForm();
   }
   function showNewElectionForm() {
     const f = document.getElementById('new-el-form');
-    f.innerHTML = `<div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
-      <label class="block text-sm mb-1 text-zinc-300">Election name</label>
-      <input id="nel-name" placeholder="Springfield Mayoral 2026" class="w-full mb-3 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
-      <div class="flex items-center justify-between mb-1"><label class="text-sm text-zinc-300">Candidates</label>
-        <button id="nel-add" class="text-xs px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700">+ Add</button></div>
+    f.innerHTML = `<div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
+      <label class="block text-sm mb-1 text-zinc-700 dark:text-zinc-300">Election name</label>
+      <input id="nel-name" placeholder="Springfield Mayoral 2026" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
+      <div class="flex items-center justify-between mb-1"><label class="text-sm text-zinc-700 dark:text-zinc-300">Candidates</label>
+        <button id="nel-add" class="text-xs px-2 py-1 rounded bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">+ Add</button></div>
       <div id="nel-cands" class="space-y-2 mb-3"></div>
       <button id="nel-create" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm">Create &amp; publish</button>
-      <p class="text-xs text-zinc-500 mt-2">Signs one transaction for the election and one per candidate.</p>
+      <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-2">Signs one transaction for the election and one per candidate.</p>
     </div>`;
     const add = (val) => {
       const row = document.createElement('div'); row.className = 'flex gap-2';
-      row.innerHTML = `<input value="${esc(val || '')}" placeholder="Candidate name" class="nel-c flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none"><button class="px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400">×</button>`;
+      row.innerHTML = `<input value="${esc(val || '')}" placeholder="Candidate name" class="nel-c flex-1 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none"><button class="px-3 rounded-lg bg-zinc-200 hover:bg-zinc-300 text-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-400">×</button>`;
       row.querySelector('button').onclick = () => row.remove();
       document.getElementById('nel-cands').appendChild(row);
     };
@@ -689,21 +691,21 @@
   // ───────────────────────── Election detail / workspace ─────────────────────────
   async function renderElectionDetail(v) {
     const d = App.state && App.state.detail;
-    if (!d) { v.innerHTML = '<p class="text-zinc-500 text-sm">Loading election… <a href="#/elections" class="text-violet-400 hover:underline">back</a></p>'; return; }
+    if (!d) { v.innerHTML = '<p class="text-zinc-600 dark:text-zinc-500 text-sm">Loading election… <a href="#/elections" class="text-violet-400 hover:underline">back</a></p>'; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
-    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${METHOD_LABELS[m]}</option>`).join('')}</select>`;
+    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${METHOD_LABELS[m]}</option>`).join('')}</select>`;
 
     v.innerHTML = `
-      <a href="#/elections" class="text-xs text-zinc-500 hover:text-zinc-300">← all elections</a>
+      <a href="#/elections" class="text-xs text-zinc-600 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-300">← all elections</a>
       <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
         <div><h2 class="text-xl font-semibold">${esc(d.election.name)}</h2>
-        <p class="text-xs text-zinc-500">by ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · pending fee'}</p></div>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500">by ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · pending fee'}</p></div>
         ${methodSel}
       </div>
       ${marginBanner(d)}
-      <div class="mb-5">${tallyBars(d) || '<p class="text-zinc-500 text-sm">No candidates yet.</p>'}</div>
-      <p class="text-sm text-zinc-400 mb-2">${d.reporting.reported} of ${d.reporting.total} stations reported</p>
+      <div class="mb-5">${tallyBars(d) || '<p class="text-zinc-600 dark:text-zinc-500 text-sm">No candidates yet.</p>'}</div>
+      <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-2">${d.reporting.reported} of ${d.reporting.total} stations reported</p>
       ${stationTable(d)}
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; refresh(); };
@@ -713,7 +715,7 @@
     if (myObs || isOrgOwner) ws.appendChild(disputeFilePanel(d));
     if (isOrgOwner) { ws.appendChild(stationsPanel(d)); ws.appendChild(observersPanel(d)); ws.appendChild(resolvePanel(d)); }
     if (!myObs && !isOrgOwner) {
-      const p = document.createElement('p'); p.className = 'text-sm text-zinc-500';
+      const p = document.createElement('p'); p.className = 'text-sm text-zinc-600 dark:text-zinc-500';
       p.innerHTML = 'Connect an authorized observer or the organizing wallet to report results or manage this election.';
       ws.appendChild(p);
     }
@@ -721,7 +723,7 @@
 
   function panel(title, inner) {
     const el = document.createElement('div');
-    el.className = 'p-4 rounded-xl bg-zinc-900 border border-zinc-800';
+    el.className = 'p-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800';
     el.innerHTML = `<h3 class="font-semibold mb-3">${title}</h3>` + inner;
     return el;
   }
@@ -729,20 +731,20 @@
   function observerPanel(d, myObs) {
     const stations = myObs.sid != null ? d.stations.filter((s) => s.sid === myObs.sid) : d.stations;
     const inner = `
-      <label class="block text-sm mb-1 text-zinc-300">Polling station</label>
-      <select id="ob-station" class="w-full mb-3 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none" ${myObs.sid != null ? 'disabled' : ''}>
+      <label class="block text-sm mb-1 text-zinc-700 dark:text-zinc-300">Polling station</label>
+      <select id="ob-station" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none" ${myObs.sid != null ? 'disabled' : ''}>
         ${stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
       </select>
       <div id="ob-cands" class="space-y-2 mb-3">${d.candidates.map((c) => `
-        <div class="flex items-center gap-2"><label class="flex-1 text-sm text-zinc-300">${esc(c.name)}</label>
-        <input type="number" min="0" data-cid="${c.cid}" value="0" class="ob-v w-28 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-right"></div>`).join('')}</div>
+        <div class="flex items-center gap-2"><label class="flex-1 text-sm text-zinc-700 dark:text-zinc-300">${esc(c.name)}</label>
+        <input type="number" min="0" data-cid="${c.cid}" value="0" class="ob-v w-28 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none text-right"></div>`).join('')}</div>
       <div class="grid grid-cols-2 gap-3 mb-3">
-        <div><label class="block text-xs mb-1 text-zinc-400">Total ballots</label><input id="ob-tot" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none"></div>
-        <div><label class="block text-xs mb-1 text-zinc-400">Invalid / blank</label><input id="ob-inv" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none"></div>
+        <div><label class="block text-xs mb-1 text-zinc-500 dark:text-zinc-400">Total ballots</label><input id="ob-tot" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none"></div>
+        <div><label class="block text-xs mb-1 text-zinc-500 dark:text-zinc-400">Invalid / blank</label><input id="ob-inv" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none"></div>
       </div>
-      <label class="block text-xs mb-1 text-zinc-400">Evidence (tally sheet) — hashed locally, file never uploaded</label>
-      <input id="ob-file" type="file" class="w-full mb-1 text-xs text-zinc-400">
-      <p id="ob-hash" class="text-[0.65rem] text-zinc-500 break-all mb-3 font-mono"></p>
+      <label class="block text-xs mb-1 text-zinc-500 dark:text-zinc-400">Evidence (tally sheet) — hashed locally, file never uploaded</label>
+      <input id="ob-file" type="file" class="w-full mb-1 text-xs text-zinc-600 dark:text-zinc-400">
+      <p id="ob-hash" class="text-[0.65rem] text-zinc-600 dark:text-zinc-500 break-all mb-3 font-mono"></p>
       <button id="ob-submit" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm">Submit / revise result</button>`;
     const p = panel('Report result' + (myObs.sid != null ? ' (your station)' : ''), inner);
     setTimeout(() => {
@@ -768,19 +770,19 @@
   function stationsPanel(d) {
     const inner = `
       <div class="flex gap-2 mb-3">
-        <input id="st-name" placeholder="Station name" class="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
-        <input id="st-label" placeholder="Label / region" class="w-36 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+        <input id="st-name" placeholder="Station name" class="flex-1 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
+        <input id="st-label" placeholder="Label / region" class="w-36 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
         <button id="st-add" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">Add</button>
       </div>
       <details class="text-sm">
-        <summary class="cursor-pointer text-zinc-400 mb-2">Bulk import from CSV</summary>
-        <p class="text-xs text-zinc-500 mb-1">One station per line: <code>name,label</code></p>
-        <textarea id="st-csv" rows="4" placeholder="North School,District 1&#10;Town Hall,District 2" class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none font-mono text-xs mb-1"></textarea>
-        <input id="st-csv-file" type="file" accept=".csv,text/csv" class="text-xs text-zinc-400 mb-2 block">
-        <div id="st-csv-preview" class="text-xs text-zinc-400 mb-2"></div>
+        <summary class="cursor-pointer text-zinc-500 dark:text-zinc-400 mb-2">Bulk import from CSV</summary>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-1">One station per line: <code>name,label</code></p>
+        <textarea id="st-csv" rows="4" placeholder="North School,District 1&#10;Town Hall,District 2" class="w-full px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none font-mono text-xs mb-1"></textarea>
+        <input id="st-csv-file" type="file" accept=".csv,text/csv" class="text-xs text-zinc-600 dark:text-zinc-400 mb-2 block">
+        <div id="st-csv-preview" class="text-xs text-zinc-500 dark:text-zinc-400 mb-2"></div>
         <button id="st-csv-import" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">Import all</button>
       </details>
-      <p class="text-xs text-zinc-500 mt-3">${d.stations.length} stations: ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
+      <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-3">${d.stations.length} stations: ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
     const p = panel('Stations', inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
@@ -807,14 +809,14 @@
   function observersPanel(d) {
     const inner = `
       <div class="flex flex-wrap gap-2 mb-3">
-        <input id="ob-addr" placeholder="Observer wallet (ut1…)" class="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none font-mono text-xs">
-        <select id="ob-scope" class="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm">
+        <input id="ob-addr" placeholder="Observer wallet (ut1…)" class="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none font-mono text-xs">
+        <select id="ob-scope" class="px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none text-sm">
           <option value="">All stations</option>
           ${d.stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
         </select>
         <button id="ob-add" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">Authorize</button>
       </div>
-      <p class="text-xs text-zinc-500">${d.observers.length} observer(s): ${d.observers.map((o) => `${esc(nm(o.addr))}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
+      <p class="text-xs text-zinc-600 dark:text-zinc-500">${d.observers.length} observer(s): ${d.observers.map((o) => `${esc(nm(o.addr))}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
     const p = panel('Observers', inner);
     setTimeout(() => {
       p.querySelector('#ob-add').onclick = async () => {
@@ -830,13 +832,13 @@
   function disputeFilePanel(d) {
     const reported = d.stations.filter((s) => s.reported && s.resultTx);
     const inner = reported.length ? `
-      <label class="block text-sm mb-1 text-zinc-300">Target result</label>
-      <select id="dp-target" class="w-full mb-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+      <label class="block text-sm mb-1 text-zinc-700 dark:text-zinc-300">Target result</label>
+      <select id="dp-target" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
         ${reported.map((s) => `<option value="${s.resultTx}">${esc(s.name)} — ${nm(s.observer)}</option>`).join('')}
       </select>
-      <input id="dp-reason" placeholder="Reason for dispute" class="w-full mb-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+      <input id="dp-reason" placeholder="Reason for dispute" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
       <button id="dp-file" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm font-semibold">File dispute</button>`
-      : '<p class="text-sm text-zinc-500">No reported results to dispute yet.</p>';
+      : '<p class="text-sm text-zinc-600 dark:text-zinc-500">No reported results to dispute yet.</p>';
     const p = panel('File a dispute', inner);
     setTimeout(() => {
       const b = p.querySelector('#dp-file'); if (!b) return;
@@ -853,12 +855,12 @@
   function resolvePanel(d) {
     const open = d.disputes.filter((x) => x.status === 'open');
     const inner = open.length ? open.map((x) => `
-      <div class="border-t border-zinc-800 pt-2 mt-2 first:border-0 first:pt-0 first:mt-0">
+      <div class="border-t border-zinc-200 dark:border-zinc-800 pt-2 mt-2 first:border-0 first:pt-0 first:mt-0">
         <p class="text-sm">${esc(x.reason || '—')}</p>
-        <p class="text-xs text-zinc-500 mb-2">filed by ${esc(nm(x.filer))} · ${timeAgo(x.createdAt)}</p>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-2">filed by ${esc(nm(x.filer))} · ${timeAgo(x.createdAt)}</p>
         <button data-disp="${x.txId}" data-v="uphold" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 font-medium">Uphold</button>
-        <button data-disp="${x.txId}" data-v="reject" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 font-medium">Reject</button>
-      </div>`).join('') : '<p class="text-sm text-zinc-500">No open disputes.</p>';
+        <button data-disp="${x.txId}" data-v="reject" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 font-medium">Reject</button>
+      </div>`).join('') : '<p class="text-sm text-zinc-600 dark:text-zinc-500">No open disputes.</p>';
     const p = panel('Resolve disputes', inner);
     setTimeout(() => {
       p.querySelectorAll('.dres-btn').forEach((b) => b.onclick = async () => {
@@ -874,30 +876,30 @@
     const myOrg = App.role.org;
     let html = '<h2 class="text-lg font-semibold mb-4">Organizations</h2>';
     if (myOrg) {
-      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
+      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
         <div class="flex items-center justify-between"><h3 class="font-semibold">${esc(myOrg.name)}</h3>
         <span class="badge ${myOrg.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${myOrg.active ? 'Active' : 'Pending — fee not paid'}</span></div>
-        <p class="text-xs text-zinc-500 mt-1">${esc(myOrg.jur || '')} · ${esc(myOrg.addr)}</p>
-        ${myOrg.active ? '<p class="text-sm text-zinc-400 mt-2">Your elections are live. Manage them under <a href="#/elections" class="text-violet-400 hover:underline">Elections</a>.</p>'
+        <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-1">${esc(myOrg.jur || '')} · ${esc(myOrg.addr)}</p>
+        ${myOrg.active ? '<p class="text-sm text-zinc-500 dark:text-zinc-400 mt-2">Your elections are live. Manage them under <a href="#/elections" class="text-violet-400 hover:underline">Elections</a>.</p>'
           : `<button id="pay-fee" class="mt-3 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-semibold">Pay registration fee (${App.cfg.orgFee})</button>`}
       </div>`;
     } else {
-      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
+      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
         <h3 class="font-semibold mb-2">Register your organization</h3>
-        <p class="text-sm text-zinc-400 mb-3">Registration pays a one-time fee of <strong>${App.cfg.orgFee}</strong> to the platform treasury. Until it confirms, your elections stay hidden.</p>
-        <input id="org-name" placeholder="Organization name" class="w-full mb-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
-        <input id="org-jur" placeholder="Jurisdiction (optional)" class="w-full mb-3 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none">
+        <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-3">Registration pays a one-time fee of <strong>${App.cfg.orgFee}</strong> to the platform treasury. Until it confirms, your elections stay hidden.</p>
+        <input id="org-name" placeholder="Organization name" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
+        <input id="org-jur" placeholder="Jurisdiction (optional)" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
         <button id="org-reg" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-semibold">Register &amp; pay fee</button>
         ${App.wallet.connected ? '' : '<p class="text-xs text-amber-300 mt-2">Connect your wallet first.</p>'}
       </div>`;
     }
     const active = (App.state.elections || []);
-    html += '<h3 class="text-sm font-medium text-zinc-400 mb-2">Active organizations</h3>';
+    html += '<h3 class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Active organizations</h3>';
     const orgs = {};
     active.forEach((e) => { if (e.orgActive) orgs[e.orgAddr] = e.orgName; });
     const orgList = Object.entries(orgs);
-    html += orgList.length ? '<div class="space-y-2">' + orgList.map(([addr, name]) => `<div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-sm flex justify-between"><span>${esc(name)}</span><span class="text-xs text-zinc-500 font-mono">${shortAddr(addr)}</span></div>`).join('') + '</div>'
-      : '<p class="text-zinc-500 text-sm">No active organizations visible yet.</p>';
+    html += orgList.length ? '<div class="space-y-2">' + orgList.map(([addr, name]) => `<div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-sm flex justify-between"><span>${esc(name)}</span><span class="text-xs text-zinc-600 dark:text-zinc-500 font-mono">${shortAddr(addr)}</span></div>`).join('') + '</div>'
+      : '<p class="text-zinc-600 dark:text-zinc-500 text-sm">No active organizations visible yet.</p>';
     v.innerHTML = html;
 
     const reg = document.getElementById('org-reg');
@@ -924,31 +926,31 @@
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('ev-body');
-    if (!d) { body.innerHTML = '<p class="text-zinc-500 text-sm">Select an election.</p>'; return; }
+    if (!d) { body.innerHTML = '<p class="text-zinc-600 dark:text-zinc-500 text-sm">Select an election.</p>'; return; }
     const stationName = (sid) => { const s = d.stations.find((x) => x.sid === sid); return s ? s.name : ('Station ' + sid); };
     const gallery = d.evidence.length ? d.evidence.map((e) => `
-      <div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+      <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
         ${e.invalid ? '<span class="badge bg-rose-500/20 text-rose-300">invalidated</span>' : ''}</div>
-        <p class="text-xs text-zinc-500">${esc(nm(e.observer))} · ${timeAgo(e.at)}</p>
-        <p class="text-[0.65rem] text-zinc-500 break-all font-mono mt-1">${esc(e.ev)}</p>
-        <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700">Verify a file against this</button>
-      </div>`).join('') : '<p class="text-zinc-500 text-sm">No evidence hashes recorded for this election.</p>';
+        <p class="text-xs text-zinc-600 dark:text-zinc-500">${esc(nm(e.observer))} · ${timeAgo(e.at)}</p>
+        <p class="text-[0.65rem] text-zinc-600 dark:text-zinc-500 break-all font-mono mt-1">${esc(e.ev)}</p>
+        <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">Verify a file against this</button>
+      </div>`).join('') : '<p class="text-zinc-600 dark:text-zinc-500 text-sm">No evidence hashes recorded for this election.</p>';
 
     body.innerHTML = `<h2 class="text-lg font-semibold mb-1">Evidence — ${esc(d.election.name)}</h2>
-      <p class="text-sm text-zinc-400 mb-4">Each result may carry a SHA-256 hash of its tally sheet. Drop the original file below to prove it matches what was reported on-chain — the file never leaves your device.</p>
-      <div class="p-4 mb-4 rounded-xl bg-zinc-900 border border-zinc-800">
-        <p class="text-sm text-zinc-300 mb-2" id="vf-target">Verifying against: <span class="text-zinc-500">select a result below, or any hash</span></p>
-        <input id="vf-file" type="file" class="text-xs text-zinc-400 mb-2 block">
+      <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Each result may carry a SHA-256 hash of its tally sheet. Drop the original file below to prove it matches what was reported on-chain — the file never leaves your device.</p>
+      <div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
+        <p class="text-sm text-zinc-600 dark:text-zinc-500 mb-2" id="vf-target">Verifying against: <span class="text-zinc-600 dark:text-zinc-500">select a result below, or any hash</span></p>
+        <input id="vf-file" type="file" class="text-xs text-zinc-600 dark:text-zinc-400 mb-2 block">
         <p id="vf-result" class="text-sm"></p>
-        <p id="vf-hash" class="text-[0.65rem] text-zinc-500 break-all font-mono"></p>
+        <p id="vf-hash" class="text-[0.65rem] text-zinc-600 dark:text-zinc-500 break-all font-mono"></p>
       </div>
       <div class="grid sm:grid-cols-2 gap-3">${gallery}</div>`;
 
     let target = '';
     body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
       target = b.dataset.hash;
-      document.getElementById('vf-target').innerHTML = 'Verifying against: <span class="text-zinc-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-zinc-500">' + esc(target.slice(0, 16)) + '…</span>';
+      document.getElementById('vf-target').innerHTML = 'Verifying against: <span class="text-zinc-700 dark:text-zinc-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-zinc-600 dark:text-zinc-500">' + esc(target.slice(0, 16)) + '…</span>';
       document.getElementById('vf-result').textContent = '';
     });
     document.getElementById('vf-file').onchange = async (e) => {
@@ -956,7 +958,7 @@
       const h = await sha256File(f);
       document.getElementById('vf-hash').textContent = 'sha256: ' + h;
       const r = document.getElementById('vf-result');
-      if (!target) { r.innerHTML = '<span class="text-zinc-400">Pick a result to compare against.</span>'; return; }
+      if (!target) { r.innerHTML = '<span class="text-zinc-500 dark:text-zinc-400">Pick a result to compare against.</span>'; return; }
       if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = '<span class="text-emerald-400 font-semibold">✓ Match — this file is exactly what was reported.</span>';
       else r.innerHTML = '<span class="text-rose-400 font-semibold">✗ No match — this file differs from the recorded evidence.</span>';
     };
@@ -968,24 +970,24 @@
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('dsp-body');
-    if (!d) { body.innerHTML = '<p class="text-zinc-500 text-sm">Select an election.</p>'; return; }
+    if (!d) { body.innerHTML = '<p class="text-zinc-600 dark:text-zinc-500 text-sm">Select an election.</p>'; return; }
     const stName = (txId) => { const s = d.stations.find((x) => x.resultTx === txId); return s ? s.name : txId.slice(0, 10) + '…'; };
     const statusBadge = (s) => s === 'upheld' ? '<span class="badge bg-rose-500/20 text-rose-300">upheld</span>'
-      : s === 'rejected' ? '<span class="badge bg-zinc-700 text-zinc-300">rejected</span>'
+      : s === 'rejected' ? '<span class="badge bg-zinc-300 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">rejected</span>'
       : '<span class="badge bg-amber-500/20 text-amber-300">open</span>';
     const rows = d.disputes.length ? d.disputes.map((x) => `
-      <div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+      <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stName(x.target))}</span>${statusBadge(x.status)}</div>
-        <p class="text-sm text-zinc-300 mt-1">${esc(x.reason || '—')}</p>
-        <p class="text-xs text-zinc-500">filed by ${esc(nm(x.filer))} · ${timeAgo(x.createdAt)}${x.ev ? ' · has evidence' : ''}</p>
-      </div>`).join('') : '<p class="text-zinc-500 text-sm">No disputes filed for this election.</p>';
+        <p class="text-sm text-zinc-700 dark:text-zinc-300 mt-1">${esc(x.reason || '—')}</p>
+        <p class="text-xs text-zinc-600 dark:text-zinc-500">filed by ${esc(nm(x.filer))} · ${timeAgo(x.createdAt)}${x.ev ? ' · has evidence' : ''}</p>
+      </div>`).join('') : '<p class="text-zinc-600 dark:text-zinc-500 text-sm">No disputes filed for this election.</p>';
     body.innerHTML = `<h2 class="text-lg font-semibold mb-3">Disputes — ${esc(d.election.name)}</h2><div class="space-y-2 mb-4">${rows}</div>
-      <p class="text-sm text-zinc-500">Authorized observers and the organizing wallet can file and resolve disputes from the <a href="#/election/${d.election.eid}" class="text-violet-400 hover:underline">election workspace</a>.</p>`;
+      <p class="text-sm text-zinc-600 dark:text-zinc-500">Authorized observers and the organizing wallet can file and resolve disputes from the <a href="#/election/${d.election.eid}" class="text-violet-400 hover:underline">election workspace</a>.</p>`;
   }
 
   // ───────────────────────── Admin ─────────────────────────
   async function renderAdmin(v) {
-    if (!App.role.isAdmin) { v.innerHTML = '<p class="text-zinc-500 text-sm">Platform-admin scope required. Connect an admin wallet.</p>'; return; }
+    if (!App.role.isAdmin) { v.innerHTML = '<p class="text-zinc-600 dark:text-zinc-500 text-sm">Platform-admin scope required. Connect an admin wallet.</p>'; return; }
     let data;
     try { data = await api('/__quickcount/admin?viewer=' + encodeURIComponent(App.wallet.address)); }
     catch (e) { v.innerHTML = '<p class="text-rose-400 text-sm">' + esc(e.message) + '</p>'; return; }
@@ -993,14 +995,14 @@
     v.innerHTML = `<h2 class="text-lg font-semibold mb-3">Platform admin</h2>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         ${[['Organizations', s.orgs], ['Active orgs', s.activeOrgs], ['Elections', s.elections], ['Org fee', s.orgFee]].map(([k, val]) =>
-          `<div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-zinc-500">${k}</div></div>`).join('')}
+          `<div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-zinc-600 dark:text-zinc-500">${k}</div></div>`).join('')}
       </div>
-      <p class="text-xs text-zinc-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
-      <h3 class="text-sm font-medium text-zinc-400 mb-2">All organizations</h3>
+      <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
+      <h3 class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">All organizations</h3>
       <div class="space-y-2">${data.orgs.map((o) => `
-        <div class="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-2">
+        <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 flex items-center justify-between gap-2">
           <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ' <span class="badge bg-sky-500/20 text-sky-300">waived</span>' : ''}</div>
-          <div class="text-xs text-zinc-500 font-mono">${esc(o.addr)} · paid ${o.feeAmount}</div></div>
+          <div class="text-xs text-zinc-600 dark:text-zinc-500 font-mono">${esc(o.addr)} · paid ${o.feeAmount}</div></div>
           ${o.active ? '<span class="badge bg-emerald-500/20 text-emerald-300">active</span>'
             : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">Waive fee</button>`}
         </div>`).join('')}</div>`;
@@ -1151,6 +1153,15 @@
     if (App.refreshTimer) clearInterval(App.refreshTimer);
     App.refreshTimer = setInterval(() => { const r = currentRoute(); if (['dashboard', 'election', 'evidence', 'disputes'].includes(r.tab)) refresh(); }, 6000);
   }
+
+  // ───────────────────────── Theme toggle ─────────────────────────
+  const themeBtn = document.getElementById('theme-btn');
+  themeBtn.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+  themeBtn.onclick = function () {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('qc-theme', isDark ? 'dark' : 'light');
+    themeBtn.textContent = isDark ? '☀️' : '🌙';
+  };
 
   async function boot() {
     App.cfg = await api('/__quickcount/config');
