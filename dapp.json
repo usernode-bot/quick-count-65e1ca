@@ -134,6 +134,16 @@
       "name": "Public user profile page loads without error",
       "path": "/#/user/ut1stagingdemo00000000000000000000000000",
       "expectText": "Activity"
+    },
+    {
+      "name": "Heatmap tab renders",
+      "path": "/#/heatmap",
+      "expectText": "Turnout"
+    },
+    {
+      "name": "Heatmap tab shows demo regions",
+      "path": "/#/heatmap",
+      "expectText": "North district"
     }
   ]
 }
