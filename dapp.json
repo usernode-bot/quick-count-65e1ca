@@ -2,8 +2,21 @@
   "name": "Quick Count",
   "secrets": [
     {
+      "key": "EXPLORER_API_URL",
+      "description": "Base URL of the public block explorer — the canonical chain read source. The indexer reads <EXPLORER_API_URL>/<CHAIN_ID>/transactions and the browser confirms transactions through the relative /explorer-api/ proxy. Public infrastructure URL; falls back to NODE_RPC_URL when unset.",
+      "required": false,
+      "private": false
+    },
+    {
+      "key": "CHAIN_ID",
+      "description": "Chain id segment used when addressing the explorer (…/<CHAIN_ID>/transactions). Public identifier.",
+      "required": false,
+      "private": false,
+      "default": "usernode"
+    },
+    {
       "key": "NODE_RPC_URL",
-      "description": "Base URL of the Usernode node the indexer polls for on-chain transactions. Platform-managed in-network; optional for standalone deploys (the indexer no-ops when unset).",
+      "description": "Base URL of the Usernode node the indexer polls for on-chain transactions. FALLBACK read source, used only when EXPLORER_API_URL is unset. Platform-managed in-network; optional for standalone deploys (the indexer no-ops when unset).",
       "required": false,
       "private": false
     },
@@ -134,6 +147,11 @@
       "name": "Public user profile page loads without error",
       "path": "/#/user/ut1stagingdemo00000000000000000000000000",
       "expectText": "Activity"
+    },
+    {
+      "name": "Confirming-on-chain indicator shows for a pending submission",
+      "path": "/?demo=1#/dashboard",
+      "expectText": "Confirming on-chain"
     }
   ]
 }
