@@ -1955,6 +1955,21 @@
   async function boot() {
     App.cfg = await api('/__quickcount/config');
     App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
+    // Point the hosted bridge's transaction reads/polls at our auth-exempt
+    // /explorer-api proxy. The bridge's nativeGetTransactions does
+    // `fetch(window.usernode.transactionsBaseUrl + "/transactions", …)`, and the
+    // server exposes POST <explorerApiBase>/<chainId>/transactions (in
+    // PUBLIC_PREFIXES) — so the base is "<explorerApiBase>/<chainId>". Setting
+    // this BEFORE any wallet connect / send means the bridge never hits its
+    // "transactionsBaseUrl not configured" guard when it reads or polls for a
+    // transaction. (In local-dev the bridge uses the mock path regardless, so we
+    // skip it there.) See PUBLIC_PREFIXES + the /explorer-api proxy in server.js.
+    if (!App.cfg.localDev) {
+      window.usernode = window.usernode || {};
+      const exBase = (App.cfg.explorerApiBase || '/explorer-api').replace(/\/+$/, '');
+      const chain = App.cfg.chainId || 'usernode';
+      window.usernode.transactionsBaseUrl = exBase + '/' + encodeURIComponent(chain);
+    }
     // Fault-injection hook — local-dev / staging ONLY — so reviewers can
     // exercise the resilience paths (?bridgefault=timeout|notready|reject).
     // A strict no-op in production.
