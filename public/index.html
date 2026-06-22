@@ -64,6 +64,7 @@
   <script src="/usernode-loading.js"></script>
   <script src="/usernode-usernames.js"></script>
   <script src="/usernode-bridge.js"></script>
+  <script src="/csv-export.js"></script>
   <!-- App-side bridge resilience: classifier (pure) then retry/notice layer.
        Must load AFTER the hosted bridge tag above. -->
   <script src="/usernode-bridge-classify.js"></script>
@@ -967,22 +968,16 @@
     document.getElementById('exp-csv').onclick = () => exportCsv(d);
     document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
   }
+  // One row per candidate (Rank, Candidate, Votes, Share %), sorted by votes
+  // descending. The CSV string itself — including escaping and the UTF-8 BOM —
+  // is built by the pure QuickCountCsv.candidateResultsCsv() (see
+  // /public/csv-export.js); here we only pick the filename and trigger the
+  // download. The method label is English (see METHOD_LABELS) and goes in the
+  // filename so exports taken under different methods don't collide.
   function exportCsv(d) {
-    const head = ['Station', 'Label', 'Reporting observer', 'Updated', ...d.candidates.map((c) => c.name), 'Total', 'Invalid', 'Status'];
-    const lines = [head];
-    for (const s of d.stations) {
-      lines.push([
-        s.name, s.label || '', s.reported ? nm(s.observer) : '', s.at || '',
-        ...d.candidates.map((c) => s.reported ? (s.votes[c.cid] || 0) : ''),
-        s.tot == null ? '' : s.tot, s.inv == null ? '' : s.inv,
-        s.invalid ? 'invalidated' : s.disputed ? 'disputed' : s.needsReview ? 'review' : s.reported ? 'ok' : 'awaiting',
-      ]);
-    }
-    lines.push([]);
-    lines.push(['TALLY (' + d.method + ')']);
-    for (const c of d.candidates) lines.push([c.name, d.tally[c.cid] || 0]);
-    const csv = lines.map((r) => r.map((x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(',')).join('\n');
-    download((d.election.name || 'election') + '.csv', csv, 'text/csv');
+    const label = METHOD_LABELS[d.method] || d.method;
+    const csv = QuickCountCsv.candidateResultsCsv(d);
+    download((d.election.name || 'election') + ' - results (' + label + ').csv', csv, 'text/csv;charset=utf-8');
   }
 
   // ───────────────────────── Elections list ─────────────────────────

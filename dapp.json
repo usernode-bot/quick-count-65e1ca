@@ -52,6 +52,11 @@
       "expectText": "Staging demo"
     },
     {
+      "name": "Results screen shows the Export CSV button",
+      "path": "/#/dashboard",
+      "expectSelector": "#exp-csv"
+    },
+    {
       "name": "Elections list renders",
       "path": "/#/elections",
       "expectText": "Elections"
