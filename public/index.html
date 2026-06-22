@@ -80,14 +80,14 @@
   <header class="sticky top-0 z-20 bg-white/90 dark:bg-slate-950/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
       <h1 class="text-lg font-bold tracking-tight">Quick&nbsp;Count</h1>
-      <span id="staging-badge" class="hidden badge bg-amber-500/20 text-amber-300">demo data</span>
+      <span id="staging-badge" class="hidden badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
-        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 outline-none"></select>
+        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none"></select>
         <div id="wallet-wrap" class="relative">
-          <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 font-medium">Connect wallet</button>
-          <div id="wallet-menu" class="hidden absolute end-0 mt-2 w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-30 overflow-hidden text-sm"></div>
+          <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium">Connect wallet</button>
+          <div id="wallet-menu" class="hidden absolute end-0 mt-2 w-52 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xl z-30 overflow-hidden text-sm"></div>
         </div>
       </div>
     </div>
@@ -164,6 +164,7 @@
       notice_wallet_unreachable: "Couldn't reach the wallet service. Your entries were kept.", notice_action_failed: "That didn't go through. Your entries were kept.", notice_connecting: 'Connecting to your wallet…', action_try_again: 'Try again', partial_candidates: 'Election published; {done} of {total} candidates added.', partial_stations: '{done} of {total} stations imported.', partial_generic: '{done} of {total} steps completed.',
       loading_submitting: 'Submitting result…', loading_adding_station: 'Adding station…', loading_authorizing: 'Authorizing observer…', loading_filing: 'Filing dispute…', loading_resolving: 'Resolving…', loading_registering: 'Registering & paying fee…', loading_paying: 'Paying fee…', loading_waiving: 'Waiving fee…', loading_importing: 'Importing station',
       loading_creating_election: 'Creating election…', loading_adding_candidate: 'Adding candidate {i}/{n}…', loading_importing_station: 'Importing station {i}/{n}…',
+      loading_confirming: 'Confirming on-chain…', confirming_onchain: 'Confirming on-chain…', confirming_generic: 'Confirming submission', pending_demo_label: 'Staging demo — pending submission', notice_confirm_timeout: 'Submitted — still confirming on the network. It will appear once the chain includes it.',
       timeago_s: '{n}s ago', timeago_m: '{n}m ago', timeago_h: '{n}h ago', timeago_d: '{n}d ago',
       station_awaiting: 'Awaiting result', station_col_name: 'Station', station_col_updated: 'Updated', station_badge_invalidated: 'invalidated', station_badge_disputed: 'disputed', station_badge_review: 'review', station_badge_reports: '{n} reports',
       margin_needs_review: '⚠ Needs review', margin_stable_lead: '✓ Stable lead', margin_lead_pct: 'lead margin {lead}%', margin_uncertainty: 'uncertainty ±{pct}%', margin_disagreement_note: 'disagreements or disputes could affect the outcome.',
@@ -332,6 +333,7 @@
       toast_election_published: 'Elección publicada ✓', toast_submit_result: 'Resultado enviado ✓', toast_station_added: 'Mesa añadida ✓', toast_observer_authorized: 'Observador autorizado ✓', toast_dispute_filed: 'Disputa presentada ✓', toast_dispute_upheld: 'Disputa aceptada ✓', toast_dispute_rejected: 'Disputa rechazada ✓', toast_org_registered: 'Organización registrada ✓', toast_fee_paid: 'Cuota pagada ✓', toast_fee_waived: 'Cuota eximida ✓', toast_failed: 'Error:', toast_wallet_unavailable: 'Puente de billetera no disponible — ábrelo dentro de Usernode.', toast_no_wallet: 'No hay dirección de billetera vinculada.', toast_add_candidate: 'Añade un nombre y al menos un candidato.', toast_nothing_to_import: 'Nada para importar', toast_enter_reason: 'Introduce un motivo', toast_enter_org_name: 'Introduce el nombre de la organización', toast_enter_station_name: 'Introduce el nombre de la mesa', toast_enter_observer_addr: 'Introduce la dirección del observador',
       loading_submitting: 'Enviando resultado…', loading_adding_station: 'Añadiendo mesa…', loading_authorizing: 'Autorizando observador…', loading_filing: 'Presentando disputa…', loading_resolving: 'Resolviendo…', loading_registering: 'Registrando y pagando cuota…', loading_paying: 'Pagando cuota…', loading_waiving: 'Eximiendo cuota…', loading_importing: 'Importando mesa',
       loading_creating_election: 'Creando elección…', loading_adding_candidate: 'Añadiendo candidato {i}/{n}…', loading_importing_station: 'Importando mesa {i}/{n}…',
+      loading_confirming: 'Confirmando en la cadena…', confirming_onchain: 'Confirmando en la cadena…', confirming_generic: 'Confirmando envío', pending_demo_label: 'Demo de staging — envío pendiente', notice_confirm_timeout: 'Enviado — aún confirmando en la red. Aparecerá cuando la cadena lo incluya.',
       timeago_s: 'hace {n}s', timeago_m: 'hace {n}min', timeago_h: 'hace {n}h', timeago_d: 'hace {n}d',
       station_awaiting: 'Esperando resultado', station_col_name: 'Mesa', station_col_updated: 'Actualizado', station_badge_invalidated: 'invalidada', station_badge_disputed: 'disputada', station_badge_review: 'revisión', station_badge_reports: '{n} informes',
       margin_needs_review: '⚠ Requiere revisión', margin_stable_lead: '✓ Ventaja estable', margin_lead_pct: 'ventaja {lead}%', margin_uncertainty: 'incertidumbre ±{pct}%', margin_disagreement_note: 'los desacuerdos o disputas podrían afectar el resultado.',
@@ -500,6 +502,7 @@
       toast_election_published: 'Élection publiée ✓', toast_submit_result: 'Résultat soumis ✓', toast_station_added: 'Bureau ajouté ✓', toast_observer_authorized: 'Observateur autorisé ✓', toast_dispute_filed: 'Contestation déposée ✓', toast_dispute_upheld: 'Contestation acceptée ✓', toast_dispute_rejected: 'Contestation rejetée ✓', toast_org_registered: 'Organisation enregistrée ✓', toast_fee_paid: 'Cotisation payée ✓', toast_fee_waived: 'Cotisation dispensée ✓', toast_failed: 'Échec :', toast_wallet_unavailable: 'Pont de portefeuille indisponible — ouvrez dans Usernode.', toast_no_wallet: 'Aucune adresse de portefeuille liée.', toast_add_candidate: 'Ajoutez un nom et au moins un candidat.', toast_nothing_to_import: 'Rien à importer', toast_enter_reason: 'Saisissez une raison', toast_enter_org_name: "Saisissez le nom de l'organisation", toast_enter_station_name: 'Saisissez le nom du bureau', toast_enter_observer_addr: "Saisissez l'adresse de l'observateur",
       loading_submitting: 'Envoi du résultat…', loading_adding_station: 'Ajout du bureau…', loading_authorizing: "Autorisation de l'observateur…", loading_filing: 'Dépôt de la contestation…', loading_resolving: 'Résolution en cours…', loading_registering: "Inscription et paiement de la cotisation…", loading_paying: 'Paiement de la cotisation…', loading_waiving: 'Dispense de cotisation…', loading_importing: 'Importation du bureau',
       loading_creating_election: "Création de l'élection…", loading_adding_candidate: 'Ajout du candidat {i}/{n}…', loading_importing_station: 'Importation du bureau {i}/{n}…',
+      loading_confirming: 'Confirmation sur la chaîne…', confirming_onchain: 'Confirmation sur la chaîne…', confirming_generic: "Confirmation de l'envoi", pending_demo_label: 'Démo de préproduction — envoi en attente', notice_confirm_timeout: "Envoyé — confirmation en cours sur le réseau. Apparaîtra une fois inclus dans la chaîne.",
       timeago_s: 'il y a {n}s', timeago_m: 'il y a {n}min', timeago_h: 'il y a {n}h', timeago_d: 'il y a {n}j',
       station_awaiting: 'En attente du résultat', station_col_name: 'Bureau', station_col_updated: 'Mis à jour', station_badge_invalidated: 'invalidé', station_badge_disputed: 'contesté', station_badge_review: 'révision', station_badge_reports: '{n} rapports',
       margin_needs_review: '⚠ À revoir', margin_stable_lead: '✓ Avance stable', margin_lead_pct: 'marge {lead}%', margin_uncertainty: 'incertitude ±{pct}%', margin_disagreement_note: 'des désaccords ou contestations pourraient affecter le résultat.',
@@ -736,6 +739,101 @@
     });
   }
 
+  // ── On-chain confirmation + optimistic "pending" indicator ──────────────────
+  // Tracks transactions broadcast but not yet seen on the ledger, so the UI shows
+  // a muted "Confirming on-chain…" pill until they land. Purely client-side and
+  // ephemeral — the indexer remains the source of truth.
+  App.pending = App.pending || [];
+  let _pendingSeq = 0;
+  function addPending(label) {
+    const id = 'p' + (++_pendingSeq);
+    App.pending.push({ id: id, label: label || t('confirming_generic') });
+    renderPending();
+    return id;
+  }
+  function removePending(id) {
+    App.pending = App.pending.filter((p) => p.id !== id);
+    renderPending();
+  }
+  function renderPending() {
+    let el = document.getElementById('qc-pending');
+    if (!App.pending.length) { if (el) el.style.display = 'none'; return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'qc-pending';
+      el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:0.75rem;z-index:55;display:flex;'
+        + 'align-items:center;gap:.5rem;padding:.45rem .8rem;border-radius:999px;font-family:system-ui;'
+        + 'font-size:.8rem;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.18)';
+      const dot = document.createElement('span');
+      dot.style.cssText = 'width:.6rem;height:.6rem;border-radius:50%;background:#f59e0b;animation:qcspin 1s linear infinite';
+      const msg = document.createElement('span'); msg.id = 'qc-pending-msg';
+      el.appendChild(dot); el.appendChild(msg);
+      document.body.appendChild(el);
+    }
+    const dark = document.documentElement.classList.contains('dark');
+    el.style.background = dark ? '#1e293b' : '#fff7ed';
+    el.style.color = dark ? '#fcd34d' : '#92400e';
+    el.style.border = '1px solid ' + (dark ? '#334155' : '#fed7aa');
+    const n = App.pending.length;
+    el.querySelector('#qc-pending-msg').textContent = t('confirming_onchain') + (n > 1 ? ' (' + n + ')' : '');
+    el.style.display = 'flex';
+  }
+
+  // Poll the public explorer proxy until `txId` appears on the ledger, or a
+  // timeout elapses. The hosted bridge resolves sendTransaction once the relay
+  // ACCEPTS the broadcast; confirmTx is the app-level "visible on-chain" gate
+  // that drives the immediate UI reflect. Resolves true on inclusion; throws a
+  // transient-tagged error on timeout. No live chain in local-dev / staging →
+  // auto-confirm so the pending→confirmed flow stays reviewable.
+  async function confirmTx(txId, opts) {
+    opts = opts || {};
+    if (!txId) return true;
+    if (App.cfg && (App.cfg.staging || App.cfg.localDev)) return true;
+    const base = ((App.cfg && App.cfg.explorerApiBase) || '/explorer-api').replace(/\/+$/, '');
+    const chain = (App.cfg && App.cfg.chainId) || 'usernode';
+    const url = base + '/' + encodeURIComponent(chain) + '/transactions';
+    const account = opts.account || App.wallet.address || '';
+    const recipient = opts.to || account;
+    const deadline = Date.now() + (opts.timeoutMs || 20000);
+    let attempt = 0;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account: account, recipient: recipient, limit: 200 }),
+        });
+        if (r.ok) {
+          const data = await r.json().catch(() => null);
+          const list = Array.isArray(data) ? data : ((data && (data.transactions || data.txs || data.results)) || []);
+          if (txInList(list, txId)) return true;
+        }
+      } catch (_) { /* transient — keep polling until the deadline */ }
+      const delay = (window.QCBridgeClassify && window.QCBridgeClassify.backoffDelay)
+        ? window.QCBridgeClassify.backoffDelay(attempt++, Math.random) : 800;
+      await new Promise((res) => setTimeout(res, delay));
+    }
+    const e = new Error('Awaiting confirmation timed out'); e.qcKind = 'transient';
+    throw e;
+  }
+  // True when any raw tx in `list` carries the given id (any field-name variant).
+  // Mirrors lib/confirm.js matchTxInList (kept in sync, no bundler in the browser).
+  function txInList(list, txId) {
+    if (!Array.isArray(list) || !txId) return false;
+    for (const raw of list) {
+      const id = (window.QCBridge && window.QCBridge.extractTxId) ? window.QCBridge.extractTxId(raw) : null;
+      if (id && id === txId) return true;
+    }
+    return false;
+  }
+
+  // Ask the server to ingest from chain right now, then re-render — so a freshly
+  // confirmed action shows without waiting for the background poll interval.
+  async function triggerRefresh() {
+    try { await api('/__quickcount/refresh'); } catch (_) { /* best-effort */ }
+    await refresh();
+  }
+
   // Run a sequence of transactions, stopping at the first failure and reporting
   // partial progress. On Try-again it RESUMES from the failed step (carrying the
   // results of completed steps) rather than restarting — so we never re-submit a
@@ -749,11 +847,13 @@
       const spec = steps[i].build(results);
       const lbl = typeof steps[i].loading === 'function' ? steps[i].loading(i, steps.length) : steps[i].loading;
       QCLoading.show(lbl);
+      let r;
       try {
-        const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+        r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
         if (spec.require && !r) throw new Error(spec.require);
-        results[i] = r;
       } catch (e) {
+        // SEND failed (or returned no id). Safe to resume by RE-SENDING this
+        // step — classify guards non-idempotent ops against an ambiguous resend.
         const done = i; // count of steps that completed before this one
         handleTxFailure(e, {
           partial: (done > 0 && opts.partial) ? opts.partial(done, steps.length) : null,
@@ -761,9 +861,46 @@
         });
         return;
       }
+      results[i] = r;
+      // The transaction was broadcast — now wait for the chain to include it.
+      if (r) {
+        const pid = addPending(typeof lbl === 'string' ? lbl : null);
+        QCLoading.show(t('loading_confirming'));
+        try {
+          await confirmTx(r, { to: spec.to });
+        } catch (e) {
+          removePending(pid);
+          // Confirmation timed out. The tx is ALREADY broadcast, so we must NOT
+          // re-send — Try-again RE-CHECKS the ledger for this same id and, on
+          // success, resumes with the remaining (un-sent) steps.
+          handleTxFailure(e, {
+            partial: t('notice_confirm_timeout'),
+            onRetry: () => resumeConfirm(steps, opts, i, results),
+          });
+          return;
+        }
+        removePending(pid);
+      }
     }
     QCLoading.hide();
+    // Reflect the confirmed change immediately, then run the success callback.
+    await triggerRefresh();
     if (opts.success) opts.success(results);
+  }
+
+  // Re-check the ledger for an already-broadcast step (no resend), then continue
+  // with the steps that never sent. Used by the confirmation-timeout Try-again.
+  function resumeConfirm(steps, opts, i, results) {
+    QCLoading.show(t('loading_confirming'));
+    return confirmTx(results[i]).then(() => {
+      return runTxSteps(steps, { _from: i + 1, _results: results, partial: opts.partial, success: opts.success });
+    }).catch((e) => {
+      QCLoading.hide();
+      handleTxFailure(e, {
+        partial: t('notice_confirm_timeout'),
+        onRetry: () => resumeConfirm(steps, opts, i, results),
+      });
+    });
   }
 
   // Single-transaction convenience wrapper over runTxSteps.
@@ -847,12 +984,12 @@
       wb.textContent = walletLabel();
       wb.title = App.wallet.address;
       menu.innerHTML =
-        `<div class="px-3 py-2 border-b border-slate-800">
+        `<div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
            <div class="text-[0.65rem] uppercase tracking-wide text-slate-500">${esc(t('menu_connected'))}</div>
-           <div class="font-mono text-xs text-slate-300 truncate" title="${esc(App.wallet.address)}">${esc(shortAddr(App.wallet.address))}</div>
+           <div class="font-mono text-xs text-slate-700 dark:text-slate-300 truncate" title="${esc(App.wallet.address)}">${esc(shortAddr(App.wallet.address))}</div>
          </div>
-         <a href="#/profile" class="wallet-menu-item block px-3 py-2 hover:bg-slate-800">${esc(t('menu_profile'))}</a>
-         <a href="#/settings" class="wallet-menu-item block px-3 py-2 hover:bg-slate-800">${esc(t('menu_settings'))}</a>`;
+         <a href="#/profile" class="wallet-menu-item block px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800">${esc(t('menu_profile'))}</a>
+         <a href="#/settings" class="wallet-menu-item block px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800">${esc(t('menu_settings'))}</a>`;
       menu.classList.toggle('hidden', !App.menuOpen);
     } else {
       wb.textContent = t('connect_wallet');
@@ -896,11 +1033,11 @@
   function electionPicker() {
     const els = (App.state && App.state.elections) || [];
     if (!els.length) return `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('elections_none_published')}</p>`;
-    return `<div class="flex flex-wrap items-center gap-2 mb-4">
-      <select id="el-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
+    return `<div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 mb-4">
+      <select id="el-picker" class="w-full sm:w-auto px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
         ${els.map((e) => `<option value="${e.eid}" ${e.eid === App.eid ? 'selected' : ''}>${esc(e.name)}${e.orgActive ? '' : ' ' + t('elections_pending_suffix')}</option>`).join('')}
       </select>
-      <select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
+      <select id="method-picker" class="w-full sm:w-auto px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
         ${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}
       </select>
     </div>`;
@@ -922,30 +1059,30 @@
         return `<div class="mb-3">
           <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
           <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
-          <div class="h-3 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
+          <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
         </div>`;
       }).join('');
   }
   function stationTable(d) {
-    const head = d.candidates.map((c) => `<th class="py-2 px-2 text-right font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
+    const head = d.candidates.map((c) => `<th class="py-3 px-2 text-right font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
     const rows = d.stations.map((s) => {
       const badges = [];
-      if (s.invalid) badges.push(`<span class="badge bg-rose-500/20 text-rose-300">${t('station_badge_invalidated')}</span>`);
-      else if (s.disputed) badges.push(`<span class="badge bg-amber-500/20 text-amber-300">${t('station_badge_disputed')}</span>`);
-      if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-500/20 text-orange-300">${t('station_badge_review')}</span>`);
+      if (s.invalid) badges.push(`<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>`);
+      else if (s.disputed) badges.push(`<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('station_badge_disputed')}</span>`);
+      if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">${t('station_badge_review')}</span>`);
       if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
-      const label = `<td class="py-2 pr-2"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
-      if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-2 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
-      const cells = d.candidates.map((c) => `<td class="py-2 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
-      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-2 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap">${timeAgo(s.at)}</td></tr>`;
+      const label = `<td class="py-3 pr-2 sticky left-0 z-10 bg-white dark:bg-slate-950"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
+      if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
+      const cells = d.candidates.map((c) => `<td class="py-3 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
+      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-3 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap hidden sm:table-cell">${timeAgo(s.at)}</td></tr>`;
     }).join('');
-    return `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[480px]">
-      <thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-slate-500 dark:text-slate-400">${t('station_col_name')}</th>${head}<th class="py-2 pl-2 text-right font-medium text-slate-500 dark:text-slate-400">${t('station_col_updated')}</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>`;
+    return `<div class="relative"><div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead><tr class="text-left"><th class="py-3 pr-2 font-medium text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-950">${t('station_col_name')}</th>${head}<th class="py-3 pl-2 text-right font-medium text-slate-500 dark:text-slate-400 hidden sm:table-cell">${t('station_col_updated')}</th></tr></thead>
+      <tbody>${rows}</tbody></table></div><div class="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white dark:from-slate-950 pointer-events-none sm:hidden"></div></div>`;
   }
   function marginBanner(d) {
     const m = d.margin;
-    const cls = m.needsReview ? 'bg-orange-500/10 border-orange-500/40 text-orange-200' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200';
+    const cls = m.needsReview ? 'bg-orange-500/10 border-orange-500/40 text-orange-700 dark:text-orange-200' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-200';
     return `<div class="border ${cls} rounded-lg px-3 py-2 text-sm mb-4">
       <span class="font-semibold">${m.needsReview ? t('margin_needs_review') : t('margin_stable_lead')}</span>
       · ${t('margin_lead_pct').replace('{lead}', m.leadMarginPct)} · ${t('margin_uncertainty').replace('{pct}', m.uncertaintyPct)}
@@ -963,8 +1100,8 @@
       `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
         <h2 class="text-lg font-semibold">${esc(d.election.name)}</h2>
         <div class="flex gap-2">
-          <button id="exp-csv" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_csv')}</button>
-          <button id="exp-json" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_json')}</button>
+          <button id="exp-csv" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_csv')}</button>
+          <button id="exp-json" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_json')}</button>
         </div>
       </div>
       <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')} · ${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)} · ${totalVotes.toLocaleString()} ${t('dashboard_votes')} · method: ${t('method_' + d.method) || METHOD_LABELS[d.method]}</p>
@@ -973,7 +1110,7 @@
       <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('dashboard_by_station')}</h3>
       ${stationTable(d)}
       <p class="mt-4 text-xs text-slate-700 dark:text-slate-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
-      <p class="mt-3 text-xs"><a class="text-indigo-400 hover:underline" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a></p>`;
+      <a class="mt-3 inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>`;
     document.getElementById('exp-csv').onclick = () => exportCsv(d);
     document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
   }
@@ -997,14 +1134,14 @@
       + (canCreate ? `<button id="new-el" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('elections_new')}</button>` : '')
       + '</div>';
     if (!App.role.org) html += `<p class="text-sm text-slate-600 dark:text-slate-500 mb-4">${t('elections_connect_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
-    else if (!App.role.org.active) html += `<p class="text-sm text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
+    else if (!App.role.org.active) html += `<p class="text-sm text-amber-600 dark:text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
 
     html += '<div id="new-el-form"></div>';
     html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => `
       <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold">${esc(e.name)}</h3>
-          ${e.orgActive ? '' : `<span class="badge bg-amber-500/20 text-amber-300">${t('badge_pending')}</span>`}
+          ${e.orgActive ? '' : `<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('badge_pending')}</span>`}
         </div>
         <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(e.orgName || '—')}</p>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
@@ -1253,7 +1390,7 @@
     if (myOrg) {
       html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><h3 class="font-semibold">${esc(myOrg.name)}</h3>
-        <span class="badge ${myOrg.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${myOrg.active ? t('orgs_active_badge') : t('orgs_pending_badge')}</span></div>
+        <span class="badge ${myOrg.active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'}">${myOrg.active ? t('orgs_active_badge') : t('orgs_pending_badge')}</span></div>
         <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(myOrg.jur || '')} · ${esc(myOrg.addr)}</p>
         ${myOrg.active ? `<p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${t('orgs_manage_elections').replace('Elections', '<a href="#/elections" class="text-indigo-400 hover:underline">' + t('tab_elections') + '</a>')}</p>`
           : `<button id="pay-fee" class="mt-3 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">${t('orgs_pay_fee')} (${App.cfg.orgFee})</button>`}
@@ -1265,7 +1402,7 @@
         <input id="org-name" placeholder="${t('orgs_name_placeholder')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
         <input id="org-jur" placeholder="${t('orgs_jur_placeholder')}" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
         <button id="org-reg" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">${t('orgs_register_button')}</button>
-        ${App.wallet.connected ? '' : `<p class="text-xs text-amber-300 mt-2">${t('orgs_connect_first')}</p>`}
+        ${App.wallet.connected ? '' : `<p class="text-xs text-amber-600 dark:text-amber-300 mt-2">${t('orgs_connect_first')}</p>`}
       </div>`;
     }
     const active = (App.state.elections || []);
@@ -1308,7 +1445,7 @@
     const gallery = d.evidence.length ? d.evidence.map((e) => `
       <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
-        ${e.invalid ? `<span class="badge bg-rose-500/20 text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
+        ${e.invalid ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
         <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
         <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
         <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
@@ -1349,9 +1486,9 @@
     const body = document.getElementById('dsp-body');
     if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`; return; }
     const stName = (txId) => { const s = d.stations.find((x) => x.resultTx === txId); return s ? s.name : txId.slice(0, 10) + '…'; };
-    const statusBadge = (s) => s === 'upheld' ? `<span class="badge bg-rose-500/20 text-rose-300">${t('disputes_status_upheld')}</span>`
+    const statusBadge = (s) => s === 'upheld' ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('disputes_status_upheld')}</span>`
       : s === 'rejected' ? `<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('disputes_status_rejected')}</span>`
-      : `<span class="badge bg-amber-500/20 text-amber-300">${t('disputes_status_open')}</span>`;
+      : `<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('disputes_status_open')}</span>`;
     const rows = d.disputes.length ? d.disputes.map((x) => `
       <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stName(x.target))}</span>${statusBadge(x.status)}</div>
@@ -1468,9 +1605,9 @@
       <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('admin_all_orgs')}</h3>
       <div class="space-y-2">${data.orgs.map((o) => `
         <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between gap-2">
-          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-500/20 text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
+          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
           <div class="text-xs text-slate-600 dark:text-slate-500 font-mono">${esc(o.addr)} · ${t('admin_paid').replace('{amount}', o.feeAmount)}</div></div>
-          ${o.active ? `<span class="badge bg-emerald-500/20 text-emerald-300">${t('orgs_active_badge')}</span>`
+          ${o.active ? `<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('orgs_active_badge')}</span>`
             : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('admin_waive_fee')}</button>`}
         </div>`).join('')}</div>`;
     v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
@@ -1483,7 +1620,7 @@
   // ───────────────────────── Profile & Settings ─────────────────────────
   function langSelect(id) {
     const opts = LANGS.map((l) => `<option value="${l}" ${l === App.lang ? 'selected' : ''}>${esc(LANG_NAMES[l])}</option>`).join('');
-    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm">${opts}</select>`;
+    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">${opts}</select>`;
   }
   function wireLangSelect(id) {
     const el = document.getElementById(id);
@@ -1529,46 +1666,46 @@
 
         <div class="space-y-4">
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_username'))} <span class="text-slate-600">· ${esc(t('hint_username'))}</span></label>
-            <div class="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm ${username ? '' : 'text-slate-500'}">${esc(username || t('not_linked'))}</div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_username'))} <span class="text-slate-500">· ${esc(t('hint_username'))}</span></label>
+            <div class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm ${username ? '' : 'text-slate-500'}">${esc(username || t('not_linked'))}</div>
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_wallet'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_wallet'))}</label>
             <div class="flex items-center gap-2">
-              <div class="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono break-all ${addr ? '' : 'text-slate-500'}">${esc(addr || t('not_linked'))}</div>
-              ${addr ? `<button id="copy-addr" class="text-xs px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">${esc(t('action_copy'))}</button>` : ''}
+              <div class="flex-1 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-xs font-mono break-all ${addr ? '' : 'text-slate-500'}">${esc(addr || t('not_linked'))}</div>
+              ${addr ? `<button id="copy-addr" class="text-xs px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 whitespace-nowrap">${esc(t('action_copy'))}</button>` : ''}
             </div>
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_display_name'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_display_name'))}</label>
             ${linked ? `
             <div class="flex items-center gap-2">
-              <input id="dn-input" maxlength="20" value="${esc(currentName)}" class="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm" />
+              <input id="dn-input" maxlength="20" value="${esc(currentName)}" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm" />
               <button id="dn-save" class="text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed">${esc(t('action_save'))}</button>
             </div>
             <p id="dn-err" class="hidden mt-1 text-xs text-rose-400"></p>
             <p class="mt-1 text-xs text-slate-500">${esc(t('hint_display_name'))}</p>
-            ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
+            ` : `<p class="text-xs text-amber-600 dark:text-amber-300">${esc(t('no_wallet_note'))}</p>`}
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_bio'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_bio'))}</label>
             ${linked ? `
             <textarea id="bio-input" maxlength="280" rows="3"
-              class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm resize-none"
+              class="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm resize-none"
               placeholder="${esc(t('hint_bio'))}">${esc(currentBio)}</textarea>
             <div class="flex items-center justify-between mt-1">
               <p id="bio-err" class="hidden text-xs text-rose-400"></p>
               <p id="bio-count" class="text-xs text-slate-500 ml-auto">${currentBio.length}/280</p>
             </div>
             <button id="bio-save" class="mt-1 text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${esc(t('action_save'))}</button>
-            ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
+            ` : `<p class="text-xs text-amber-600 dark:text-amber-300">${esc(t('no_wallet_note'))}</p>`}
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_language'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_language'))}</label>
             ${langSelect('profile-lang')}
           </div>
         </div>
@@ -1654,7 +1791,7 @@
             const items = (data && data.history) || [];
             histArea.innerHTML = `<h3 class="text-sm font-semibold mb-2">${esc(t('profile_history_heading'))}</h3>` +
               (items.length ? `<ul class="space-y-2">${items.map((item) =>
-                `<li class="text-sm text-slate-400"><span class="text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
+                `<li class="text-sm text-slate-400"><span class="text-slate-800 dark:text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
               ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`);
           }
         } catch (_) {}
@@ -1689,11 +1826,11 @@
             ${data.username ? `<div class="text-xs text-slate-500">@${esc(data.username)}</div>` : ''}
           </div>
         </div>
-        ${data.bio ? `<p class="text-sm text-slate-300 mb-4">${esc(data.bio)}</p>` : ''}
+        ${data.bio ? `<p class="text-sm text-slate-700 dark:text-slate-300 mb-4">${esc(data.bio)}</p>` : ''}
         ${statsHtml(data)}
         <h3 class="text-sm font-semibold mb-2 mt-4">${esc(t('profile_history_heading'))}</h3>
         ${items.length ? `<ul class="space-y-2">${items.map((item) =>
-          `<li class="text-sm text-slate-400"><span class="text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
+          `<li class="text-sm text-slate-400"><span class="text-slate-800 dark:text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
         ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`}
       </div>`;
   }
@@ -1702,7 +1839,7 @@
     v.innerHTML = `
       <div class="max-w-xl">
         <h2 class="text-xl font-bold mb-5">${esc(t('title_settings'))}</h2>
-        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
+        <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
           <label class="block text-sm font-medium mb-1">${esc(t('label_language'))}</label>
           <p class="text-xs text-slate-500 mb-3">${esc(t('desc_language'))}</p>
           ${langSelect('settings-lang')}
@@ -1736,6 +1873,12 @@
     if (App.cfg.localDev || App.cfg.staging) {
       const fault = new URLSearchParams(location.search).get('bridgefault');
       if (fault && window.QCBridge) window.QCBridge.setFault(fault);
+    }
+    // Staging-only: a persistent "pending" row so the Confirming-on-chain
+    // indicator is reviewable without timing a real broadcast. Request-time,
+    // client-side only (no DB), and a strict no-op outside staging.
+    if (App.cfg.staging && new URLSearchParams(location.search).get('demo') === '1') {
+      addPending(t('pending_demo_label'));
     }
     if (App.cfg.localDev && !window.QCMock) {
       // Server is in local-dev but the mock wallet shim never loaded. Falling

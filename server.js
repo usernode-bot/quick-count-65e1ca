@@ -39,6 +39,15 @@ const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const IS_DEMO = LOCAL_DEV || IS_STAGING; // seed obviously-fake data so every screen renders
 const PORT = process.env.PORT || 3000;
 const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
+// Canonical chain read path: the public block explorer, addressed per-chain as
+// <EXPLORER_API_URL>/<CHAIN_ID>/transactions. NODE_RPC_URL is the standalone
+// fallback (used only when no explorer base is configured). The client polls
+// the SAME explorer through the relative, auth-exempt /explorer-api/ prefix.
+const EXPLORER_API_URL = process.env.EXPLORER_API_URL || '';
+const CHAIN_ID = process.env.CHAIN_ID || 'usernode';
+// Relative path the browser uses to reach the explorer proxy (auth-exempt via
+// PUBLIC_PREFIXES). The bridge polls <EXPLORER_API_BASE>/<chain>/transactions.
+const EXPLORER_API_BASE = '/explorer-api';
 const TREASURY_ADDR = process.env.TREASURY_ADDR || 'ut1treasuryquickcount00000000000000000000';
 const ORG_FEE = Number(process.env.ORG_FEE) || 100;
 
@@ -59,7 +68,7 @@ const pool = (Pool && process.env.DATABASE_URL)
   : null;
 
 const indexer = new QuickCountIndexer({ treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS });
-const source = makeSource({ localDev: LOCAL_DEV, nodeUrl: NODE_RPC_URL });
+const source = makeSource({ localDev: LOCAL_DEV, nodeUrl: NODE_RPC_URL, explorerUrl: EXPLORER_API_URL, chainId: CHAIN_ID });
 
 // In-memory transaction log (source for every rebuild) and dedupe set.
 const txLog = [];
@@ -89,6 +98,23 @@ function rebuild() {
   for (const org of indexer.orgs.values()) {
     if (!watched.has(org.addr)) watched.set(org.addr, null);
   }
+}
+
+// Full reconcile: drop the in-memory cache and re-ingest every watched address
+// from the chain, then replay. Because the read model is a deterministic replay
+// of the transaction log, the cache (in-memory txLog + the `chain_txs` table) is
+// disposable — this proves it: after a resync the state is identical to a cold
+// boot. `truncateDb` also clears the durable cache so it is rebuilt from chain.
+async function resyncFromChain({ truncateDb = false } = {}) {
+  if (truncateDb && pool) {
+    try { await pool.query('TRUNCATE chain_txs'); } catch (e) { console.error('truncate chain_txs failed:', e.message); }
+  }
+  txLog.length = 0;
+  seen.clear();
+  // Reset cursors but keep the discovered watch set so org wallets are re-read.
+  for (const addr of watched.keys()) watched.set(addr, null);
+  await pollOnce();
+  return { txs: txLog.length, orgs: indexer.orgs.size, elections: indexer.elections.size };
 }
 
 async function pollOnce() {
@@ -243,7 +269,19 @@ app.get('/__quickcount/config', (_req, res) => {
     localDev: LOCAL_DEV, staging: IS_STAGING, demo: IS_DEMO,
     treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
     methods: require('./lib/aggregate').METHODS, personas,
+    // Chain read config for the client confirmation poll. The browser builds
+    // <explorerApiBase>/<chainId>/transactions; both are auth-exempt.
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE,
   });
+});
+
+// Trigger an immediate chain ingest so a just-confirmed transaction reflects in
+// the read model without waiting for the next background poll. GET + under the
+// auth-exempt /__quickcount/ prefix so the client can call it right after a
+// confirmation; the work is a cheap read-only replay, already running on a timer.
+app.get('/__quickcount/refresh', async (_req, res) => {
+  try { await pollOnce(); res.json({ ok: true, txs: txLog.length }); }
+  catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
 // Has this wallet paid to unlock? Unlock is global per wallet and permanent.
@@ -263,6 +301,9 @@ app.get('/api/public/config', (_req, res) => {
       recipient: UNLOCK_RECIPIENT || null,
       price: UNLOCK_PRICE,
     },
+    // Chain read config so the public dashboard can confirm the unlock payment
+    // against the same explorer proxy the main app uses.
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE,
   });
 });
 
@@ -769,7 +810,10 @@ async function start() {
   await pollOnce();
   const interval = LOCAL_DEV ? 2000 : 4000;
   setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), interval);
-  app.listen(PORT, () => console.log(`Quick Count listening on :${PORT}` + (LOCAL_DEV ? ' (local-dev)' : '') + (IS_STAGING ? ' (staging)' : '')));
+  app.listen(PORT, () => console.log(
+    `Quick Count listening on :${PORT}` + (LOCAL_DEV ? ' (local-dev)' : '') + (IS_STAGING ? ' (staging)' : '') +
+    ` — chain source: ${source.backend}` + (source.endpoint ? ` (${source.endpoint})` : '')
+  ));
 }
 
 // Only auto-start when run directly (`node server.js`); stays importable from
@@ -778,4 +822,4 @@ if (require.main === module) {
   start().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { app, indexer, buildDemoTxs };
+module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source };
