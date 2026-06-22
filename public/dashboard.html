@@ -68,7 +68,7 @@
     <header class="flex items-center justify-between mb-4 flex-wrap gap-2">
       <div class="flex items-center gap-3">
         <h1 class="text-xl font-bold">Quick Count — Live</h1>
-        <span id="staging-badge" class="hidden text-xs font-medium px-2 py-1 rounded bg-amber-500/20 text-amber-300">staging</span>
+        <span id="staging-badge" class="hidden text-xs font-medium px-2 py-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">staging</span>
       </div>
       <div class="flex items-center gap-2">
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
@@ -360,6 +360,7 @@
         var isDark = document.documentElement.classList.toggle('dark');
         localStorage.setItem('qc-theme', isDark ? 'dark' : 'light');
         btn.textContent = isDark ? '☀️' : '🌙';
+        render();
       };
     })();
 

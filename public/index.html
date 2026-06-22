@@ -80,14 +80,14 @@
   <header class="sticky top-0 z-20 bg-white/90 dark:bg-slate-950/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
       <h1 class="text-lg font-bold tracking-tight">Quick&nbsp;Count</h1>
-      <span id="staging-badge" class="hidden badge bg-amber-500/20 text-amber-300">demo data</span>
+      <span id="staging-badge" class="hidden badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
-        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 outline-none"></select>
+        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none"></select>
         <div id="wallet-wrap" class="relative">
-          <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 font-medium">Connect wallet</button>
-          <div id="wallet-menu" class="hidden absolute end-0 mt-2 w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-30 overflow-hidden text-sm"></div>
+          <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium">Connect wallet</button>
+          <div id="wallet-menu" class="hidden absolute end-0 mt-2 w-52 rounded-xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xl z-30 overflow-hidden text-sm"></div>
         </div>
       </div>
     </div>
@@ -839,12 +839,12 @@
       wb.textContent = walletLabel();
       wb.title = App.wallet.address;
       menu.innerHTML =
-        `<div class="px-3 py-2 border-b border-slate-800">
+        `<div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800">
            <div class="text-[0.65rem] uppercase tracking-wide text-slate-500">${esc(t('menu_connected'))}</div>
-           <div class="font-mono text-xs text-slate-300 truncate" title="${esc(App.wallet.address)}">${esc(shortAddr(App.wallet.address))}</div>
+           <div class="font-mono text-xs text-slate-700 dark:text-slate-300 truncate" title="${esc(App.wallet.address)}">${esc(shortAddr(App.wallet.address))}</div>
          </div>
-         <a href="#/profile" class="wallet-menu-item block px-3 py-2 hover:bg-slate-800">${esc(t('menu_profile'))}</a>
-         <a href="#/settings" class="wallet-menu-item block px-3 py-2 hover:bg-slate-800">${esc(t('menu_settings'))}</a>`;
+         <a href="#/profile" class="wallet-menu-item block px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800">${esc(t('menu_profile'))}</a>
+         <a href="#/settings" class="wallet-menu-item block px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800">${esc(t('menu_settings'))}</a>`;
       menu.classList.toggle('hidden', !App.menuOpen);
     } else {
       wb.textContent = t('connect_wallet');
@@ -921,9 +921,9 @@
     const head = d.candidates.map((c) => `<th class="py-2 px-2 text-right font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
     const rows = d.stations.map((s) => {
       const badges = [];
-      if (s.invalid) badges.push(`<span class="badge bg-rose-500/20 text-rose-300">${t('station_badge_invalidated')}</span>`);
-      else if (s.disputed) badges.push(`<span class="badge bg-amber-500/20 text-amber-300">${t('station_badge_disputed')}</span>`);
-      if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-500/20 text-orange-300">${t('station_badge_review')}</span>`);
+      if (s.invalid) badges.push(`<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>`);
+      else if (s.disputed) badges.push(`<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('station_badge_disputed')}</span>`);
+      if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">${t('station_badge_review')}</span>`);
       if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
       const label = `<td class="py-2 pr-2"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
       if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-2 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
@@ -936,7 +936,7 @@
   }
   function marginBanner(d) {
     const m = d.margin;
-    const cls = m.needsReview ? 'bg-orange-500/10 border-orange-500/40 text-orange-200' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200';
+    const cls = m.needsReview ? 'bg-orange-500/10 border-orange-500/40 text-orange-700 dark:text-orange-200' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-200';
     return `<div class="border ${cls} rounded-lg px-3 py-2 text-sm mb-4">
       <span class="font-semibold">${m.needsReview ? t('margin_needs_review') : t('margin_stable_lead')}</span>
       · ${t('margin_lead_pct').replace('{lead}', m.leadMarginPct)} · ${t('margin_uncertainty').replace('{pct}', m.uncertaintyPct)}
@@ -988,14 +988,14 @@
       + (canCreate ? `<button id="new-el" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('elections_new')}</button>` : '')
       + '</div>';
     if (!App.role.org) html += `<p class="text-sm text-slate-600 dark:text-slate-500 mb-4">${t('elections_connect_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
-    else if (!App.role.org.active) html += `<p class="text-sm text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
+    else if (!App.role.org.active) html += `<p class="text-sm text-amber-600 dark:text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
 
     html += '<div id="new-el-form"></div>';
     html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => `
       <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold">${esc(e.name)}</h3>
-          ${e.orgActive ? '' : `<span class="badge bg-amber-500/20 text-amber-300">${t('badge_pending')}</span>`}
+          ${e.orgActive ? '' : `<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('badge_pending')}</span>`}
         </div>
         <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(e.orgName || '—')}</p>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
@@ -1244,7 +1244,7 @@
     if (myOrg) {
       html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><h3 class="font-semibold">${esc(myOrg.name)}</h3>
-        <span class="badge ${myOrg.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${myOrg.active ? t('orgs_active_badge') : t('orgs_pending_badge')}</span></div>
+        <span class="badge ${myOrg.active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'}">${myOrg.active ? t('orgs_active_badge') : t('orgs_pending_badge')}</span></div>
         <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(myOrg.jur || '')} · ${esc(myOrg.addr)}</p>
         ${myOrg.active ? `<p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${t('orgs_manage_elections').replace('Elections', '<a href="#/elections" class="text-indigo-400 hover:underline">' + t('tab_elections') + '</a>')}</p>`
           : `<button id="pay-fee" class="mt-3 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">${t('orgs_pay_fee')} (${App.cfg.orgFee})</button>`}
@@ -1256,7 +1256,7 @@
         <input id="org-name" placeholder="${t('orgs_name_placeholder')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
         <input id="org-jur" placeholder="${t('orgs_jur_placeholder')}" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
         <button id="org-reg" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">${t('orgs_register_button')}</button>
-        ${App.wallet.connected ? '' : `<p class="text-xs text-amber-300 mt-2">${t('orgs_connect_first')}</p>`}
+        ${App.wallet.connected ? '' : `<p class="text-xs text-amber-600 dark:text-amber-300 mt-2">${t('orgs_connect_first')}</p>`}
       </div>`;
     }
     const active = (App.state.elections || []);
@@ -1299,7 +1299,7 @@
     const gallery = d.evidence.length ? d.evidence.map((e) => `
       <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
-        ${e.invalid ? `<span class="badge bg-rose-500/20 text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
+        ${e.invalid ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
         <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
         <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
         <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
@@ -1340,9 +1340,9 @@
     const body = document.getElementById('dsp-body');
     if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`; return; }
     const stName = (txId) => { const s = d.stations.find((x) => x.resultTx === txId); return s ? s.name : txId.slice(0, 10) + '…'; };
-    const statusBadge = (s) => s === 'upheld' ? `<span class="badge bg-rose-500/20 text-rose-300">${t('disputes_status_upheld')}</span>`
+    const statusBadge = (s) => s === 'upheld' ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('disputes_status_upheld')}</span>`
       : s === 'rejected' ? `<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('disputes_status_rejected')}</span>`
-      : `<span class="badge bg-amber-500/20 text-amber-300">${t('disputes_status_open')}</span>`;
+      : `<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('disputes_status_open')}</span>`;
     const rows = d.disputes.length ? d.disputes.map((x) => `
       <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stName(x.target))}</span>${statusBadge(x.status)}</div>
@@ -1369,9 +1369,9 @@
       <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('admin_all_orgs')}</h3>
       <div class="space-y-2">${data.orgs.map((o) => `
         <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between gap-2">
-          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-500/20 text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
+          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
           <div class="text-xs text-slate-600 dark:text-slate-500 font-mono">${esc(o.addr)} · ${t('admin_paid').replace('{amount}', o.feeAmount)}</div></div>
-          ${o.active ? `<span class="badge bg-emerald-500/20 text-emerald-300">${t('orgs_active_badge')}</span>`
+          ${o.active ? `<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('orgs_active_badge')}</span>`
             : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('admin_waive_fee')}</button>`}
         </div>`).join('')}</div>`;
     v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
@@ -1384,7 +1384,7 @@
   // ───────────────────────── Profile & Settings ─────────────────────────
   function langSelect(id) {
     const opts = LANGS.map((l) => `<option value="${l}" ${l === App.lang ? 'selected' : ''}>${esc(LANG_NAMES[l])}</option>`).join('');
-    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm">${opts}</select>`;
+    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">${opts}</select>`;
   }
   function wireLangSelect(id) {
     const el = document.getElementById(id);
@@ -1430,46 +1430,46 @@
 
         <div class="space-y-4">
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_username'))} <span class="text-slate-600">· ${esc(t('hint_username'))}</span></label>
-            <div class="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm ${username ? '' : 'text-slate-500'}">${esc(username || t('not_linked'))}</div>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_username'))} <span class="text-slate-500">· ${esc(t('hint_username'))}</span></label>
+            <div class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm ${username ? '' : 'text-slate-500'}">${esc(username || t('not_linked'))}</div>
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_wallet'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_wallet'))}</label>
             <div class="flex items-center gap-2">
-              <div class="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono break-all ${addr ? '' : 'text-slate-500'}">${esc(addr || t('not_linked'))}</div>
-              ${addr ? `<button id="copy-addr" class="text-xs px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">${esc(t('action_copy'))}</button>` : ''}
+              <div class="flex-1 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-xs font-mono break-all ${addr ? '' : 'text-slate-500'}">${esc(addr || t('not_linked'))}</div>
+              ${addr ? `<button id="copy-addr" class="text-xs px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 whitespace-nowrap">${esc(t('action_copy'))}</button>` : ''}
             </div>
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_display_name'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_display_name'))}</label>
             ${linked ? `
             <div class="flex items-center gap-2">
-              <input id="dn-input" maxlength="20" value="${esc(currentName)}" class="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm" />
+              <input id="dn-input" maxlength="20" value="${esc(currentName)}" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm" />
               <button id="dn-save" class="text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed">${esc(t('action_save'))}</button>
             </div>
             <p id="dn-err" class="hidden mt-1 text-xs text-rose-400"></p>
             <p class="mt-1 text-xs text-slate-500">${esc(t('hint_display_name'))}</p>
-            ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
+            ` : `<p class="text-xs text-amber-600 dark:text-amber-300">${esc(t('no_wallet_note'))}</p>`}
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_bio'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_bio'))}</label>
             ${linked ? `
             <textarea id="bio-input" maxlength="280" rows="3"
-              class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm resize-none"
+              class="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm resize-none"
               placeholder="${esc(t('hint_bio'))}">${esc(currentBio)}</textarea>
             <div class="flex items-center justify-between mt-1">
               <p id="bio-err" class="hidden text-xs text-rose-400"></p>
               <p id="bio-count" class="text-xs text-slate-500 ml-auto">${currentBio.length}/280</p>
             </div>
             <button id="bio-save" class="mt-1 text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${esc(t('action_save'))}</button>
-            ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
+            ` : `<p class="text-xs text-amber-600 dark:text-amber-300">${esc(t('no_wallet_note'))}</p>`}
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_language'))}</label>
+            <label class="block text-xs text-slate-600 dark:text-slate-400 mb-1">${esc(t('label_language'))}</label>
             ${langSelect('profile-lang')}
           </div>
         </div>
@@ -1555,7 +1555,7 @@
             const items = (data && data.history) || [];
             histArea.innerHTML = `<h3 class="text-sm font-semibold mb-2">${esc(t('profile_history_heading'))}</h3>` +
               (items.length ? `<ul class="space-y-2">${items.map((item) =>
-                `<li class="text-sm text-slate-400"><span class="text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
+                `<li class="text-sm text-slate-400"><span class="text-slate-800 dark:text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
               ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`);
           }
         } catch (_) {}
@@ -1590,11 +1590,11 @@
             ${data.username ? `<div class="text-xs text-slate-500">@${esc(data.username)}</div>` : ''}
           </div>
         </div>
-        ${data.bio ? `<p class="text-sm text-slate-300 mb-4">${esc(data.bio)}</p>` : ''}
+        ${data.bio ? `<p class="text-sm text-slate-700 dark:text-slate-300 mb-4">${esc(data.bio)}</p>` : ''}
         ${statsHtml(data)}
         <h3 class="text-sm font-semibold mb-2 mt-4">${esc(t('profile_history_heading'))}</h3>
         ${items.length ? `<ul class="space-y-2">${items.map((item) =>
-          `<li class="text-sm text-slate-400"><span class="text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
+          `<li class="text-sm text-slate-400"><span class="text-slate-800 dark:text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
         ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`}
       </div>`;
   }
@@ -1603,7 +1603,7 @@
     v.innerHTML = `
       <div class="max-w-xl">
         <h2 class="text-xl font-bold mb-5">${esc(t('title_settings'))}</h2>
-        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
+        <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
           <label class="block text-sm font-medium mb-1">${esc(t('label_language'))}</label>
           <p class="text-xs text-slate-500 mb-3">${esc(t('desc_language'))}</p>
           ${langSelect('settings-lang')}
