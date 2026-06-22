@@ -56,9 +56,19 @@
   function classifyBridgeError(err) {
     var text = messageOf(err).toLowerCase();
     if (!text) return 'unknown';
-    if (anyMatch(text, TERMINAL)) return 'terminal';
-    if (anyMatch(text, AMBIGUOUS)) return 'ambiguous';
-    if (anyMatch(text, TRANSIENT)) return 'transient';
+    if (anyMatch(text, TERMINAL)) {
+      if (err && typeof err === 'object' && !err.qcCode) { try { err.qcCode = 'BRIDGE_REJECTED'; } catch (_) {} }
+      return 'terminal';
+    }
+    if (anyMatch(text, AMBIGUOUS)) {
+      if (err && typeof err === 'object' && !err.qcCode) { try { err.qcCode = 'BRIDGE_RELAY_TIMEOUT'; } catch (_) {} }
+      return 'ambiguous';
+    }
+    if (anyMatch(text, TRANSIENT)) {
+      if (err && typeof err === 'object' && !err.qcCode) { try { err.qcCode = 'BRIDGE_UNREACHABLE'; } catch (_) {} }
+      return 'transient';
+    }
+    if (err && typeof err === 'object' && !err.qcCode) { try { err.qcCode = 'BRIDGE_UNKNOWN'; } catch (_) {} }
     return 'unknown';
   }
 

@@ -84,3 +84,22 @@ test('backoff grows then caps at the last step, with bounded jitter', () => {
   assert.ok(lo < BACKOFF_MS[0] && hi > BACKOFF_MS[0]);
   assert.ok(lo >= Math.round(BACKOFF_MS[0] * 0.75) && hi <= Math.round(BACKOFF_MS[0] * 1.25));
 });
+
+// ── Error codes (new error tagging system) ────────────────────────────────
+test('error codes are assigned based on classification', () => {
+  const terminalErr = new Error('User rejected');
+  classifyBridgeError(terminalErr);
+  assert.equal(terminalErr.qcCode, 'BRIDGE_REJECTED');
+
+  const timeoutErr = new Error('Relay timed out');
+  classifyBridgeError(timeoutErr);
+  assert.equal(timeoutErr.qcCode, 'BRIDGE_RELAY_TIMEOUT');
+
+  const transientErr = new Error('Bridge not ready');
+  classifyBridgeError(transientErr);
+  assert.equal(transientErr.qcCode, 'BRIDGE_UNREACHABLE');
+
+  const unknownErr = new Error('Something weird');
+  classifyBridgeError(unknownErr);
+  assert.equal(unknownErr.qcCode, 'BRIDGE_UNKNOWN');
+});

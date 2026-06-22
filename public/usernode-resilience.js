@@ -73,13 +73,24 @@
       })();
     });
   }
-  // One ~6s polling window, then up to two extra backoff rounds before giving up.
+  // One ~10s polling window (extended from 6s), then up to two extra backoff rounds before giving up.
   function ensureReady() {
-    return pollReady(60).then(function (ok) {
-      if (ok) return true;
+    var startTime = Date.now();
+    var pollAttempts = 0;
+    return pollReady(100).then(function (ok) {
+      pollAttempts = Math.floor((Date.now() - startTime) / 100);
+      if (ok) {
+        console.log('[QCBridge] Ready after ' + pollAttempts + ' attempts (~' + Math.round((Date.now() - startTime) / 100) / 10 + 's)');
+        return true;
+      }
       var round = 0;
       function next() {
-        if (round >= 2) return false;
+        if (round >= 2) {
+          var err = new Error('Wallet bridge not ready after extended timeout');
+          err.qcCode = 'BRIDGE_INIT_TIMEOUT';
+          console.error('[QCBridge] BRIDGE_INIT_TIMEOUT after ' + (Date.now() - startTime) + 'ms, ' + pollAttempts + ' initial poll attempts');
+          return false;
+        }
         var attempt = round++;
         return sleep(backoff(attempt)).then(function () {
           return pollReady(20).then(function (r) { return r ? true : next(); });
@@ -88,10 +99,14 @@
       return next();
     });
   }
-  function notReadyError() { return tag(new Error('Wallet bridge not ready'), 'transient'); }
+  function notReadyError() {
+    var err = new Error('Wallet bridge not ready');
+    err.qcCode = 'BRIDGE_UNREACHABLE';
+    return tag(err, 'transient');
+  }
 
   // ── call(fn, opts): readiness + classified retry ────────────────────────────
-  // opts: { idempotent?: bool, attempts?: number, skipReady?: bool }
+  // opts: { idempotent?: bool, attempts?: number, skipReady?: bool, isSend?: bool }
   async function call(fn, opts) {
     opts = opts || {};
     var maxAttempts = opts.attempts || C.MAX_ATTEMPTS || 3;
@@ -102,17 +117,32 @@
         if (!ready) {
           lastErr = notReadyError();
           if (attempt < maxAttempts - 1) { await sleep(backoff(attempt)); continue; }
+          console.error('[QCBridge] All readiness attempts exhausted', lastErr);
           throw lastErr;
         }
       }
       try {
-        return await invoke(fn, opts.isSend);
+        var result = await invoke(fn, opts.isSend);
+        if (attempt > 0) console.log('[QCBridge] Success on attempt ' + (attempt + 1));
+        return result;
       } catch (err) {
         lastErr = err;
         var kind = classify(err);
         tag(err, kind);
-        if (!(C.isRetryable ? C.isRetryable(kind, opts) : false) || attempt >= maxAttempts - 1) throw err;
-        await sleep(backoff(attempt));
+        if (!err.qcCode) {
+          if (kind === 'ambiguous') err.qcCode = 'BRIDGE_RELAY_TIMEOUT';
+          else if (kind === 'transient') err.qcCode = 'BRIDGE_UNREACHABLE';
+          else if (kind === 'terminal') err.qcCode = 'BRIDGE_REJECTED';
+        }
+        console.log('[QCBridge] Attempt ' + (attempt + 1) + '/' + maxAttempts + ' failed: kind=' + kind + ', code=' + err.qcCode + ', msg=' + (err.message || ''));
+        var isRetryable = C.isRetryable ? C.isRetryable(kind, opts) : false;
+        if (!isRetryable || attempt >= maxAttempts - 1) {
+          console.error('[QCBridge] Non-retryable or exhausted: ' + err.qcCode, err);
+          throw err;
+        }
+        var delay = backoff(attempt);
+        console.log('[QCBridge] Retrying in ' + delay + 'ms...');
+        await sleep(delay);
       }
     }
     throw tag(lastErr || new Error('Wallet bridge call failed'), 'unknown');
