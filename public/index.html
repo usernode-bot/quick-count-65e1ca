@@ -1696,7 +1696,7 @@
         </div>`).join('')}</div>`;
     v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
       const org = b.dataset.org;
-      runTx({ to: App.wallet.address, amount: 0, memo: QC.adm('waive', org) },
+      runTx({ to: org, amount: 0, memo: QC.adm('waive', org) },
         { loading: t('loading_waiving'), success: () => { toast(t('toast_fee_waived')); refreshSoon(); } });
     });
   }
