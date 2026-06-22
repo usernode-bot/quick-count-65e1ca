@@ -113,6 +113,7 @@
     me: null,           // last /api/me response
     lang: 'en',         // active UI language
     menuOpen: false,    // wallet dropdown menu open?
+    txState: { sentTime: null, confirmStartTime: null, lastError: null, retryCount: 0 }, // transaction state tracking
   };
 
   const TABS = [
@@ -713,6 +714,53 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
+  // ───────────────────────── Memo Validation ────────────────────────────────
+  // Mirror of lib/memo.js validation — client-side guards before send.
+  function isHash64(s) {
+    return typeof s === 'string' && /^[0-9a-f]{64}$/i.test(s);
+  }
+  function posInt(n) {
+    const x = Number(n);
+    return Number.isFinite(x) ? Math.max(0, Math.round(x)) : null;
+  }
+  function cleanVotes(votes) {
+    const out = {};
+    const src = votes && typeof votes === 'object' && !Array.isArray(votes) ? votes : {};
+    const keys = Object.keys(src).slice(0, 64);
+    for (const k of keys) {
+      const cid = Number(k);
+      const n = posInt(src[k]);
+      if (Number.isInteger(cid) && cid >= 1 && n != null) out[String(cid)] = n;
+    }
+    return out;
+  }
+  function validateMemo(m) {
+    if (!m || typeof m !== 'object') return false;
+    if (m.app !== 'quickcount' || m.v !== 1) return false;
+    switch (m.t) {
+      case 'org':
+        return typeof m.name === 'string' && m.name.length > 0;
+      case 'el':
+        return typeof m.name === 'string' && m.name.length > 0;
+      case 'cand':
+        return m.eid && Number.isInteger(m.cid) && m.cid >= 1 && typeof m.name === 'string' && m.name.length > 0;
+      case 'stn':
+        return m.eid && Number.isInteger(m.sid) && m.sid >= 1 && typeof m.name === 'string' && m.name.length > 0;
+      case 'obs':
+        return m.eid && typeof m.addr === 'string' && m.addr.length > 0;
+      case 'res':
+        return m.eid && Number.isInteger(m.sid) && m.sid >= 1 && m.votes && typeof m.votes === 'object';
+      case 'disp':
+        return m.eid && typeof m.target === 'string' && m.target.length > 0;
+      case 'dres':
+        return m.eid && m.disp && (m.verdict === 'uphold' || m.verdict === 'reject');
+      case 'adm':
+        return typeof m.act === 'string' && m.act.length > 0;
+      default:
+        return false;
+    }
+  }
+
   // ───────────────────────── Wallet ─────────────────────────
   // Readiness, tx-id extraction and classified retry all live in the shared
   // resilience layer (window.QCBridge, public/usernode-resilience.js).
@@ -727,6 +775,8 @@
     QCLoading.hide();
     const kind = (window.QCBridgeClassify && window.QCBridgeClassify.classifyBridgeError)
       ? (err && err.qcKind ? err.qcKind : window.QCBridgeClassify.classifyBridgeError(err)) : 'unknown';
+    const code = (err && err.qcCode) || 'UNKNOWN_ERROR';
+    console.error('[QCTx] handleTxFailure: kind=' + kind + ', code=' + code + ', msg=' + (err && err.message || ''), err);
     if (kind === 'terminal') {
       toast((o.partial ? o.partial + ' ' : '') + t('toast_failed') + ' ' + (err && err.message || ''), 'error');
       return;
@@ -795,7 +845,10 @@
     const account = opts.account || App.wallet.address || '';
     const recipient = opts.to || account;
     const deadline = Date.now() + (opts.timeoutMs || 20000);
+    const startTime = Date.now();
     let attempt = 0;
+    let lastError = null;
+    console.log('[QCTx] confirmTx: txId=' + txId + ', deadline=' + (opts.timeoutMs || 20000) + 'ms');
     while (Date.now() < deadline) {
       try {
         const r = await fetch(url, {
@@ -806,14 +859,26 @@
         if (r.ok) {
           const data = await r.json().catch(() => null);
           const list = Array.isArray(data) ? data : ((data && (data.transactions || data.txs || data.results)) || []);
-          if (txInList(list, txId)) return true;
+          if (txInList(list, txId)) {
+            console.log('[QCTx] confirmTx: found after attempt ' + (attempt + 1) + ', elapsed=' + (Date.now() - startTime) + 'ms');
+            return true;
+          }
+        } else {
+          lastError = 'explorer returned ' + r.status;
+          console.log('[QCTx] confirmTx attempt ' + (attempt + 1) + ': explorer ' + r.status);
         }
-      } catch (_) { /* transient — keep polling until the deadline */ }
+      } catch (e) {
+        lastError = e.message;
+        console.log('[QCTx] confirmTx attempt ' + (attempt + 1) + ': fetch error: ' + lastError);
+      }
       const delay = (window.QCBridgeClassify && window.QCBridgeClassify.backoffDelay)
         ? window.QCBridgeClassify.backoffDelay(attempt++, Math.random) : 800;
       await new Promise((res) => setTimeout(res, delay));
     }
-    const e = new Error('Awaiting confirmation timed out'); e.qcKind = 'transient';
+    const e = new Error('Awaiting confirmation timed out');
+    e.qcKind = 'transient';
+    e.qcCode = 'CONFIRM_TIMEOUT';
+    console.error('[QCTx] CONFIRM_TIMEOUT: txId=' + txId + ', total attempts=' + attempt + ', elapsed=' + (Date.now() - startTime) + 'ms, lastError=' + lastError);
     throw e;
   }
   // True when any raw tx in `list` carries the given id (any field-name variant).
@@ -843,18 +908,26 @@
     opts = opts || {};
     const results = opts._results || [];
     const start = opts._from || 0;
+    const isRetry = opts._from != null;
+    if (isRetry) App.txState.retryCount++;
+    console.log('[QCTx] runTxSteps start: steps=' + steps.length + ', from=' + start + ', retries=' + App.txState.retryCount);
     for (let i = start; i < steps.length; i++) {
       const spec = steps[i].build(results);
       const lbl = typeof steps[i].loading === 'function' ? steps[i].loading(i, steps.length) : steps[i].loading;
       QCLoading.show(lbl);
       let r;
       try {
+        App.txState.sentTime = Date.now();
+        console.log('[QCTx] sendTx step ' + (i + 1) + '/' + steps.length + ': to=' + spec.to.slice(0, 20) + '..., amount=' + spec.amount + ', idempotent=' + spec.idempotent);
         r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
         if (spec.require && !r) throw new Error(spec.require);
+        console.log('[QCTx] sendTx step ' + (i + 1) + ' succeeded: txId=' + (r ? r.slice(0, 20) + '...' : 'none'));
       } catch (e) {
         // SEND failed (or returned no id). Safe to resume by RE-SENDING this
         // step — classify guards non-idempotent ops against an ambiguous resend.
         const done = i; // count of steps that completed before this one
+        App.txState.lastError = e.message;
+        console.log('[QCTx] sendTx step ' + (i + 1) + ' failed: ' + e.message);
         handleTxFailure(e, {
           partial: (done > 0 && opts.partial) ? opts.partial(done, steps.length) : null,
           onRetry: () => runTxSteps(steps, { _from: i, _results: results, partial: opts.partial, success: opts.success }),
@@ -866,13 +939,17 @@
       if (r) {
         const pid = addPending(typeof lbl === 'string' ? lbl : null);
         QCLoading.show(t('loading_confirming'));
+        App.txState.confirmStartTime = Date.now();
         try {
           await confirmTx(r, { to: spec.to });
+          console.log('[QCTx] confirmTx step ' + (i + 1) + ' succeeded: elapsed=' + (Date.now() - App.txState.confirmStartTime) + 'ms');
         } catch (e) {
           removePending(pid);
           // Confirmation timed out. The tx is ALREADY broadcast, so we must NOT
           // re-send — Try-again RE-CHECKS the ledger for this same id and, on
           // success, resumes with the remaining (un-sent) steps.
+          App.txState.lastError = e.message;
+          console.log('[QCTx] confirmTx step ' + (i + 1) + ' timed out: ' + e.message);
           handleTxFailure(e, {
             partial: t('notice_confirm_timeout'),
             onRetry: () => resumeConfirm(steps, opts, i, results),
@@ -883,6 +960,8 @@
       }
     }
     QCLoading.hide();
+    App.txState = { sentTime: null, confirmStartTime: null, lastError: null, retryCount: 0 };
+    console.log('[QCTx] runTxSteps completed successfully, all ' + steps.length + ' steps done');
     // Reflect the confirmed change immediately, then run the success callback.
     await triggerRefresh();
     if (opts.success) opts.success(results);
@@ -937,6 +1016,13 @@
   // touching the real bridge. opts.idempotent is OFF unless the caller opts in.
   function sendTx(to, amount, memoObj, opts) {
     opts = opts || {};
+    if (!validateMemo(memoObj)) {
+      const e = new Error('Invalid transaction memo');
+      e.qcKind = 'terminal';
+      e.qcCode = 'MEMO_INVALID';
+      console.error('[QCTx] MEMO_INVALID:', memoObj);
+      throw e;
+    }
     const memoStr = JSON.stringify(memoObj);
     if (App.cfg.localDev) {
       return window.QCBridge.send(to, amount, memoStr, {
