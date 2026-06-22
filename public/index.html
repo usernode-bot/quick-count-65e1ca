@@ -836,7 +836,11 @@
   async function confirmTx(txId, opts) {
     opts = opts || {};
     if (!txId) return true;
-    if (App.cfg && (App.cfg.staging || App.cfg.localDev)) return true;
+    // No live chain to poll: staging / local-dev (auto-confirm so the
+    // pending→confirmed flow stays reviewable), or a deploy with no chain read
+    // source configured (chainConfigured===false) — confirm optimistically and
+    // let the background poll reconcile, rather than dead-ending on a timeout.
+    if (App.cfg && (App.cfg.staging || App.cfg.localDev || App.cfg.chainConfigured === false)) return true;
     const base = ((App.cfg && App.cfg.explorerApiBase) || '/explorer-api').replace(/\/+$/, '');
     const chain = (App.cfg && App.cfg.chainId) || 'usernode';
     const url = base + '/' + encodeURIComponent(chain) + '/transactions';

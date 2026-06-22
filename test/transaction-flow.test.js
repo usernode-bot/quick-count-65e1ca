@@ -3,6 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { classifyBridgeError, isRetryable } = require('../public/usernode-bridge-classify');
+const { matchTxInList } = require('../lib/confirm');
 
 // ── Transaction flow integration tests ────────────────────────────────────
 // Tests the lifecycle: send → classify → retry vs fail → confirm → success/timeout
@@ -152,4 +153,85 @@ test('retry count tracking across attempts', () => {
   txState.retryCount++; // second retry
   assert.strictEqual(txState.retryCount, 2);
   // Notice would say: "That didn't go through (retry attempt #2). Your entries were kept."
+});
+
+// ── Multi-step createElection: confirm-then-resume (Fix 1 + Fix 3) ──────────
+// Models index.html runTxSteps/resumeConfirm for the election + candidates
+// flow once the /explorer-api proxy actually returns ledger rows. The election
+// step (step 0) is NON-idempotent, so the resume path must NEVER re-send it —
+// it re-checks the ledger via the same confirmTx matching logic and, on a hit,
+// continues with the remaining (un-sent) candidate steps. We exercise the real
+// lib/confirm.matchTxInList matcher the browser confirmTx mirrors.
+
+// Simulate runTxSteps over a proxy-backed confirmTx. `ledger` is the set of tx
+// ids the explorer proxy currently reports. Each step records whether it was
+// (re)sent; the election step refuses to re-send once it has a txId.
+function runStepsSim(steps, ledger, opts) {
+  opts = opts || {};
+  const sends = [];        // ordered list of step indexes that issued a send
+  const results = opts._results ? opts._results.slice() : [];
+  for (let i = opts._from || 0; i < steps.length; i++) {
+    // Resume: an already-sent step is confirmed off the ledger, never re-sent.
+    if (results[i]) {
+      if (!matchTxInList(ledger, results[i])) return { ok: false, stalledAt: i, sends, results };
+      continue;
+    }
+    sends.push(i);
+    results[i] = steps[i].txId;           // broadcast → returns a tx id
+    if (!matchTxInList(ledger, results[i])) {
+      // Confirm timed out for this freshly-sent step → stop (Try-again resumes).
+      return { ok: false, stalledAt: i, sends, results };
+    }
+  }
+  return { ok: true, sends, results };
+}
+
+test('createElection runs election + candidates to completion when the proxy confirms', () => {
+  const steps = [
+    { name: 'election', txId: 'tx-el-1' },
+    { name: 'cand-1', txId: 'tx-c1' },
+    { name: 'cand-2', txId: 'tx-c2' },
+  ];
+  // Proxy reports every tx (the fixed /explorer-api path).
+  const ledger = [{ id: 'tx-el-1' }, { id: 'tx-c2' }, { txHash: 'tx-c1' }];
+  const r = runStepsSim(steps, ledger);
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.sends, [0, 1, 2]);      // each step sent exactly once
+  assert.deepStrictEqual(r.results, ['tx-el-1', 'tx-c1', 'tx-c2']);
+});
+
+test('resume after a confirm timeout re-checks the ledger WITHOUT re-sending the election step', () => {
+  const steps = [
+    { name: 'election', txId: 'tx-el-1' },
+    { name: 'cand-1', txId: 'tx-c1' },
+    { name: 'cand-2', txId: 'tx-c2' },
+  ];
+  // First pass: election broadcast but NOT yet visible → stalls at step 0.
+  const first = runStepsSim(steps, /* ledger */ []);
+  assert.strictEqual(first.ok, false);
+  assert.strictEqual(first.stalledAt, 0);
+  assert.deepStrictEqual(first.sends, [0]);        // only the election was sent
+
+  // Try-again: the election landed and now appears on the ledger. resumeConfirm
+  // re-checks (no resend) and continues with the candidate steps.
+  const ledger = [{ tx_id: 'tx-el-1' }, { id: 'tx-c1' }, { id: 'tx-c2' }];
+  const resumed = runStepsSim(steps, ledger, { _from: 0, _results: first.results });
+  assert.strictEqual(resumed.ok, true);
+  assert.deepStrictEqual(resumed.sends, [1, 2]);   // election NOT re-sent; candidates sent
+  assert.deepStrictEqual(resumed.results, ['tx-el-1', 'tx-c1', 'tx-c2']);
+});
+
+test('resume stays stalled (and still does not re-send) while the election tx is absent', () => {
+  const steps = [
+    { name: 'election', txId: 'tx-el-1' },
+    { name: 'cand-1', txId: 'tx-c1' },
+  ];
+  const first = runStepsSim(steps, []);
+  assert.strictEqual(first.ok, false);
+  // Ledger still doesn't show the election → resume re-checks, finds nothing,
+  // stops again at step 0 and issues NO new send (no duplicate election).
+  const resumed = runStepsSim(steps, [], { _from: 0, _results: first.results });
+  assert.strictEqual(resumed.ok, false);
+  assert.strictEqual(resumed.stalledAt, 0);
+  assert.deepStrictEqual(resumed.sends, []);
 });
