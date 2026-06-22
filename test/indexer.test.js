@@ -69,6 +69,29 @@ test('admin can waive the fee to activate an org', () => {
   assert.strictEqual(ix.orgs.get('org').waived, true);
 });
 
+test('activeOrgs lists active orgs (incl. election-less + waived), excludes pending, newest-first', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild([
+    // Paid org with NO elections — must still appear.
+    mk('o1', 'orgPaid', 'TREASURY', 100, memo.orgMemo('Paid Org', 'Land')),
+    // Unpaid/pending org — must be excluded.
+    mk('o2', 'orgPending', 'TREASURY', 0, memo.orgMemo('Pending Org')),
+    // Org activated by an admin waiver — must appear.
+    mk('o3', 'orgWaived', 'TREASURY', 0, memo.orgMemo('Waived Org')),
+    mk('a1', 'ADMIN', 'ADMIN', 0, memo.adminMemo('waive', 'orgWaived')),
+  ]);
+  const active = ix.activeOrgs();
+  const addrs = active.map((o) => o.addr);
+  assert.ok(addrs.includes('orgPaid'));
+  assert.ok(addrs.includes('orgWaived'));
+  assert.ok(!addrs.includes('orgPending'));
+  // Minimal public shape only — no fee/tx/waived leakage.
+  const paid = active.find((o) => o.addr === 'orgPaid');
+  assert.deepStrictEqual(paid, { addr: 'orgPaid', name: 'Paid Org', jur: 'Land' });
+  // Newest-first ordering (orgWaived has the latest createdAt).
+  assert.strictEqual(active[0].addr, 'orgWaived');
+});
+
 // ── Authorization ───────────────────────────────────────────────────────────
 test('structural changes require the organizing wallet; results require an observer', () => {
   const ix = new QuickCountIndexer(CFG);

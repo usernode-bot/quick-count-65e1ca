@@ -56,6 +56,7 @@ const DEMO = {
   admin: 'ut1demoadmin000000000000000000000000000000',
   orgA: 'ut1democitizenscount0000000000000000000000',
   orgB: 'ut1demounpaidorg000000000000000000000000000',
+  orgC: 'ut1demopollwatchalliance00000000000000000000',
   obs1: 'ut1demoobserverone000000000000000000000000',
   obs2: 'ut1demoobservertwo000000000000000000000000',
   obs3: 'ut1demoobserverthree00000000000000000000000',
@@ -152,6 +153,9 @@ function buildDemoTxs() {
     // Organizations — one pays the fee (active), one does not (pending).
     mk('demo_org_a', DEMO.orgA, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Citizens Count', 'Demo Republic')),
     mk('demo_org_b', DEMO.orgB, TREASURY_ADDR, 0, memo.orgMemo('Staging demo — Unpaid Org', 'Demo Republic')),
+    // Active org with NO elections — proves "Organisasi aktif" lists active orgs
+    // directly, not derived from elections.
+    mk('demo_org_c', DEMO.orgC, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Pollwatch Alliance', 'Demo Republic')),
     // Election + candidates (by the active org).
     mk(eid, DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — General Election')),
     mk('demo_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 1, 'Demo Candidate Red')),
@@ -343,7 +347,7 @@ app.get('/__quickcount/state', (req, res) => {
       const can = visible.some((el) => el.eid === req.query.eid);
       detail = can ? indexer.electionDetail(req.query.eid, method) : null;
     }
-    res.json({ role, elections, detail, method });
+    res.json({ role, elections, detail, method, activeOrgs: indexer.activeOrgs() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -1493,12 +1493,11 @@
         ${App.wallet.connected ? '' : `<p class="text-xs text-amber-600 dark:text-amber-300 mt-2">${t('orgs_connect_first')}</p>`}
       </div>`;
     }
-    const active = (App.state.elections || []);
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('orgs_active_orgs')}</h3>`;
-    const orgs = {};
-    active.forEach((e) => { if (e.orgActive) orgs[e.orgAddr] = e.orgName; });
-    const orgList = Object.entries(orgs);
-    html += orgList.length ? '<div class="space-y-2">' + orgList.map(([addr, name]) => `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between"><span>${esc(name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(addr)}</span></div>`).join('') + '</div>'
+    // Authoritative list of active orgs from the indexer — independent of whether
+    // an org has published elections, so a just-registered org shows instantly.
+    const orgList = (App.state.activeOrgs || []);
+    html += orgList.length ? '<div class="space-y-2">' + orgList.map((o) => `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between"><span>${esc(o.name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(o.addr)}</span></div>`).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('orgs_no_active')}</p>`;
     v.innerHTML = html;
 
