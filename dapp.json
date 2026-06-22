@@ -93,6 +93,11 @@
       "expectText": "Evidence"
     },
     {
+      "name": "Active organizations list shows an election-less active org",
+      "path": "/#/orgs",
+      "expectText": "Pollwatch Alliance"
+    },
+    {
       "name": "Demo election shows reporting progress",
       "path": "/dashboard.html?eid=demo-election",
       "expectText": "stations reported"
