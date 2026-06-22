@@ -121,6 +121,7 @@
     { id: 'orgs', label: 'Orgs', icon: '🏛️' },
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
+    { id: 'heatmap', label: 'Heatmap', icon: '🗺️' },
     { id: 'profile', label: 'My Profile', icon: '👤', walletOnly: true },
     { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
@@ -192,6 +193,7 @@
       profile_history_heading: 'Activity',
       profile_history_empty: 'No activity yet.',
       profile_not_found: 'No profile or activity found for this address.',
+      tab_heatmap: 'Heatmap', heatmap_heading: 'Voter Turnout by Region', heatmap_select_election: 'Select an election to view turnout by region.', heatmap_no_regions: 'No regions are defined. Add a label to each station in the election workspace.', heatmap_col_region: 'Region', heatmap_col_stations: 'Stations', heatmap_col_ballots: 'Ballots cast', heatmap_col_valid_rate: 'Valid ballots', heatmap_col_invalid: 'Blank / invalid', heatmap_unlabeled: '(No region)', heatmap_summary: '{reported} of {total} stations reported · {regions} regions',
     },
     id: {
       menu_profile: 'Profil Saya', menu_settings: 'Pengaturan', menu_connected: 'Masuk sebagai',
@@ -247,6 +249,7 @@
       profile_history_heading: 'Aktivitas',
       profile_history_empty: 'Belum ada aktivitas.',
       profile_not_found: 'Tidak ada profil atau aktivitas untuk alamat ini.',
+      tab_heatmap: 'Peta Panas', heatmap_heading: 'Partisipasi Pemilih per Wilayah', heatmap_select_election: 'Pilih pemilihan untuk melihat partisipasi per wilayah.', heatmap_no_regions: 'Tidak ada wilayah yang ditentukan. Tambahkan label ke setiap TPS di ruang kerja pemilihan.', heatmap_col_region: 'Wilayah', heatmap_col_stations: 'TPS', heatmap_col_ballots: 'Surat suara masuk', heatmap_col_valid_rate: 'Surat suara sah', heatmap_col_invalid: 'Kosong / tidak sah', heatmap_unlabeled: '(Tanpa wilayah)', heatmap_summary: '{reported} dari {total} TPS dilaporkan · {regions} wilayah',
     },
     'zh-Hans': {
       menu_profile: '我的资料', menu_settings: '设置', menu_connected: '当前登录',
@@ -302,6 +305,7 @@
       profile_history_heading: '活动',
       profile_history_empty: '暂无活动。',
       profile_not_found: '未找到该地址的资料或活动。',
+      tab_heatmap: '热力图', heatmap_heading: '各地区选民参与率', heatmap_select_election: '选择一场选举以查看各地区的参与率。', heatmap_no_regions: '未定义地区。请在选举工作区中为每个投票站添加标签。', heatmap_col_region: '地区', heatmap_col_stations: '投票站', heatmap_col_ballots: '投票数', heatmap_col_valid_rate: '有效票', heatmap_col_invalid: '空白/无效', heatmap_unlabeled: '（无地区）', heatmap_summary: '{reported}/{total} 个投票站已上报 · {regions} 个地区',
     },
     es: {
       menu_profile: 'Mi perfil', menu_settings: 'Configuración', menu_connected: 'Sesión de',
@@ -358,6 +362,7 @@
       profile_history_heading: 'Actividad',
       profile_history_empty: 'Sin actividad aún.',
       profile_not_found: 'No se encontró perfil ni actividad para esta dirección.',
+      tab_heatmap: 'Mapa de calor', heatmap_heading: 'Participación por región', heatmap_select_election: 'Selecciona una elección para ver la participación por región.', heatmap_no_regions: 'No hay regiones definidas. Añade una etiqueta a cada mesa en el espacio de trabajo de la elección.', heatmap_col_region: 'Región', heatmap_col_stations: 'Mesas', heatmap_col_ballots: 'Votos emitidos', heatmap_col_valid_rate: 'Votos válidos', heatmap_col_invalid: 'En blanco / nulos', heatmap_unlabeled: '(Sin región)', heatmap_summary: '{reported} de {total} mesas reportadas · {regions} regiones',
     },
     hi: {
       menu_profile: 'मेरी प्रोफ़ाइल', menu_settings: 'सेटिंग्स', menu_connected: 'साइन इन',
@@ -413,6 +418,7 @@
       profile_history_heading: 'गतिविधि',
       profile_history_empty: 'अभी तक कोई गतिविधि नहीं।',
       profile_not_found: 'इस पते के लिए कोई प्रोफ़ाइल या गतिविधि नहीं मिली।',
+      tab_heatmap: 'हीटमैप', heatmap_heading: 'क्षेत्रवार मतदाता भागीदारी', heatmap_select_election: 'क्षेत्र के अनुसार भागीदारी देखने के लिए चुनाव चुनें।', heatmap_no_regions: 'कोई क्षेत्र परिभाषित नहीं है। चुनाव कार्यक्षेत्र में प्रत्येक बूथ में लेबल जोड़ें।', heatmap_col_region: 'क्षेत्र', heatmap_col_stations: 'बूथ', heatmap_col_ballots: 'डाले गए मत', heatmap_col_valid_rate: 'वैध मत', heatmap_col_invalid: 'रिक्त / अमान्य', heatmap_unlabeled: '(कोई क्षेत्र नहीं)', heatmap_summary: '{total} में से {reported} बूथों ने रिपोर्ट किया · {regions} क्षेत्र',
     },
     ar: {
       menu_profile: 'ملفي الشخصي', menu_settings: 'الإعدادات', menu_connected: 'تسجيل الدخول باسم',
@@ -468,6 +474,7 @@
       profile_history_heading: 'النشاط',
       profile_history_empty: 'لا يوجد نشاط بعد.',
       profile_not_found: 'لم يُعثر على ملف شخصي أو نشاط لهذا العنوان.',
+      tab_heatmap: 'خريطة حرارية', heatmap_heading: 'مشاركة الناخبين حسب المنطقة', heatmap_select_election: 'اختر انتخابات لعرض المشاركة حسب المنطقة.', heatmap_no_regions: 'لا توجد مناطق محددة. أضف تسميات للمراكز في مساحة عمل الانتخابات.', heatmap_col_region: 'المنطقة', heatmap_col_stations: 'المراكز', heatmap_col_ballots: 'الأوراق المُدلى بها', heatmap_col_valid_rate: 'الأوراق الصالحة', heatmap_col_invalid: 'فارغة / غير صالحة', heatmap_unlabeled: '(بدون منطقة)', heatmap_summary: '{reported} من {total} مركز أبلغ · {regions} منطقة',
     },
     fr: {
       menu_profile: 'Mon profil', menu_settings: 'Paramètres', menu_connected: 'Connecté en tant que',
@@ -524,6 +531,7 @@
       profile_history_heading: 'Activité',
       profile_history_empty: "Aucune activité pour l'instant.",
       profile_not_found: 'Aucun profil ou activité trouvé pour cette adresse.',
+      tab_heatmap: 'Carte thermique', heatmap_heading: 'Participation par région', heatmap_select_election: 'Sélectionnez une élection pour voir la participation par région.', heatmap_no_regions: "Aucune région définie. Ajoutez une étiquette à chaque bureau dans l'espace de travail de l'élection.", heatmap_col_region: 'Région', heatmap_col_stations: 'Bureaux', heatmap_col_ballots: 'Bulletins exprimés', heatmap_col_valid_rate: 'Bulletins valides', heatmap_col_invalid: 'Blancs / nuls', heatmap_unlabeled: '(Sans région)', heatmap_summary: '{reported} sur {total} bureaux déclarés · {regions} régions',
     },
   };
 
@@ -1013,6 +1021,7 @@
       case 'orgs': return renderOrgs(v);
       case 'evidence': return renderEvidence(v);
       case 'disputes': return renderDisputes(v);
+      case 'heatmap': return renderHeatmap(v);
       case 'admin': return renderAdmin(v);
       case 'profile': return renderProfile(v);
       case 'settings': return renderSettings(v);
@@ -1488,6 +1497,96 @@
       </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('disputes_no_disputes')}</p>`;
     body.innerHTML = `<h2 class="text-lg font-semibold mb-3">${t('disputes_heading')} — ${esc(d.election.name)}</h2><div class="space-y-2 mb-4">${rows}</div>
       <p class="text-sm text-slate-600 dark:text-slate-500">${t('disputes_workspace_note').replace('election workspace', '<a href="#/election/' + d.election.eid + '" class="text-indigo-400 hover:underline">election workspace</a>')}</p>`;
+  }
+
+  // ───────────────────────── Heatmap ─────────────────────────
+  function renderHeatmap(v) {
+    v.innerHTML = electionPicker() + '<div id="hmap-body"></div>';
+    wirePickers();
+    const d = App.state && App.state.detail;
+    const body = document.getElementById('hmap-body');
+    if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('heatmap_select_election')}</p>`; return; }
+
+    const groups = new Map();
+    for (const s of d.stations) {
+      const key = s.label && s.label.trim() ? s.label.trim() : null;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+
+    const rows = [];
+    for (const [key, stations] of groups) {
+      let totSum = 0, invSum = 0, hasData = false, reportedCount = 0;
+      for (const s of stations) {
+        if (s.reported && !s.invalid) {
+          reportedCount++;
+          if (s.tot != null) { totSum += s.tot; hasData = true; }
+          if (s.inv != null) invSum += s.inv;
+        }
+      }
+      rows.push({ key, stations, reportedCount, totSum: hasData ? totSum : null, invSum: hasData ? invSum : null, total: stations.length });
+    }
+
+    const maxTot = rows.reduce((m, r) => (r.totSum != null && r.totSum > m) ? r.totSum : m, 0);
+    function heatTier(r) {
+      if (r.totSum == null || maxTot === 0) return 0;
+      return Math.min(5, Math.max(1, Math.ceil((r.totSum / maxTot) * 5)));
+    }
+    const tierBg = ['dark:bg-slate-800 bg-slate-100', 'bg-indigo-50 dark:bg-indigo-950', 'bg-indigo-100 dark:bg-indigo-900', 'bg-indigo-200 dark:bg-indigo-800', 'bg-indigo-300 dark:bg-indigo-700', 'bg-indigo-400 dark:bg-indigo-600'];
+    const tierTx = ['text-slate-500', 'text-indigo-700 dark:text-indigo-300', 'text-indigo-700 dark:text-indigo-200', 'text-indigo-800 dark:text-indigo-100', 'text-indigo-900 dark:text-white', 'text-white'];
+
+    rows.sort((a, b) => {
+      if (a.key === null && b.key !== null) return 1;
+      if (a.key !== null && b.key === null) return -1;
+      if (a.totSum != null && b.totSum != null) return b.totSum - a.totSum;
+      if (a.totSum != null) return -1;
+      if (b.totSum != null) return 1;
+      return b.reportedCount - a.reportedCount;
+    });
+
+    const onlyUnlabeled = rows.length === 1 && rows[0].key === null;
+    const regionCount = rows.filter(r => r.key !== null).length;
+    const totalReported = d.stations.filter(s => s.reported && !s.invalid).length;
+    const totalStations = d.stations.length;
+
+    const tableRows = rows.map(r => {
+      const tv = heatTier(r);
+      const label = r.key ? esc(r.key) : `<em class="text-slate-500">${t('heatmap_unlabeled')}</em>`;
+      const ballots = r.totSum != null ? r.totSum.toLocaleString() : '—';
+      const validPct = (r.totSum != null && r.invSum != null && r.totSum > 0)
+        ? ((r.totSum - r.invSum) / r.totSum * 100).toFixed(1) + '%' : '—';
+      const inv = r.invSum != null ? r.invSum.toLocaleString() : '—';
+      return `<tr class="${tierBg[tv]} ${tierTx[tv]}">
+        <td class="px-4 py-2 font-medium">${label}</td>
+        <td class="px-4 py-2 text-center">${r.reportedCount}/${r.total}</td>
+        <td class="px-4 py-2 text-right font-mono">${ballots}</td>
+        <td class="px-4 py-2 text-right">${validPct}</td>
+        <td class="px-4 py-2 text-right font-mono">${inv}</td>
+      </tr>`;
+    }).join('');
+
+    const noRegionNote = onlyUnlabeled ? `<p class="text-sm text-slate-600 dark:text-slate-500 mt-3">${t('heatmap_no_regions')}</p>` : '';
+    const summary = t('heatmap_summary')
+      .replace('{reported}', totalReported).replace('{total}', totalStations).replace('{regions}', regionCount);
+
+    body.innerHTML = `
+      <h2 class="text-lg font-semibold mb-3">${t('heatmap_heading')} — ${esc(d.election.name)}</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm rounded-lg overflow-hidden">
+          <thead>
+            <tr class="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+              <th class="px-4 py-2 text-left">${t('heatmap_col_region')}</th>
+              <th class="px-4 py-2 text-center">${t('heatmap_col_stations')}</th>
+              <th class="px-4 py-2 text-right">${t('heatmap_col_ballots')}</th>
+              <th class="px-4 py-2 text-right">${t('heatmap_col_valid_rate')}</th>
+              <th class="px-4 py-2 text-right">${t('heatmap_col_invalid')}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200/40 dark:divide-slate-700/40">${tableRows}</tbody>
+        </table>
+      </div>
+      ${noRegionNote}
+      <p class="text-xs text-slate-500 mt-3">${summary} · ${t('dashboard_auto_refreshing')}</p>`;
   }
 
   // ───────────────────────── Admin ─────────────────────────
