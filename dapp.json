@@ -56,6 +56,19 @@
       "private": false,
       "default": "10",
       "staging_default": "10"
+    },
+    {
+      "key": "APP_PUBKEY",
+      "description": "Application public key",
+      "required": true,
+      "private": false
+    },
+    {
+      "key": "APP_SECRET_KEY",
+      "description": "Application secret key",
+      "required": true,
+      "private": true,
+      "staging_default": ""
     }
   ],
   "tests": [
