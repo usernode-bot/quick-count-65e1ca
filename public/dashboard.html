@@ -388,6 +388,16 @@
 
     async function loadConfig() {
       try { cfg = await (await fetch('/api/public/config')).json(); } catch (_) {}
+      // Point the hosted bridge's transaction reads at our auth-exempt
+      // /explorer-api proxy so it never hits its "transactionsBaseUrl not
+      // configured" guard. The bridge appends "/transactions", so the base is
+      // "<explorerApiBase>/<chainId>" (mirrors boot() in index.html).
+      if (cfg && !cfg.localDev) {
+        window.usernode = window.usernode || {};
+        const exBase = (cfg.explorerApiBase || '/explorer-api').replace(/\/+$/, '');
+        const chain = cfg.chainId || 'usernode';
+        window.usernode.transactionsBaseUrl = exBase + '/' + encodeURIComponent(chain);
+      }
       if (cfg && cfg.staging) document.getElementById('staging-badge').classList.remove('hidden');
       // Fault-injection hook — staging ONLY (no-op in production) — so reviewers
       // can exercise the unlock resilience path (?bridgefault=timeout|notready|reject).
