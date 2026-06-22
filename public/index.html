@@ -69,24 +69,24 @@
   <script src="/usernode-bridge-classify.js"></script>
   <script src="/usernode-resilience.js"></script>
   <style>
-    .tab-on { background:#7c3aed; color:#fff; }
+    .tab-on { background:#4f46e5; color:#fff; }
     .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
   </style>
 </head>
-<body class="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 min-h-screen pb-20 sm:pb-0">
+<body class="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen pb-20 sm:pb-0">
 
   <!-- Top bar -->
-  <header class="sticky top-0 z-20 bg-white/90 dark:bg-zinc-950/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-800">
+  <header class="sticky top-0 z-20 bg-white/90 dark:bg-slate-950/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
       <h1 class="text-lg font-bold tracking-tight">Quick&nbsp;Count</h1>
       <span id="staging-badge" class="hidden badge bg-amber-500/20 text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
-        <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 font-medium" title="Toggle theme">☀️</button>
-        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 outline-none"></select>
+        <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
+        <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 outline-none"></select>
         <div id="wallet-wrap" class="relative">
-          <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 font-medium">Connect wallet</button>
-          <div id="wallet-menu" class="hidden absolute end-0 mt-2 w-52 rounded-xl bg-zinc-900 border border-zinc-800 shadow-xl z-30 overflow-hidden text-sm"></div>
+          <button id="wallet-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 font-medium">Connect wallet</button>
+          <div id="wallet-menu" class="hidden absolute end-0 mt-2 w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-xl z-30 overflow-hidden text-sm"></div>
         </div>
       </div>
     </div>
@@ -95,7 +95,7 @@
   <main id="view" class="max-w-5xl mx-auto px-4 py-5"></main>
 
   <!-- Mobile bottom tab bar -->
-  <nav id="bottom-tabs" class="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 dark:bg-zinc-950/95 backdrop-blur border-t border-zinc-200 dark:border-zinc-800 flex"></nav>
+  <nav id="bottom-tabs" class="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 dark:bg-slate-950/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 flex"></nav>
 
   <div id="toast" class="fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 hidden px-4 py-2 rounded-lg text-sm font-medium shadow-lg"></div>
 
@@ -124,7 +124,7 @@
     { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
-  const COLORS = ['bg-rose-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-violet-500','bg-pink-500','bg-teal-500'];
+  const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
 
   // ───────────────────────── i18n (full-app) ─────────────────────────
   // Mirrors lib/profile.js (LANGS + display-name regex). Translations are
@@ -652,17 +652,17 @@
     if (!data) return '';
     const stats = data.stats || {};
     return `<div class="grid grid-cols-3 gap-3 my-4">
-      <div class="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
+      <div class="rounded-xl bg-slate-100 dark:bg-slate-800 p-3 text-center">
         <p class="text-2xl font-bold">${stats.results_submitted ?? 0}</p>
-        <p class="text-xs text-zinc-500 mt-1">${t('profile_stat_results')}</p>
+        <p class="text-xs text-slate-500 mt-1">${t('profile_stat_results')}</p>
       </div>
-      <div class="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
+      <div class="rounded-xl bg-slate-100 dark:bg-slate-800 p-3 text-center">
         <p class="text-2xl font-bold">${stats.elections ?? 0}</p>
-        <p class="text-xs text-zinc-500 mt-1">${t('profile_stat_elections')}</p>
+        <p class="text-xs text-slate-500 mt-1">${t('profile_stat_elections')}</p>
       </div>
-      <div class="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
+      <div class="rounded-xl bg-slate-100 dark:bg-slate-800 p-3 text-center">
         <p class="text-2xl font-bold">${stats.disputes_filed ?? 0}</p>
-        <p class="text-xs text-zinc-500 mt-1">${t('profile_stat_disputes')}</p>
+        <p class="text-xs text-slate-500 mt-1">${t('profile_stat_disputes')}</p>
       </div>
     </div>`;
   }
@@ -678,7 +678,7 @@
     const t = document.getElementById('toast');
     t.textContent = msg;
     t.className = 'fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-lg text-sm font-medium shadow-lg ' +
-      (kind === 'error' ? 'bg-rose-600 text-white' : kind === 'warn' ? 'bg-amber-500 text-zinc-900' : 'bg-emerald-600 text-white');
+      (kind === 'error' ? 'bg-rose-600 text-white' : kind === 'warn' ? 'bg-amber-500 text-slate-900' : 'bg-emerald-600 text-white');
     t.classList.remove('hidden');
     clearTimeout(toast._t);
     toast._t = setTimeout(() => t.classList.add('hidden'), 4200);
@@ -826,10 +826,10 @@
       if (tab.walletOnly && !App.wallet.connected) return false;
       return true;
     });
-    const topHtml = tabs.map((tab) => `<a href="#/${tab.id}" class="px-3 py-1.5 rounded-lg ${route.tab === tab.id ? 'tab-on' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}">${t('tab_' + tab.id)}</a>`).join('');
+    const topHtml = tabs.map((tab) => `<a href="#/${tab.id}" class="px-3 py-1.5 rounded-lg ${route.tab === tab.id ? 'tab-on' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}">${t('tab_' + tab.id)}</a>`).join('');
     document.getElementById('top-tabs').innerHTML = topHtml;
     document.getElementById('bottom-tabs').innerHTML = tabs.map((tab) =>
-      `<a href="#/${tab.id}" class="flex-1 py-2 flex flex-col items-center gap-0.5 text-[0.62rem] ${route.tab === tab.id ? 'text-violet-400' : 'text-zinc-600 dark:text-zinc-500'}">
+      `<a href="#/${tab.id}" class="flex-1 py-2 flex flex-col items-center gap-0.5 text-[0.62rem] ${route.tab === tab.id ? 'text-indigo-400' : 'text-slate-600 dark:text-slate-500'}">
         <span class="text-base leading-none">${tab.icon}</span>${t('tab_' + tab.id)}</a>`).join('');
 
     const wb = document.getElementById('wallet-btn');
@@ -838,12 +838,12 @@
       wb.textContent = walletLabel();
       wb.title = App.wallet.address;
       menu.innerHTML =
-        `<div class="px-3 py-2 border-b border-zinc-800">
-           <div class="text-[0.65rem] uppercase tracking-wide text-zinc-500">${esc(t('menu_connected'))}</div>
-           <div class="font-mono text-xs text-zinc-300 truncate" title="${esc(App.wallet.address)}">${esc(shortAddr(App.wallet.address))}</div>
+        `<div class="px-3 py-2 border-b border-slate-800">
+           <div class="text-[0.65rem] uppercase tracking-wide text-slate-500">${esc(t('menu_connected'))}</div>
+           <div class="font-mono text-xs text-slate-300 truncate" title="${esc(App.wallet.address)}">${esc(shortAddr(App.wallet.address))}</div>
          </div>
-         <a href="#/profile" class="wallet-menu-item block px-3 py-2 hover:bg-zinc-800">${esc(t('menu_profile'))}</a>
-         <a href="#/settings" class="wallet-menu-item block px-3 py-2 hover:bg-zinc-800">${esc(t('menu_settings'))}</a>`;
+         <a href="#/profile" class="wallet-menu-item block px-3 py-2 hover:bg-slate-800">${esc(t('menu_profile'))}</a>
+         <a href="#/settings" class="wallet-menu-item block px-3 py-2 hover:bg-slate-800">${esc(t('menu_settings'))}</a>`;
       menu.classList.toggle('hidden', !App.menuOpen);
     } else {
       wb.textContent = t('connect_wallet');
@@ -885,12 +885,12 @@
 
   function electionPicker() {
     const els = (App.state && App.state.elections) || [];
-    if (!els.length) return `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('elections_none_published')}</p>`;
+    if (!els.length) return `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('elections_none_published')}</p>`;
     return `<div class="flex flex-wrap items-center gap-2 mb-4">
-      <select id="el-picker" class="px-3 py-2 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 outline-none text-sm">
+      <select id="el-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
         ${els.map((e) => `<option value="${e.eid}" ${e.eid === App.eid ? 'selected' : ''}>${esc(e.name)}${e.orgActive ? '' : ' ' + t('elections_pending_suffix')}</option>`).join('')}
       </select>
-      <select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 outline-none text-sm">
+      <select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
         ${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}
       </select>
     </div>`;
@@ -911,26 +911,26 @@
         const pct = Math.round((votes / total) * 100);
         return `<div class="mb-3">
           <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-          <span class="font-mono text-zinc-700 dark:text-zinc-300">${votes.toLocaleString()} <span class="text-zinc-600 dark:text-zinc-500">(${pct}%)</span></span></div>
-          <div class="h-3 rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
+          <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+          <div class="h-3 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
         </div>`;
       }).join('');
   }
   function stationTable(d) {
-    const head = d.candidates.map((c) => `<th class="py-2 px-2 text-right font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
+    const head = d.candidates.map((c) => `<th class="py-2 px-2 text-right font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
     const rows = d.stations.map((s) => {
       const badges = [];
       if (s.invalid) badges.push(`<span class="badge bg-rose-500/20 text-rose-300">${t('station_badge_invalidated')}</span>`);
       else if (s.disputed) badges.push(`<span class="badge bg-amber-500/20 text-amber-300">${t('station_badge_disputed')}</span>`);
       if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-500/20 text-orange-300">${t('station_badge_review')}</span>`);
-      if (s.sources > 1) badges.push(`<span class="badge bg-zinc-300 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
-      const label = `<td class="py-2 pr-2"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-zinc-600 dark:text-zinc-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
-      if (!s.reported) return `<tr class="border-t border-zinc-200 dark:border-zinc-800">${label}<td class="py-2 text-zinc-600 dark:text-zinc-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
+      if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
+      const label = `<td class="py-2 pr-2"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
+      if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-2 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
       const cells = d.candidates.map((c) => `<td class="py-2 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
-      return `<tr class="border-t border-zinc-200 dark:border-zinc-800">${label}${cells}<td class="py-2 pl-2 text-right text-xs text-zinc-600 dark:text-zinc-500 whitespace-nowrap">${timeAgo(s.at)}</td></tr>`;
+      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-2 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap">${timeAgo(s.at)}</td></tr>`;
     }).join('');
     return `<div class="overflow-x-auto"><table class="w-full text-sm min-w-[480px]">
-      <thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-zinc-500 dark:text-zinc-400">${t('station_col_name')}</th>${head}<th class="py-2 pl-2 text-right font-medium text-zinc-500 dark:text-zinc-400">${t('station_col_updated')}</th></tr></thead>
+      <thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-slate-500 dark:text-slate-400">${t('station_col_name')}</th>${head}<th class="py-2 pl-2 text-right font-medium text-slate-500 dark:text-slate-400">${t('station_col_updated')}</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }
   function marginBanner(d) {
@@ -947,23 +947,23 @@
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('dash-body');
-    if (!d) { body.innerHTML = `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('dashboard_select_election')}</p>`; return; }
+    if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_select_election')}</p>`; return; }
     const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0);
     body.innerHTML =
       `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
         <h2 class="text-lg font-semibold">${esc(d.election.name)}</h2>
         <div class="flex gap-2">
-          <button id="exp-csv" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">${t('dashboard_export_csv')}</button>
-          <button id="exp-json" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">${t('dashboard_export_json')}</button>
+          <button id="exp-csv" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_csv')}</button>
+          <button id="exp-json" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_json')}</button>
         </div>
       </div>
-      <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-3">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')} · ${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)} · ${totalVotes.toLocaleString()} ${t('dashboard_votes')} · method: ${t('method_' + d.method) || METHOD_LABELS[d.method]}</p>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')} · ${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)} · ${totalVotes.toLocaleString()} ${t('dashboard_votes')} · method: ${t('method_' + d.method) || METHOD_LABELS[d.method]}</p>
       ${marginBanner(d)}
-      <div class="mb-6">${tallyBars(d) || `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
-      <h3 class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">${t('dashboard_by_station')}</h3>
+      <div class="mb-6">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
+      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('dashboard_by_station')}</h3>
       ${stationTable(d)}
-      <p class="mt-4 text-xs text-zinc-700 dark:text-zinc-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
-      <p class="mt-3 text-xs"><a class="text-violet-400 hover:underline" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a></p>`;
+      <p class="mt-4 text-xs text-slate-700 dark:text-slate-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
+      <p class="mt-3 text-xs"><a class="text-indigo-400 hover:underline" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a></p>`;
     document.getElementById('exp-csv').onclick = () => exportCsv(d);
     document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
   }
@@ -990,40 +990,40 @@
     const els = (App.state && App.state.elections) || [];
     const canCreate = App.role.org && App.role.org.active;
     let html = `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-semibold">${t('elections_heading')}</h2>`
-      + (canCreate ? `<button id="new-el" class="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">${t('elections_new')}</button>` : '')
+      + (canCreate ? `<button id="new-el" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('elections_new')}</button>` : '')
       + '</div>';
-    if (!App.role.org) html += `<p class="text-sm text-zinc-600 dark:text-zinc-500 mb-4">${t('elections_connect_org').replace('{orgs_link}', '<a href="#/orgs" class="text-violet-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
-    else if (!App.role.org.active) html += `<p class="text-sm text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-violet-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
+    if (!App.role.org) html += `<p class="text-sm text-slate-600 dark:text-slate-500 mb-4">${t('elections_connect_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
+    else if (!App.role.org.active) html += `<p class="text-sm text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
 
     html += '<div id="new-el-form"></div>';
     html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => `
-      <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-zinc-100 border border-zinc-200 hover:border-violet-600/60 dark:bg-zinc-900 dark:border-zinc-800">
+      <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold">${esc(e.name)}</h3>
           ${e.orgActive ? '' : `<span class="badge bg-amber-500/20 text-amber-300">${t('badge_pending')}</span>`}
         </div>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-1">${esc(e.orgName || '—')}</p>
-        <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(e.orgName || '—')}</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
       </a>`).join('') + '</div>'
-      : `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('elections_no_elections')}</p>`;
+      : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('elections_no_elections')}</p>`;
     v.innerHTML = html;
 
     if (canCreate) document.getElementById('new-el').onclick = () => showNewElectionForm();
   }
   function showNewElectionForm() {
     const f = document.getElementById('new-el-form');
-    f.innerHTML = `<div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
-      <label class="block text-sm mb-1 text-zinc-700 dark:text-zinc-300">${t('elections_form_name_label')}</label>
-      <input id="nel-name" placeholder="Springfield Mayoral 2026" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
-      <div class="flex items-center justify-between mb-1"><label class="text-sm text-zinc-700 dark:text-zinc-300">${t('elections_form_candidates_label')}</label>
-        <button id="nel-add" class="text-xs px-2 py-1 rounded bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">${t('elections_form_add_candidate')}</button></div>
+    f.innerHTML = `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+      <label class="block text-sm mb-1 text-slate-700 dark:text-slate-300">${t('elections_form_name_label')}</label>
+      <input id="nel-name" placeholder="Springfield Mayoral 2026" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+      <div class="flex items-center justify-between mb-1"><label class="text-sm text-slate-700 dark:text-slate-300">${t('elections_form_candidates_label')}</label>
+        <button id="nel-add" class="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('elections_form_add_candidate')}</button></div>
       <div id="nel-cands" class="space-y-2 mb-3"></div>
-      <button id="nel-create" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm">${t('elections_form_create')}</button>
-      <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-2">${t('elections_form_tx_note')}</p>
+      <button id="nel-create" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm">${t('elections_form_create')}</button>
+      <p class="text-xs text-slate-600 dark:text-slate-500 mt-2">${t('elections_form_tx_note')}</p>
     </div>`;
     const add = (val) => {
       const row = document.createElement('div'); row.className = 'flex gap-2';
-      row.innerHTML = `<input value="${esc(val || '')}" placeholder="${t('elections_form_candidate_ph')}" class="nel-c flex-1 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none"><button class="px-3 rounded-lg bg-zinc-200 hover:bg-zinc-300 text-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-400">×</button>`;
+      row.innerHTML = `<input value="${esc(val || '')}" placeholder="${t('elections_form_candidate_ph')}" class="nel-c flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none"><button class="px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-400">×</button>`;
       row.querySelector('button').onclick = () => row.remove();
       document.getElementById('nel-cands').appendChild(row);
     };
@@ -1054,21 +1054,21 @@
   // ───────────────────────── Election detail / workspace ─────────────────────────
   async function renderElectionDetail(v) {
     const d = App.state && App.state.detail;
-    if (!d) { v.innerHTML = `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-violet-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
+    if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
-    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
+    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
 
     v.innerHTML = `
-      <a href="#/elections" class="text-xs text-zinc-600 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-300">${t('election_detail_back')}</a>
+      <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
       <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
         <div><h2 class="text-xl font-semibold">${esc(d.election.name)}</h2>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
+        <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
         ${methodSel}
       </div>
       ${marginBanner(d)}
-      <div class="mb-5">${tallyBars(d) || `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
-      <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-2">${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)}</p>
+      <div class="mb-5">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)}</p>
       ${stationTable(d)}
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; refresh(); };
@@ -1078,7 +1078,7 @@
     if (myObs || isOrgOwner) ws.appendChild(disputeFilePanel(d));
     if (isOrgOwner) { ws.appendChild(stationsPanel(d)); ws.appendChild(observersPanel(d)); ws.appendChild(resolvePanel(d)); }
     if (!myObs && !isOrgOwner) {
-      const p = document.createElement('p'); p.className = 'text-sm text-zinc-600 dark:text-zinc-500';
+      const p = document.createElement('p'); p.className = 'text-sm text-slate-600 dark:text-slate-500';
       p.textContent = t('election_detail_connect_note');
       ws.appendChild(p);
     }
@@ -1086,7 +1086,7 @@
 
   function panel(title, inner) {
     const el = document.createElement('div');
-    el.className = 'p-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800';
+    el.className = 'p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800';
     el.innerHTML = `<h3 class="font-semibold mb-3">${title}</h3>` + inner;
     return el;
   }
@@ -1094,21 +1094,21 @@
   function observerPanel(d, myObs) {
     const stations = myObs.sid != null ? d.stations.filter((s) => s.sid === myObs.sid) : d.stations;
     const inner = `
-      <label class="block text-sm mb-1 text-zinc-700 dark:text-zinc-300">${t('election_observer_station_label')}</label>
-      <select id="ob-station" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none" ${myObs.sid != null ? 'disabled' : ''}>
+      <label class="block text-sm mb-1 text-slate-700 dark:text-slate-300">${t('election_observer_station_label')}</label>
+      <select id="ob-station" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none" ${myObs.sid != null ? 'disabled' : ''}>
         ${stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
       </select>
       <div id="ob-cands" class="space-y-2 mb-3">${d.candidates.map((c) => `
-        <div class="flex items-center gap-2"><label class="flex-1 text-sm text-zinc-700 dark:text-zinc-300">${esc(c.name)}</label>
-        <input type="number" min="0" data-cid="${c.cid}" value="0" class="ob-v w-28 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none text-right"></div>`).join('')}</div>
+        <div class="flex items-center gap-2"><label class="flex-1 text-sm text-slate-700 dark:text-slate-300">${esc(c.name)}</label>
+        <input type="number" min="0" data-cid="${c.cid}" value="0" class="ob-v w-28 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-right"></div>`).join('')}</div>
       <div class="grid grid-cols-2 gap-3 mb-3">
-        <div><label class="block text-xs mb-1 text-zinc-500 dark:text-zinc-400">${t('election_observer_total_label')}</label><input id="ob-tot" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none"></div>
-        <div><label class="block text-xs mb-1 text-zinc-500 dark:text-zinc-400">${t('election_observer_invalid_label')}</label><input id="ob-inv" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none"></div>
+        <div><label class="block text-xs mb-1 text-slate-500 dark:text-slate-400">${t('election_observer_total_label')}</label><input id="ob-tot" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none"></div>
+        <div><label class="block text-xs mb-1 text-slate-500 dark:text-slate-400">${t('election_observer_invalid_label')}</label><input id="ob-inv" type="number" min="0" class="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none"></div>
       </div>
-      <label class="block text-xs mb-1 text-zinc-500 dark:text-zinc-400">${t('evidence_upload_label')}</label>
-      <input id="ob-file" type="file" class="w-full mb-1 text-xs text-zinc-600 dark:text-zinc-400">
-      <p id="ob-hash" class="text-[0.65rem] text-zinc-600 dark:text-zinc-500 break-all mb-3 font-mono"></p>
-      <button id="ob-submit" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold text-sm">${t('election_observer_submit_btn')}</button>`;
+      <label class="block text-xs mb-1 text-slate-500 dark:text-slate-400">${t('evidence_upload_label')}</label>
+      <input id="ob-file" type="file" class="w-full mb-1 text-xs text-slate-600 dark:text-slate-400">
+      <p id="ob-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all mb-3 font-mono"></p>
+      <button id="ob-submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm">${t('election_observer_submit_btn')}</button>`;
     const p = panel(t('election_observer_title') + (myObs.sid != null ? ' ' + t('election_observer_your_station') : ''), inner);
     setTimeout(() => {
       let evHash = '';
@@ -1133,19 +1133,19 @@
   function stationsPanel(d) {
     const inner = `
       <div class="flex gap-2 mb-3">
-        <input id="st-name" placeholder="${t('election_station_name_ph')}" class="flex-1 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
-        <input id="st-label" placeholder="${t('election_station_label_ph')}" class="w-36 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
-        <button id="st-add" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">${t('election_station_add_btn')}</button>
+        <input id="st-name" placeholder="${t('election_station_name_ph')}" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+        <input id="st-label" placeholder="${t('election_station_label_ph')}" class="w-36 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+        <button id="st-add" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_station_add_btn')}</button>
       </div>
       <details class="text-sm">
-        <summary class="cursor-pointer text-zinc-500 dark:text-zinc-400 mb-2">${t('election_station_bulk_import')}</summary>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-1">${t('election_station_csv_desc')}</p>
-        <textarea id="st-csv" rows="4" placeholder="North School,District 1&#10;Town Hall,District 2" class="w-full px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none font-mono text-xs mb-1"></textarea>
-        <input id="st-csv-file" type="file" accept=".csv,text/csv" class="text-xs text-zinc-600 dark:text-zinc-400 mb-2 block">
-        <div id="st-csv-preview" class="text-xs text-zinc-500 dark:text-zinc-400 mb-2"></div>
-        <button id="st-csv-import" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">${t('election_station_import_btn')}</button>
+        <summary class="cursor-pointer text-slate-500 dark:text-slate-400 mb-2">${t('election_station_bulk_import')}</summary>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mb-1">${t('election_station_csv_desc')}</p>
+        <textarea id="st-csv" rows="4" placeholder="North School,District 1&#10;Town Hall,District 2" class="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none font-mono text-xs mb-1"></textarea>
+        <input id="st-csv-file" type="file" accept=".csv,text/csv" class="text-xs text-slate-600 dark:text-slate-400 mb-2 block">
+        <div id="st-csv-preview" class="text-xs text-slate-500 dark:text-slate-400 mb-2"></div>
+        <button id="st-csv-import" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_station_import_btn')}</button>
       </details>
-      <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-3">${t('election_station_count').replace('{n}', d.stations.length)} ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
+      <p class="text-xs text-slate-600 dark:text-slate-500 mt-3">${t('election_station_count').replace('{n}', d.stations.length)} ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
     const p = panel(t('election_stations_title'), inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
@@ -1179,14 +1179,14 @@
   function observersPanel(d) {
     const inner = `
       <div class="flex flex-wrap gap-2 mb-3">
-        <input id="ob-addr" placeholder="${t('election_observer_addr_ph')}" class="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none font-mono text-xs">
-        <select id="ob-scope" class="px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none text-sm">
+        <input id="ob-addr" placeholder="${t('election_observer_addr_ph')}" class="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none font-mono text-xs">
+        <select id="ob-scope" class="px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">
           <option value="">${t('election_observer_all_stations')}</option>
           ${d.stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
         </select>
-        <button id="ob-add" class="px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">${t('election_observer_authorize_btn')}</button>
+        <button id="ob-add" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_observer_authorize_btn')}</button>
       </div>
-      <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('election_observer_count').replace('{n}', d.observers.length)} ${d.observers.map((o) => `${userLink(o.addr)}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
+      <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_observer_count').replace('{n}', d.observers.length)} ${d.observers.map((o) => `${userLink(o.addr)}${o.sid != null ? ' (st ' + o.sid + ')' : ''}`).join(', ') || '—'}</p>`;
     const p = panel(t('election_observers_title'), inner);
     setTimeout(() => {
       p.querySelector('#ob-add').onclick = () => {
@@ -1202,13 +1202,13 @@
   function disputeFilePanel(d) {
     const reported = d.stations.filter((s) => s.reported && s.resultTx);
     const inner = reported.length ? `
-      <label class="block text-sm mb-1 text-zinc-700 dark:text-zinc-300">${t('election_dispute_target_label')}</label>
-      <select id="dp-target" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
+      <label class="block text-sm mb-1 text-slate-700 dark:text-slate-300">${t('election_dispute_target_label')}</label>
+      <select id="dp-target" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
         ${reported.map((s) => `<option value="${s.resultTx}">${esc(s.name)} — ${nm(s.observer)}</option>`).join('')}
       </select>
-      <input id="dp-reason" placeholder="${t('election_dispute_reason_ph')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
+      <input id="dp-reason" placeholder="${t('election_dispute_reason_ph')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
       <button id="dp-file" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm font-semibold">${t('disputes_file')}</button>`
-      : `<p class="text-sm text-zinc-600 dark:text-zinc-500">${t('election_dispute_no_results')}</p>`;
+      : `<p class="text-sm text-slate-600 dark:text-slate-500">${t('election_dispute_no_results')}</p>`;
     const p = panel(t('disputes_file'), inner);
     setTimeout(() => {
       const b = p.querySelector('#dp-file'); if (!b) return;
@@ -1225,12 +1225,12 @@
   function resolvePanel(d) {
     const open = d.disputes.filter((x) => x.status === 'open');
     const inner = open.length ? open.map((x) => `
-      <div class="border-t border-zinc-200 dark:border-zinc-800 pt-2 mt-2 first:border-0 first:pt-0 first:mt-0">
+      <div class="border-t border-slate-200 dark:border-slate-800 pt-2 mt-2 first:border-0 first:pt-0 first:mt-0">
         <p class="text-sm">${esc(x.reason || '—')}</p>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-2">${t('disputes_filed_by').replace('{who}', userLink(x.filer))} · ${timeAgo(x.createdAt)}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mb-2">${t('disputes_filed_by').replace('{who}', userLink(x.filer))} · ${timeAgo(x.createdAt)}</p>
         <button data-disp="${x.txId}" data-v="uphold" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 font-medium">${t('disputes_uphold')}</button>
-        <button data-disp="${x.txId}" data-v="reject" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 font-medium">${t('disputes_reject')}</button>
-      </div>`).join('') : `<p class="text-sm text-zinc-600 dark:text-zinc-500">${t('disputes_no_open')}</p>`;
+        <button data-disp="${x.txId}" data-v="reject" class="dres-btn text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 font-medium">${t('disputes_reject')}</button>
+      </div>`).join('') : `<p class="text-sm text-slate-600 dark:text-slate-500">${t('disputes_no_open')}</p>`;
     const p = panel(t('disputes_resolve'), inner);
     setTimeout(() => {
       p.querySelectorAll('.dres-btn').forEach((b) => b.onclick = () => {
@@ -1247,30 +1247,30 @@
     const myOrg = App.role.org;
     let html = `<h2 class="text-lg font-semibold mb-4">${t('orgs_heading')}</h2>`;
     if (myOrg) {
-      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><h3 class="font-semibold">${esc(myOrg.name)}</h3>
         <span class="badge ${myOrg.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${myOrg.active ? t('orgs_active_badge') : t('orgs_pending_badge')}</span></div>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500 mt-1">${esc(myOrg.jur || '')} · ${esc(myOrg.addr)}</p>
-        ${myOrg.active ? `<p class="text-sm text-zinc-500 dark:text-zinc-400 mt-2">${t('orgs_manage_elections').replace('Elections', '<a href="#/elections" class="text-violet-400 hover:underline">' + t('tab_elections') + '</a>')}</p>`
-          : `<button id="pay-fee" class="mt-3 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-semibold">${t('orgs_pay_fee')} (${App.cfg.orgFee})</button>`}
+        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(myOrg.jur || '')} · ${esc(myOrg.addr)}</p>
+        ${myOrg.active ? `<p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${t('orgs_manage_elections').replace('Elections', '<a href="#/elections" class="text-indigo-400 hover:underline">' + t('tab_elections') + '</a>')}</p>`
+          : `<button id="pay-fee" class="mt-3 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">${t('orgs_pay_fee')} (${App.cfg.orgFee})</button>`}
       </div>`;
     } else {
-      html += `<div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <h3 class="font-semibold mb-2">${t('orgs_register_heading')}</h3>
-        <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-3">${t('orgs_register_desc').replace('{fee}', '<strong>' + App.cfg.orgFee + '</strong>')}</p>
-        <input id="org-name" placeholder="${t('orgs_name_placeholder')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
-        <input id="org-jur" placeholder="${t('orgs_jur_placeholder')}" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 outline-none">
-        <button id="org-reg" class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-semibold">${t('orgs_register_button')}</button>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">${t('orgs_register_desc').replace('{fee}', '<strong>' + App.cfg.orgFee + '</strong>')}</p>
+        <input id="org-name" placeholder="${t('orgs_name_placeholder')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+        <input id="org-jur" placeholder="${t('orgs_jur_placeholder')}" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+        <button id="org-reg" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold">${t('orgs_register_button')}</button>
         ${App.wallet.connected ? '' : `<p class="text-xs text-amber-300 mt-2">${t('orgs_connect_first')}</p>`}
       </div>`;
     }
     const active = (App.state.elections || []);
-    html += `<h3 class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">${t('orgs_active_orgs')}</h3>`;
+    html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('orgs_active_orgs')}</h3>`;
     const orgs = {};
     active.forEach((e) => { if (e.orgActive) orgs[e.orgAddr] = e.orgName; });
     const orgList = Object.entries(orgs);
-    html += orgList.length ? '<div class="space-y-2">' + orgList.map(([addr, name]) => `<div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-sm flex justify-between"><span>${esc(name)}</span><span class="text-xs text-zinc-600 dark:text-zinc-500 font-mono">${shortAddr(addr)}</span></div>`).join('') + '</div>'
-      : `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('orgs_no_active')}</p>`;
+    html += orgList.length ? '<div class="space-y-2">' + orgList.map(([addr, name]) => `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between"><span>${esc(name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(addr)}</span></div>`).join('') + '</div>'
+      : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('orgs_no_active')}</p>`;
     v.innerHTML = html;
 
     const reg = document.getElementById('org-reg');
@@ -1299,31 +1299,31 @@
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('ev-body');
-    if (!d) { body.innerHTML = `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('select_election_prompt')}</p>`; return; }
+    if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`; return; }
     const stationName = (sid) => { const s = d.stations.find((x) => x.sid === sid); return s ? s.name : ('Station ' + sid); };
     const gallery = d.evidence.length ? d.evidence.map((e) => `
-      <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
+      <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
         ${e.invalid ? `<span class="badge bg-rose-500/20 text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
-        <p class="text-[0.65rem] text-zinc-600 dark:text-zinc-500 break-all font-mono mt-1">${esc(e.ev)}</p>
-        <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700">${t('evidence_submit')}</button>
-      </div>`).join('') : `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('evidence_no_evidence')}</p>`;
+        <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
+        <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
+        <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
+      </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('evidence_no_evidence')}</p>`;
 
     body.innerHTML = `<h2 class="text-lg font-semibold mb-1">${t('evidence_heading')} — ${esc(d.election.name)}</h2>
-      <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">${t('evidence_sha256_desc')}</p>
-      <div class="p-4 mb-4 rounded-xl bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
-        <p class="text-sm text-zinc-600 dark:text-zinc-500 mb-2" id="vf-target">${t('evidence_verifying_label')} <span class="text-zinc-600 dark:text-zinc-500">${t('evidence_verifying_default')}</span></p>
-        <input id="vf-file" type="file" class="text-xs text-zinc-600 dark:text-zinc-400 mb-2 block">
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('evidence_sha256_desc')}</p>
+      <div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <p class="text-sm text-slate-600 dark:text-slate-500 mb-2" id="vf-target">${t('evidence_verifying_label')} <span class="text-slate-600 dark:text-slate-500">${t('evidence_verifying_default')}</span></p>
+        <input id="vf-file" type="file" class="text-xs text-slate-600 dark:text-slate-400 mb-2 block">
         <p id="vf-result" class="text-sm"></p>
-        <p id="vf-hash" class="text-[0.65rem] text-zinc-600 dark:text-zinc-500 break-all font-mono"></p>
+        <p id="vf-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono"></p>
       </div>
       <div class="grid sm:grid-cols-2 gap-3">${gallery}</div>`;
 
     let target = '';
     body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
       target = b.dataset.hash;
-      document.getElementById('vf-target').innerHTML = t('evidence_verifying_label') + ' <span class="text-zinc-700 dark:text-zinc-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-zinc-600 dark:text-zinc-500">' + esc(target.slice(0, 16)) + '…</span>';
+      document.getElementById('vf-target').innerHTML = t('evidence_verifying_label') + ' <span class="text-slate-700 dark:text-slate-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-slate-600 dark:text-slate-500">' + esc(target.slice(0, 16)) + '…</span>';
       document.getElementById('vf-result').textContent = '';
     });
     document.getElementById('vf-file').onchange = async (e) => {
@@ -1331,7 +1331,7 @@
       const h = await sha256File(f);
       document.getElementById('vf-hash').textContent = 'sha256: ' + h;
       const r = document.getElementById('vf-result');
-      if (!target) { r.innerHTML = `<span class="text-zinc-500 dark:text-zinc-400">${t('evidence_pick_target')}</span>`; return; }
+      if (!target) { r.innerHTML = `<span class="text-slate-500 dark:text-slate-400">${t('evidence_pick_target')}</span>`; return; }
       if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = `<span class="text-emerald-400 font-semibold">${t('evidence_match_yes')}</span>`;
       else r.innerHTML = `<span class="text-rose-400 font-semibold">${t('evidence_match_no')}</span>`;
     };
@@ -1343,24 +1343,24 @@
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('dsp-body');
-    if (!d) { body.innerHTML = `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('select_election_prompt')}</p>`; return; }
+    if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`; return; }
     const stName = (txId) => { const s = d.stations.find((x) => x.resultTx === txId); return s ? s.name : txId.slice(0, 10) + '…'; };
     const statusBadge = (s) => s === 'upheld' ? `<span class="badge bg-rose-500/20 text-rose-300">${t('disputes_status_upheld')}</span>`
-      : s === 'rejected' ? `<span class="badge bg-zinc-300 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">${t('disputes_status_rejected')}</span>`
+      : s === 'rejected' ? `<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('disputes_status_rejected')}</span>`
       : `<span class="badge bg-amber-500/20 text-amber-300">${t('disputes_status_open')}</span>`;
     const rows = d.disputes.length ? d.disputes.map((x) => `
-      <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800">
+      <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stName(x.target))}</span>${statusBadge(x.status)}</div>
-        <p class="text-sm text-zinc-700 dark:text-zinc-300 mt-1">${esc(x.reason || '—')}</p>
-        <p class="text-xs text-zinc-600 dark:text-zinc-500">${t('disputes_filed_by').replace('{who}', userLink(x.filer))} · ${timeAgo(x.createdAt)}${x.ev ? ' · ' + t('disputes_has_evidence') : ''}</p>
-      </div>`).join('') : `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('disputes_no_disputes')}</p>`;
+        <p class="text-sm text-slate-700 dark:text-slate-300 mt-1">${esc(x.reason || '—')}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-500">${t('disputes_filed_by').replace('{who}', userLink(x.filer))} · ${timeAgo(x.createdAt)}${x.ev ? ' · ' + t('disputes_has_evidence') : ''}</p>
+      </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('disputes_no_disputes')}</p>`;
     body.innerHTML = `<h2 class="text-lg font-semibold mb-3">${t('disputes_heading')} — ${esc(d.election.name)}</h2><div class="space-y-2 mb-4">${rows}</div>
-      <p class="text-sm text-zinc-600 dark:text-zinc-500">${t('disputes_workspace_note').replace('election workspace', '<a href="#/election/' + d.election.eid + '" class="text-violet-400 hover:underline">election workspace</a>')}</p>`;
+      <p class="text-sm text-slate-600 dark:text-slate-500">${t('disputes_workspace_note').replace('election workspace', '<a href="#/election/' + d.election.eid + '" class="text-indigo-400 hover:underline">election workspace</a>')}</p>`;
   }
 
   // ───────────────────────── Admin ─────────────────────────
   async function renderAdmin(v) {
-    if (!App.role.isAdmin) { v.innerHTML = `<p class="text-zinc-600 dark:text-zinc-500 text-sm">${t('admin_scope_required')}</p>`; return; }
+    if (!App.role.isAdmin) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('admin_scope_required')}</p>`; return; }
     let data;
     try { data = await api('/__quickcount/admin?viewer=' + encodeURIComponent(App.wallet.address)); }
     catch (e) { v.innerHTML = '<p class="text-rose-400 text-sm">' + esc(e.message) + '</p>'; return; }
@@ -1368,16 +1368,16 @@
     v.innerHTML = `<h2 class="text-lg font-semibold mb-3">${t('admin_heading')}</h2>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         ${[[t('admin_stat_orgs'), s.orgs], [t('admin_stat_active_orgs'), s.activeOrgs], [t('admin_stat_elections'), s.elections], [t('admin_stat_org_fee'), s.orgFee]].map(([k, val]) =>
-          `<div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-zinc-600 dark:text-zinc-500">${k}</div></div>`).join('')}
+          `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-slate-600 dark:text-slate-500">${k}</div></div>`).join('')}
       </div>
-      <p class="text-xs text-zinc-600 dark:text-zinc-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
-      <h3 class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">${t('admin_all_orgs')}</h3>
+      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
+      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('admin_all_orgs')}</h3>
       <div class="space-y-2">${data.orgs.map((o) => `
-        <div class="p-3 rounded-lg bg-zinc-100 border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 flex items-center justify-between gap-2">
+        <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between gap-2">
           <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-500/20 text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
-          <div class="text-xs text-zinc-600 dark:text-zinc-500 font-mono">${esc(o.addr)} · ${t('admin_paid').replace('{amount}', o.feeAmount)}</div></div>
+          <div class="text-xs text-slate-600 dark:text-slate-500 font-mono">${esc(o.addr)} · ${t('admin_paid').replace('{amount}', o.feeAmount)}</div></div>
           ${o.active ? `<span class="badge bg-emerald-500/20 text-emerald-300">${t('orgs_active_badge')}</span>`
-            : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">${t('admin_waive_fee')}</button>`}
+            : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('admin_waive_fee')}</button>`}
         </div>`).join('')}</div>`;
     v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
       const org = b.dataset.org;
@@ -1389,7 +1389,7 @@
   // ───────────────────────── Profile & Settings ─────────────────────────
   function langSelect(id) {
     const opts = LANGS.map((l) => `<option value="${l}" ${l === App.lang ? 'selected' : ''}>${esc(LANG_NAMES[l])}</option>`).join('');
-    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm">${opts}</select>`;
+    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm">${opts}</select>`;
   }
   function wireLangSelect(id) {
     const el = document.getElementById(id);
@@ -1421,13 +1421,13 @@
     v.innerHTML = `
       <div class="max-w-xl">
         <h2 class="text-xl font-bold mb-1">${esc(t('title_profile'))}</h2>
-        <p class="text-xs text-zinc-500 mb-5">${esc(t('readonly_note'))}</p>
+        <p class="text-xs text-slate-500 mb-5">${esc(t('readonly_note'))}</p>
 
         <div class="flex items-center gap-4 mb-6">
           ${identicon(seed)}
           <div class="min-w-0">
             <div class="text-lg font-semibold truncate">${esc(prof.display_name || username || (addr ? shortAddr(addr) : t('not_linked')))}</div>
-            <div class="text-xs text-zinc-500">${esc(t('label_joined'))}: ${esc(fmtJoined(prof.created_at))}</div>
+            <div class="text-xs text-slate-500">${esc(t('label_joined'))}: ${esc(fmtJoined(prof.created_at))}</div>
           </div>
         </div>
 
@@ -1435,46 +1435,46 @@
 
         <div class="space-y-4">
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_username'))} <span class="text-zinc-600">· ${esc(t('hint_username'))}</span></label>
-            <div class="px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm ${username ? '' : 'text-zinc-500'}">${esc(username || t('not_linked'))}</div>
+            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_username'))} <span class="text-slate-600">· ${esc(t('hint_username'))}</span></label>
+            <div class="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm ${username ? '' : 'text-slate-500'}">${esc(username || t('not_linked'))}</div>
           </div>
 
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_wallet'))}</label>
+            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_wallet'))}</label>
             <div class="flex items-center gap-2">
-              <div class="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono break-all ${addr ? '' : 'text-zinc-500'}">${esc(addr || t('not_linked'))}</div>
-              ${addr ? `<button id="copy-addr" class="text-xs px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 whitespace-nowrap">${esc(t('action_copy'))}</button>` : ''}
+              <div class="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono break-all ${addr ? '' : 'text-slate-500'}">${esc(addr || t('not_linked'))}</div>
+              ${addr ? `<button id="copy-addr" class="text-xs px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 whitespace-nowrap">${esc(t('action_copy'))}</button>` : ''}
             </div>
           </div>
 
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_display_name'))}</label>
+            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_display_name'))}</label>
             ${linked ? `
             <div class="flex items-center gap-2">
-              <input id="dn-input" maxlength="20" value="${esc(currentName)}" class="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm" />
-              <button id="dn-save" class="text-sm px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed">${esc(t('action_save'))}</button>
+              <input id="dn-input" maxlength="20" value="${esc(currentName)}" class="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm" />
+              <button id="dn-save" class="text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed">${esc(t('action_save'))}</button>
             </div>
             <p id="dn-err" class="hidden mt-1 text-xs text-rose-400"></p>
-            <p class="mt-1 text-xs text-zinc-500">${esc(t('hint_display_name'))}</p>
+            <p class="mt-1 text-xs text-slate-500">${esc(t('hint_display_name'))}</p>
             ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
           </div>
 
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_bio'))}</label>
+            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_bio'))}</label>
             ${linked ? `
             <textarea id="bio-input" maxlength="280" rows="3"
-              class="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 outline-none text-sm resize-none"
+              class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 outline-none text-sm resize-none"
               placeholder="${esc(t('hint_bio'))}">${esc(currentBio)}</textarea>
             <div class="flex items-center justify-between mt-1">
               <p id="bio-err" class="hidden text-xs text-rose-400"></p>
-              <p id="bio-count" class="text-xs text-zinc-500 ml-auto">${currentBio.length}/280</p>
+              <p id="bio-count" class="text-xs text-slate-500 ml-auto">${currentBio.length}/280</p>
             </div>
-            <button id="bio-save" class="mt-1 text-sm px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-medium">${esc(t('action_save'))}</button>
+            <button id="bio-save" class="mt-1 text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${esc(t('action_save'))}</button>
             ` : `<p class="text-xs text-amber-300">${esc(t('no_wallet_note'))}</p>`}
           </div>
 
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">${esc(t('label_language'))}</label>
+            <label class="block text-xs text-slate-400 mb-1">${esc(t('label_language'))}</label>
             ${langSelect('profile-lang')}
           </div>
         </div>
@@ -1560,8 +1560,8 @@
             const items = (data && data.history) || [];
             histArea.innerHTML = `<h3 class="text-sm font-semibold mb-2">${esc(t('profile_history_heading'))}</h3>` +
               (items.length ? `<ul class="space-y-2">${items.map((item) =>
-                `<li class="text-sm text-zinc-400"><span class="text-zinc-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-zinc-600">${timeAgo(item.submitted_at)}</span></li>`
-              ).join('')}</ul>` : `<p class="text-sm text-zinc-500">${esc(t('profile_history_empty'))}</p>`);
+                `<li class="text-sm text-slate-400"><span class="text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
+              ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`);
           }
         } catch (_) {}
       }
@@ -1569,18 +1569,18 @@
   }
 
   async function renderUserProfile(v, addr) {
-    if (!addr) { v.innerHTML = `<p class="text-zinc-500 text-sm">${esc(t('profile_not_found'))}</p>`; return; }
-    v.innerHTML = `<div class="max-w-xl"><p class="text-zinc-500 text-sm">${esc(t('loading') || '…')}</p></div>`;
+    if (!addr) { v.innerHTML = `<p class="text-slate-500 text-sm">${esc(t('profile_not_found'))}</p>`; return; }
+    v.innerHTML = `<div class="max-w-xl"><p class="text-slate-500 text-sm">${esc(t('loading') || '…')}</p></div>`;
     let data;
     try {
       const viewer = (App.me && App.me.usernode_pubkey) || '';
       data = await api(`/api/public/profiles/${encodeURIComponent(addr)}${viewer ? '?viewer=' + encodeURIComponent(viewer) : ''}`);
     } catch (_) {
-      v.innerHTML = `<div class="max-w-xl"><p class="text-zinc-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
+      v.innerHTML = `<div class="max-w-xl"><p class="text-slate-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
       return;
     }
     if (!data || (!data.display_name && !data.username && !(data.stats && (data.stats.results_submitted || data.stats.elections)))) {
-      v.innerHTML = `<div class="max-w-xl"><p class="text-zinc-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
+      v.innerHTML = `<div class="max-w-xl"><p class="text-slate-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
       return;
     }
     const displayLabel = data.display_name || data.username || shortAddr(addr);
@@ -1592,15 +1592,15 @@
           ${identicon(seed)}
           <div class="min-w-0">
             <div class="text-lg font-semibold truncate">${esc(displayLabel)}</div>
-            ${data.username ? `<div class="text-xs text-zinc-500">@${esc(data.username)}</div>` : ''}
+            ${data.username ? `<div class="text-xs text-slate-500">@${esc(data.username)}</div>` : ''}
           </div>
         </div>
-        ${data.bio ? `<p class="text-sm text-zinc-300 mb-4">${esc(data.bio)}</p>` : ''}
+        ${data.bio ? `<p class="text-sm text-slate-300 mb-4">${esc(data.bio)}</p>` : ''}
         ${statsHtml(data)}
         <h3 class="text-sm font-semibold mb-2 mt-4">${esc(t('profile_history_heading'))}</h3>
         ${items.length ? `<ul class="space-y-2">${items.map((item) =>
-          `<li class="text-sm text-zinc-400"><span class="text-zinc-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-zinc-600">${timeAgo(item.submitted_at)}</span></li>`
-        ).join('')}</ul>` : `<p class="text-sm text-zinc-500">${esc(t('profile_history_empty'))}</p>`}
+          `<li class="text-sm text-slate-400"><span class="text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
+        ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`}
       </div>`;
   }
 
@@ -1608,9 +1608,9 @@
     v.innerHTML = `
       <div class="max-w-xl">
         <h2 class="text-xl font-bold mb-5">${esc(t('title_settings'))}</h2>
-        <div class="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
           <label class="block text-sm font-medium mb-1">${esc(t('label_language'))}</label>
-          <p class="text-xs text-zinc-500 mb-3">${esc(t('desc_language'))}</p>
+          <p class="text-xs text-slate-500 mb-3">${esc(t('desc_language'))}</p>
           ${langSelect('settings-lang')}
         </div>
       </div>`;
