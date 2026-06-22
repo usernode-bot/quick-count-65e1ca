@@ -716,9 +716,7 @@
 
   // ───────────────────────── Memo Validation ────────────────────────────────
   // Mirror of lib/memo.js validation — client-side guards before send.
-  function isHash64(s) {
-    return typeof s === 'string' && /^[0-9a-f]{64}$/i.test(s);
-  }
+  // Note: isHash64 is already declared above in the QC memo builders block.
   function posInt(n) {
     const x = Number(n);
     return Number.isFinite(x) ? Math.max(0, Math.round(x)) : null;
