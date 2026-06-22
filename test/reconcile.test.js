@@ -56,6 +56,39 @@ test('explorer-sourced replay reconstructs the same state as the direct log', as
   assert.strictEqual(resyncedState, directState, 'resync from chain == direct rebuild');
 });
 
+test('treasury poll surfaces recipient-side (user -> treasury) registrations', async () => {
+  // An org registration is a user -> treasury transfer. The poller watches the
+  // treasury, so the explorer query MUST return transactions where the treasury
+  // is the RECIPIENT, not only the sender. Model an explorer that ANDs whichever
+  // of { account, recipient } are present (the strict interpretation): a single
+  // { account: treasury, recipient: treasury } body would match only self-sends
+  // and miss the registration. listFromBase now queries each side separately.
+  const reg = {
+    tx_hash: 'reg-1', sender: 'ut1someorg', recipient: CFG.treasury,
+    amount: CFG.orgFee, memo: require('../lib/memo').encode(require('../lib/memo').orgMemo('Recipient-side Org', 'Land')),
+    created_at: '2026-06-20T09:00:00.000Z',
+  };
+  global.fetch = async (_url, opts) => {
+    let body = {};
+    try { body = JSON.parse(opts.body || '{}'); } catch (_) {}
+    const hasAcct = body.account != null;
+    const hasRcpt = body.recipient != null;
+    const match = [reg].filter((tx) => {
+      if (hasAcct && tx.sender !== body.account) return false;
+      if (hasRcpt && tx.recipient !== body.recipient) return false;
+      return hasAcct || hasRcpt;
+    });
+    return { ok: true, status: 200, json: async () => ({ transactions: match }) };
+  };
+  const src = makeSource({ localDev: false, explorerUrl: 'https://ex.test/explorer-api', chainId: 'usernode' });
+  const raw = await src.listTransactions({ account: CFG.treasury });
+  assert.ok(raw.some((r) => r.tx_hash === 'reg-1'), 'registration surfaced via the recipient-side query');
+
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(raw.map(normalizeTx));
+  assert.ok(ix.activeOrgs().some((o) => o.addr === 'ut1someorg'), 'recipient-side registration becomes an active org');
+});
+
 test('replay is idempotent — ingesting the log twice yields identical state', () => {
   const demo = buildDemoTxs().map(normalizeTx);
   const once = new QuickCountIndexer(CFG); once.rebuild(demo);

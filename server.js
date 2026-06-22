@@ -835,13 +835,17 @@ async function start() {
   await seedStaging();
   await pollOnce();
   // No explorer/node upstream → the indexer can't ingest and the /explorer-api
-  // proxy has nothing to forward to. Warn loudly; the client falls back to
-  // optimistic confirmation (chainConfigured=false) so the app stays usable.
+  // proxy has nothing to forward to. This is no longer a silent log-only state:
+  // /__quickcount/config (and /api/public/config) report chainConfigured=false,
+  // which the SPA surfaces as a persistent banner on the Orgs/Admin screens and
+  // a neutral "submitted — awaiting on-chain sync" notice instead of a false
+  // success toast. We still log here so operators see it in container logs.
   if (source.backend === 'none' && !LOCAL_DEV) {
     console.warn(
       '[QuickCount] WARNING: no chain read source configured — set EXPLORER_API_URL ' +
       'or NODE_RPC_URL. On-chain transactions will broadcast but the indexer will not ' +
-      'ingest them and client confirmation will be optimistic (best-effort).'
+      'ingest them (registered orgs will not appear and admin stats stay at 0). The UI ' +
+      'now shows a persistent "on-chain sync not configured" banner via chainConfigured=false.'
     );
   }
   const interval = LOCAL_DEV ? 2000 : 4000;
