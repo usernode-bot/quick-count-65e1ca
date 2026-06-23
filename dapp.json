@@ -3,7 +3,7 @@
   "secrets": [
     {
       "key": "EXPLORER_API_URL",
-      "description": "Base URL of the public block explorer — the canonical chain read source. The indexer reads <EXPLORER_API_URL>/<CHAIN_ID>/transactions and the browser confirms transactions through the relative /explorer-api/ proxy. Public infrastructure URL; falls back to NODE_RPC_URL when unset.",
+      "description": "Base URL of the public block explorer — the canonical chain read source. The indexer reads <EXPLORER_API_URL>/<CHAIN_ID>/transactions and the browser confirms transactions through the relative /explorer-api/ proxy. Public infrastructure URL; when unset the indexer falls back to the platform-managed NODE_RPC_URL (which carries a default), so a normal deploy never lands with the chain read source set to 'none'.",
       "required": false,
       "private": false
     },
@@ -16,9 +16,10 @@
     },
     {
       "key": "NODE_RPC_URL",
-      "description": "Base URL of the Usernode node the indexer polls for on-chain transactions. FALLBACK read source, used only when EXPLORER_API_URL is unset. Platform-managed in-network; optional for standalone deploys (the indexer no-ops when unset).",
+      "description": "Base URL of the Usernode node the indexer polls for on-chain transactions. FALLBACK read source, used only when EXPLORER_API_URL is unset. Platform-managed: inside the platform the deploy injects the real in-network node URL, overriding the default below; the default is the in-network host used for standalone deploys so the chain read source is never 'none'. Local-dev ignores this and uses the in-process mock ledger.",
       "required": false,
-      "private": false
+      "private": false,
+      "default": "http://usernode-node:3000"
     },
     {
       "key": "TREASURY_ADDR",
@@ -91,6 +92,11 @@
       "name": "Evidence gallery renders",
       "path": "/#/evidence",
       "expectText": "Evidence"
+    },
+    {
+      "name": "Active organizations list shows an election-less active org",
+      "path": "/#/orgs",
+      "expectText": "Pollwatch Alliance"
     },
     {
       "name": "Demo election shows reporting progress",

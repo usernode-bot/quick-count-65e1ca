@@ -25,7 +25,7 @@ const jwt = require('jsonwebtoken');
 const { normalizeTx, QuickCountIndexer } = require('./lib/indexer');
 const memo = require('./lib/memo');
 const mock = require('./lib/mockledger');
-const { makeSource, getTransaction } = require('./lib/txsource');
+const { makeSource, getTransaction, resolveTxEndpoint, postTransactions } = require('./lib/txsource');
 const { verifyPayment } = require('./lib/unlock');
 const { isKind, validateImageUpload } = require('./lib/attach');
 const { isValidDisplayName, isValidBio, isSupportedLang } = require('./lib/profile');
@@ -58,6 +58,7 @@ const DEMO = {
   orgB: 'ut1demounpaidorg000000000000000000000000000',
   orgC: 'ut1demoprivateorg00000000000000000000000000', // private org
   orgD: 'ut1demodeletedorg00000000000000000000000000', // tombstoned org
+  pollwatch: 'ut1demopollwatchalliance00000000000000000000',
   obs1: 'ut1demoobserverone000000000000000000000000',
   obs2: 'ut1demoobservertwo000000000000000000000000',
   obs3: 'ut1demoobserverthree00000000000000000000000',
@@ -157,6 +158,9 @@ function buildDemoTxs() {
     // Organizations — one pays the fee (active), one does not (pending).
     mk('demo_org_a', DEMO.orgA, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Citizens Count', 'Demo Republic')),
     mk('demo_org_b', DEMO.orgB, TREASURY_ADDR, 0, memo.orgMemo('Staging demo — Unpaid Org', 'Demo Republic')),
+    // Active org with NO elections — proves "Organisasi aktif" lists active orgs
+    // directly, not derived from elections.
+    mk('demo_pollwatch', DEMO.pollwatch, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Pollwatch Alliance', 'Demo Republic')),
     // Election + candidates (by the active org).
     mk(eid, DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — General Election')),
     mk('demo_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 1, 'Demo Candidate Red')),
@@ -306,7 +310,9 @@ app.get('/__quickcount/config', (_req, res) => {
     methods: require('./lib/aggregate').METHODS, personas,
     // Chain read config for the client confirmation poll. The browser builds
     // <explorerApiBase>/<chainId>/transactions; both are auth-exempt.
-    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE,
+    // chainConfigured=false (no explorer/node upstream) tells the client to
+    // confirm optimistically rather than dead-end on a 20s timeout.
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: source.configured,
   });
 });
 
@@ -317,6 +323,25 @@ app.get('/__quickcount/config', (_req, res) => {
 app.get('/__quickcount/refresh', async (_req, res) => {
   try { await pollOnce(); res.json({ ok: true, txs: txLog.length }); }
   catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+// Browser-facing chain read proxy. The client confirmation poll (index.html
+// confirmTx) and the public dashboard's unlock confirm POST to
+// /explorer-api/<chain>/transactions to wait for a just-sent transaction to
+// appear on the ledger. The browser can't reach EXPLORER_API_URL / NODE_RPC_URL
+// directly (internal hostnames / CORS), so the app forwards the query to the
+// SAME upstream the server-side indexer reads — via the shared postTransactions
+// helper in lib/txsource.js. Read-only, side-effect-free, and auth-exempt (the
+// /explorer-api/ prefix is in PUBLIC_PREFIXES). Registered before app.get('*')
+// so the POST isn't swallowed by the SPA catch-all. Mirrors the path the hosted
+// bridge itself polls. In local-dev the in-process mock answers instead and the
+// client short-circuits confirmation, so this is effectively a production path.
+app.post('/explorer-api/:chain/transactions', async (req, res) => {
+  const url = resolveTxEndpoint({ explorerUrl: EXPLORER_API_URL, nodeUrl: NODE_RPC_URL, chainId: req.params.chain });
+  if (!url) return res.status(503).json({ error: 'chain read source not configured', transactions: [] });
+  const { status, data } = await postTransactions(url, req.body || {});
+  const code = (status >= 200 && status < 600) ? status : 502;
+  res.status(code).json(data == null ? { transactions: [] } : data);
 });
 
 // Has this wallet paid to unlock? Unlock is global per wallet and permanent.
@@ -337,8 +362,9 @@ app.get('/api/public/config', (_req, res) => {
       price: UNLOCK_PRICE,
     },
     // Chain read config so the public dashboard can confirm the unlock payment
-    // against the same explorer proxy the main app uses.
-    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE,
+    // against the same explorer proxy the main app uses. chainConfigured=false
+    // makes the dashboard confirm optimistically instead of timing out.
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: source.configured,
   });
 });
 
@@ -356,7 +382,7 @@ app.get('/__quickcount/state', (req, res) => {
       const can = visible.some((el) => el.eid === req.query.eid);
       detail = can ? indexer.electionDetail(req.query.eid, method) : null;
     }
-    res.json({ role, elections, detail, method });
+    res.json({ role, elections, detail, method, activeOrgs: indexer.activeOrgs() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -855,6 +881,20 @@ async function start() {
   seedDemo();
   await seedStaging();
   await pollOnce();
+  // No explorer/node upstream → the indexer can't ingest and the /explorer-api
+  // proxy has nothing to forward to. This is no longer a silent log-only state:
+  // /__quickcount/config (and /api/public/config) report chainConfigured=false,
+  // which the SPA surfaces as a persistent banner on the Orgs/Admin screens and
+  // a neutral "submitted — awaiting on-chain sync" notice instead of a false
+  // success toast. We still log here so operators see it in container logs.
+  if (source.backend === 'none' && !LOCAL_DEV) {
+    console.warn(
+      '[QuickCount] WARNING: no chain read source configured — set EXPLORER_API_URL ' +
+      'or NODE_RPC_URL. On-chain transactions will broadcast but the indexer will not ' +
+      'ingest them (registered orgs will not appear and admin stats stay at 0). The UI ' +
+      'now shows a persistent "on-chain sync not configured" banner via chainConfigured=false.'
+    );
+  }
   const interval = LOCAL_DEV ? 2000 : 4000;
   setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), interval);
   app.listen(PORT, () => console.log(

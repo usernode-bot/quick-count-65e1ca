@@ -25,19 +25,26 @@ test('explorerTxUrl builds <base>/<chain>/transactions and trims slashes', () =>
   assert.strictEqual(explorerTxUrl('https://ex.test', ''), null);
 });
 
-test('makeSource prefers the explorer backend and queries the per-chain endpoint', async () => {
-  let seenUrl = null, seenBody = null;
+test('makeSource prefers the explorer backend and queries both sides of the per-chain endpoint', async () => {
+  // listFromBase issues two single-sided queries (by sender `account`, by
+  // `recipient`) so the poller surfaces user -> treasury registrations under any
+  // explorer field interpretation. Capture every call.
+  const seenUrls = [], seenBodies = [];
   global.fetch = async (url, opts) => {
-    seenUrl = url; seenBody = JSON.parse(opts.body);
+    seenUrls.push(url); seenBodies.push(JSON.parse(opts.body));
     return { ok: true, json: async () => ({ transactions: [{ tx_hash: 't1', sender: 'a', recipient: 'b', memo: 'm', amount: 0, created_at: '2026-01-01T00:00:00Z' }] }) };
   };
   const src = makeSource({ localDev: false, nodeUrl: 'https://node.test', explorerUrl: 'https://ex.test/explorer-api', chainId: 'usernode' });
   assert.strictEqual(src.backend, 'explorer');
   const txs = await src.listTransactions({ account: 'a' });
-  assert.strictEqual(seenUrl, 'https://ex.test/explorer-api/usernode/transactions');
-  assert.strictEqual(seenBody.account, 'a');
-  assert.strictEqual(txs.length, 1);
-  assert.strictEqual(txs[0].tx_hash, 't1');
+  // Both queries hit the per-chain endpoint.
+  assert.ok(seenUrls.every((u) => u === 'https://ex.test/explorer-api/usernode/transactions'));
+  // One query is sender-side (account), the other recipient-side.
+  assert.ok(seenBodies.some((b) => b.account === 'a'), 'queried by sender');
+  assert.ok(seenBodies.some((b) => b.recipient === 'a'), 'queried by recipient');
+  // Both stubbed responses are concatenated (caller dedupes by txId).
+  assert.ok(txs.length >= 1);
+  assert.ok(txs.every((t) => t.tx_hash === 't1'));
 });
 
 test('makeSource falls back to NODE_RPC_URL when no explorer is configured', async () => {

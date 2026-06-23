@@ -170,9 +170,15 @@
   function send(to, amount, memo, opts) {
     opts = opts || {};
     var sender = opts.sender;
+    // waitForInclusion:false → the hosted bridge resolves sendTransaction as soon
+    // as the relay ACCEPTS the broadcast, instead of polling for on-chain
+    // inclusion itself. The app drives its own inclusion gate (confirmTx in
+    // index.html, against the /explorer-api proxy), so letting the bridge also
+    // poll would be redundant — and would dead-end when no chain read source is
+    // configured (the proxy returns 503). The mock sender ignores the opts arg.
     var fn = sender
       ? function () { return sender(to, amount || 0, memo); }
-      : function () { return window.sendTransaction(to, amount || 0, memo); };
+      : function () { return window.sendTransaction(to, amount || 0, memo, { waitForInclusion: false }); };
     return call(fn, { idempotent: opts.idempotent === true, skipReady: !!sender, isSend: true }).then(extractTxId);
   }
 
