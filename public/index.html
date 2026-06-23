@@ -83,6 +83,7 @@
       <span id="staging-badge" class="hidden badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
+        <button id="refresh-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Refresh">↻</button>
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
         <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none"></select>
         <div id="wallet-wrap" class="relative">
@@ -206,6 +207,13 @@
       profile_history_heading: 'Activity',
       profile_history_empty: 'No activity yet.',
       profile_not_found: 'No profile or activity found for this address.',
+      profile_stat_orgs: 'Organizations',
+      profile_orgs_heading: 'Organizations',
+      profile_orgs_empty: 'Not part of any organization yet.',
+      dashboard_owner_no_election: 'Your organization {org} is active. Create your first election to see live results here.',
+      elections_active_no_elections: 'Your organization is registered and active. Publish your first election to get started.',
+      action_refresh: 'Refresh',
+      toast_refreshed: 'Refreshed ✓',
       tab_heatmap: 'Heatmap', heatmap_heading: 'Voter Turnout by Region', heatmap_select_election: 'Select an election to view turnout by region.', heatmap_no_regions: 'No regions are defined. Add a label to each station in the election workspace.', heatmap_col_region: 'Region', heatmap_col_stations: 'Stations', heatmap_col_ballots: 'Ballots cast', heatmap_col_valid_rate: 'Valid ballots', heatmap_col_invalid: 'Blank / invalid', heatmap_unlabeled: '(No region)', heatmap_summary: '{reported} of {total} stations reported · {regions} regions',
     },
     id: {
@@ -264,6 +272,13 @@
       profile_history_heading: 'Aktivitas',
       profile_history_empty: 'Belum ada aktivitas.',
       profile_not_found: 'Tidak ada profil atau aktivitas untuk alamat ini.',
+      profile_stat_orgs: 'Organisasi',
+      profile_orgs_heading: 'Organisasi',
+      profile_orgs_empty: 'Belum tergabung dalam organisasi mana pun.',
+      dashboard_owner_no_election: 'Organisasi Anda {org} aktif. Buat pemilihan pertama Anda untuk melihat hasil langsung di sini.',
+      elections_active_no_elections: 'Organisasi Anda terdaftar dan aktif. Terbitkan pemilihan pertama Anda untuk memulai.',
+      action_refresh: 'Segarkan',
+      toast_refreshed: 'Disegarkan ✓',
       tab_heatmap: 'Peta Panas', heatmap_heading: 'Partisipasi Pemilih per Wilayah', heatmap_select_election: 'Pilih pemilihan untuk melihat partisipasi per wilayah.', heatmap_no_regions: 'Tidak ada wilayah yang ditentukan. Tambahkan label ke setiap TPS di ruang kerja pemilihan.', heatmap_col_region: 'Wilayah', heatmap_col_stations: 'TPS', heatmap_col_ballots: 'Surat suara masuk', heatmap_col_valid_rate: 'Surat suara sah', heatmap_col_invalid: 'Kosong / tidak sah', heatmap_unlabeled: '(Tanpa wilayah)', heatmap_summary: '{reported} dari {total} TPS dilaporkan · {regions} wilayah',
     },
     'zh-Hans': {
@@ -322,6 +337,13 @@
       profile_history_heading: '活动',
       profile_history_empty: '暂无活动。',
       profile_not_found: '未找到该地址的资料或活动。',
+      profile_stat_orgs: '机构',
+      profile_orgs_heading: '机构',
+      profile_orgs_empty: '尚未加入任何机构。',
+      dashboard_owner_no_election: '您的机构 {org} 已激活。创建您的第一个选举即可在此查看实时结果。',
+      elections_active_no_elections: '您的机构已注册并激活。发布您的第一个选举以开始使用。',
+      action_refresh: '刷新',
+      toast_refreshed: '已刷新 ✓',
       tab_heatmap: '热力图', heatmap_heading: '各地区选民参与率', heatmap_select_election: '选择一场选举以查看各地区的参与率。', heatmap_no_regions: '未定义地区。请在选举工作区中为每个投票站添加标签。', heatmap_col_region: '地区', heatmap_col_stations: '投票站', heatmap_col_ballots: '投票数', heatmap_col_valid_rate: '有效票', heatmap_col_invalid: '空白/无效', heatmap_unlabeled: '（无地区）', heatmap_summary: '{reported}/{total} 个投票站已上报 · {regions} 个地区',
     },
     es: {
@@ -381,6 +403,13 @@
       profile_history_heading: 'Actividad',
       profile_history_empty: 'Sin actividad aún.',
       profile_not_found: 'No se encontró perfil ni actividad para esta dirección.',
+      profile_stat_orgs: 'Organizaciones',
+      profile_orgs_heading: 'Organizaciones',
+      profile_orgs_empty: 'Aún no pertenece a ninguna organización.',
+      dashboard_owner_no_election: 'Tu organización {org} está activa. Crea tu primera elección para ver resultados en vivo aquí.',
+      elections_active_no_elections: 'Tu organización está registrada y activa. Publica tu primera elección para empezar.',
+      action_refresh: 'Actualizar',
+      toast_refreshed: 'Actualizado ✓',
       tab_heatmap: 'Mapa de calor', heatmap_heading: 'Participación por región', heatmap_select_election: 'Selecciona una elección para ver la participación por región.', heatmap_no_regions: 'No hay regiones definidas. Añade una etiqueta a cada mesa en el espacio de trabajo de la elección.', heatmap_col_region: 'Región', heatmap_col_stations: 'Mesas', heatmap_col_ballots: 'Votos emitidos', heatmap_col_valid_rate: 'Votos válidos', heatmap_col_invalid: 'En blanco / nulos', heatmap_unlabeled: '(Sin región)', heatmap_summary: '{reported} de {total} mesas reportadas · {regions} regiones',
     },
     hi: {
@@ -439,6 +468,13 @@
       profile_history_heading: 'गतिविधि',
       profile_history_empty: 'अभी तक कोई गतिविधि नहीं।',
       profile_not_found: 'इस पते के लिए कोई प्रोफ़ाइल या गतिविधि नहीं मिली।',
+      profile_stat_orgs: 'संगठन',
+      profile_orgs_heading: 'संगठन',
+      profile_orgs_empty: 'अभी तक किसी संगठन का हिस्सा नहीं।',
+      dashboard_owner_no_election: 'आपका संगठन {org} सक्रिय है। यहाँ लाइव परिणाम देखने के लिए अपना पहला चुनाव बनाएँ।',
+      elections_active_no_elections: 'आपका संगठन पंजीकृत और सक्रिय है। शुरू करने के लिए अपना पहला चुनाव प्रकाशित करें।',
+      action_refresh: 'ताज़ा करें',
+      toast_refreshed: 'ताज़ा किया गया ✓',
       tab_heatmap: 'हीटमैप', heatmap_heading: 'क्षेत्रवार मतदाता भागीदारी', heatmap_select_election: 'क्षेत्र के अनुसार भागीदारी देखने के लिए चुनाव चुनें।', heatmap_no_regions: 'कोई क्षेत्र परिभाषित नहीं है। चुनाव कार्यक्षेत्र में प्रत्येक बूथ में लेबल जोड़ें।', heatmap_col_region: 'क्षेत्र', heatmap_col_stations: 'बूथ', heatmap_col_ballots: 'डाले गए मत', heatmap_col_valid_rate: 'वैध मत', heatmap_col_invalid: 'रिक्त / अमान्य', heatmap_unlabeled: '(कोई क्षेत्र नहीं)', heatmap_summary: '{total} में से {reported} बूथों ने रिपोर्ट किया · {regions} क्षेत्र',
     },
     ar: {
@@ -497,6 +533,13 @@
       profile_history_heading: 'النشاط',
       profile_history_empty: 'لا يوجد نشاط بعد.',
       profile_not_found: 'لم يُعثر على ملف شخصي أو نشاط لهذا العنوان.',
+      profile_stat_orgs: 'المنظمات',
+      profile_orgs_heading: 'المنظمات',
+      profile_orgs_empty: 'لست عضواً في أي منظمة بعد.',
+      dashboard_owner_no_election: 'منظمتك {org} نشطة. أنشئ انتخابك الأول لعرض النتائج المباشرة هنا.',
+      elections_active_no_elections: 'منظمتك مسجّلة ونشطة. انشر انتخابك الأول للبدء.',
+      action_refresh: 'تحديث',
+      toast_refreshed: 'تم التحديث ✓',
       tab_heatmap: 'خريطة حرارية', heatmap_heading: 'مشاركة الناخبين حسب المنطقة', heatmap_select_election: 'اختر انتخابات لعرض المشاركة حسب المنطقة.', heatmap_no_regions: 'لا توجد مناطق محددة. أضف تسميات للمراكز في مساحة عمل الانتخابات.', heatmap_col_region: 'المنطقة', heatmap_col_stations: 'المراكز', heatmap_col_ballots: 'الأوراق المُدلى بها', heatmap_col_valid_rate: 'الأوراق الصالحة', heatmap_col_invalid: 'فارغة / غير صالحة', heatmap_unlabeled: '(بدون منطقة)', heatmap_summary: '{reported} من {total} مركز أبلغ · {regions} منطقة',
     },
     fr: {
@@ -556,6 +599,13 @@
       profile_history_heading: 'Activité',
       profile_history_empty: "Aucune activité pour l'instant.",
       profile_not_found: 'Aucun profil ou activité trouvé pour cette adresse.',
+      profile_stat_orgs: 'Organisations',
+      profile_orgs_heading: 'Organisations',
+      profile_orgs_empty: "Ne fait partie d'aucune organisation pour le moment.",
+      dashboard_owner_no_election: 'Votre organisation {org} est active. Créez votre première élection pour voir les résultats en direct ici.',
+      elections_active_no_elections: 'Votre organisation est enregistrée et active. Publiez votre première élection pour commencer.',
+      action_refresh: 'Actualiser',
+      toast_refreshed: 'Actualisé ✓',
       tab_heatmap: 'Carte thermique', heatmap_heading: 'Participation par région', heatmap_select_election: 'Sélectionnez une élection pour voir la participation par région.', heatmap_no_regions: "Aucune région définie. Ajoutez une étiquette à chaque bureau dans l'espace de travail de l'élection.", heatmap_col_region: 'Région', heatmap_col_stations: 'Bureaux', heatmap_col_ballots: 'Bulletins exprimés', heatmap_col_valid_rate: 'Bulletins valides', heatmap_col_invalid: 'Blancs / nuls', heatmap_unlabeled: '(Sans région)', heatmap_summary: '{reported} sur {total} bureaux déclarés · {regions} régions',
     },
   };
@@ -693,7 +743,7 @@
   function statsHtml(data) {
     if (!data) return '';
     const stats = data.stats || {};
-    return `<div class="grid grid-cols-3 gap-3 my-4">
+    return `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4">
       <div class="rounded-xl bg-slate-100 dark:bg-slate-800 p-3 text-center">
         <p class="text-2xl font-bold">${stats.results_submitted ?? 0}</p>
         <p class="text-xs text-slate-500 mt-1">${t('profile_stat_results')}</p>
@@ -706,7 +756,32 @@
         <p class="text-2xl font-bold">${stats.disputes_filed ?? 0}</p>
         <p class="text-xs text-slate-500 mt-1">${t('profile_stat_disputes')}</p>
       </div>
+      <div class="rounded-xl bg-slate-100 dark:bg-slate-800 p-3 text-center">
+        <p class="text-2xl font-bold">${stats.organizations ?? 0}</p>
+        <p class="text-xs text-slate-500 mt-1">${t('profile_stat_orgs')}</p>
+      </div>
     </div>`;
+  }
+  // Organizations section for a profile. `orgs` is the visibility-filtered list
+  // from /api/public/profiles. When `linkToWorkspace` is true (the viewer's own
+  // profile) cards open the Orgs workspace; otherwise they are non-interactive.
+  function profileOrgsHtml(orgs, linkToWorkspace) {
+    const list = orgs || [];
+    const body = list.length
+      ? '<div class="space-y-2">' + list.map((o) => {
+        const inner = `<span class="flex items-center gap-2 flex-wrap"><span class="font-medium">${esc(o.name)}</span>${orgRoleBadge(o.role)}${orgVisBadge(o.visibility || 'public')}<span class="badge ${o.active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'}">${o.active ? t('orgs_active_badge') : t('orgs_pending_badge')}</span></span>`;
+        return linkToWorkspace
+          ? `<button class="profile-org w-full text-left p-3 rounded-lg bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800 text-sm" data-addr="${esc(o.addr)}">${inner}</button>`
+          : `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm">${inner}</div>`;
+      }).join('') + '</div>'
+      : `<p class="text-sm text-slate-500">${esc(t('profile_orgs_empty'))}</p>`;
+    return `<h3 class="text-sm font-semibold mb-2 mt-4">${esc(t('profile_orgs_heading'))}</h3>${body}`;
+  }
+  // Wire profile org cards (own profile only) to open the Orgs workspace.
+  function wireProfileOrgs(scope) {
+    (scope || document).querySelectorAll('.profile-org').forEach((b) => {
+      b.onclick = () => { App.orgView = b.dataset.addr; location.hash = '#/orgs'; };
+    });
   }
   function timeAgo(iso) {
     if (!iso) return '';
@@ -1132,6 +1207,9 @@
     } else ps.classList.add('hidden');
 
     document.getElementById('staging-badge').classList.toggle('hidden', !(App.cfg && App.cfg.demo));
+
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) refreshBtn.title = t('action_refresh');
   }
 
   // ───────────────────────── Render dispatch ─────────────────────────
@@ -1221,7 +1299,23 @@
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('dash-body');
-    if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_select_election')}</p>`; return; }
+    if (!d) {
+      const myOrg = App.role && App.role.org;
+      const activeCount = ((App.state && App.state.activeOrgs) || []).length;
+      // Owner of an active org with no election yet → guide them, instead of a
+      // bare "select an election" that makes their just-registered org feel lost.
+      const ownerCard = (myOrg && myOrg.active)
+        ? `<div class="p-4 mb-4 rounded-xl bg-indigo-50 border border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30">
+            <p class="text-sm text-slate-700 dark:text-slate-200 mb-3">${t('dashboard_owner_no_election').replace('{org}', '<strong>' + esc(myOrg.name) + '</strong>')}</p>
+            <a href="#/elections" class="inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">${t('elections_new')}</a>
+          </div>`
+        : '';
+      const activeLine = activeCount
+        ? `<p class="text-xs text-slate-500 dark:text-slate-500 mt-3">${esc(t('orgs_active_orgs'))}: ${activeCount}</p>`
+        : '';
+      body.innerHTML = ownerCard + `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_select_election')}</p>` + activeLine;
+      return;
+    }
     const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0);
     body.innerHTML =
       `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
@@ -1273,7 +1367,7 @@
         <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(e.orgName || '—')}</p>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
       </a>`).join('') + '</div>'
-      : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('elections_no_elections')}</p>`;
+      : `<p class="text-slate-600 dark:text-slate-500 text-sm">${canCreate ? t('elections_active_no_elections') : t('elections_no_elections')}</p>`;
     v.innerHTML = html;
 
     if (canCreate) document.getElementById('new-el').onclick = () => showNewElectionForm();
@@ -2008,6 +2102,7 @@
         </div>
 
         <div id="profile-history-area" class="mt-6"></div>
+        <div id="profile-orgs-area" class="mt-2"></div>
       </div>`;
 
     wireLangSelect('profile-lang');
@@ -2077,12 +2172,15 @@
         }
       };
 
-      // Load stats + history asynchronously
+      // Load stats + history + organizations asynchronously. Pass viewer=addr
+      // (the owner is viewing their own profile) so their pending and private
+      // orgs surface to them.
       if (addr) {
         try {
-          const data = await api(`/api/public/profiles/${encodeURIComponent(addr)}`);
+          const data = await api(`/api/public/profiles/${encodeURIComponent(addr)}?viewer=${encodeURIComponent(addr)}`);
           const statsArea = document.getElementById('profile-stats-area');
           const histArea = document.getElementById('profile-history-area');
+          const orgsArea = document.getElementById('profile-orgs-area');
           if (statsArea) statsArea.innerHTML = statsHtml(data);
           if (histArea) {
             const items = (data && data.history) || [];
@@ -2090,6 +2188,10 @@
               (items.length ? `<ul class="space-y-2">${items.map((item) =>
                 `<li class="text-sm text-slate-400"><span class="text-slate-800 dark:text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
               ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`);
+          }
+          if (orgsArea) {
+            orgsArea.innerHTML = profileOrgsHtml((data && data.organizations) || [], true);
+            wireProfileOrgs(orgsArea);
           }
         } catch (_) {}
       }
@@ -2107,7 +2209,8 @@
       v.innerHTML = `<div class="max-w-xl"><p class="text-slate-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
       return;
     }
-    if (!data || (!data.display_name && !data.username && !(data.stats && (data.stats.results_submitted || data.stats.elections)))) {
+    const hasOrgs = !!(data && Array.isArray(data.organizations) && data.organizations.length);
+    if (!data || (!data.display_name && !data.username && !hasOrgs && !(data.stats && (data.stats.results_submitted || data.stats.elections)))) {
       v.innerHTML = `<div class="max-w-xl"><p class="text-slate-500 text-sm">${esc(t('profile_not_found'))}</p></div>`;
       return;
     }
@@ -2129,6 +2232,7 @@
         ${items.length ? `<ul class="space-y-2">${items.map((item) =>
           `<li class="text-sm text-slate-400"><span class="text-slate-800 dark:text-slate-200">${esc(item.election_name)}</span> — ${esc(item.station_name)} <span class="text-xs text-slate-600">${timeAgo(item.submitted_at)}</span></li>`
         ).join('')}</ul>` : `<p class="text-sm text-slate-500">${esc(t('profile_history_empty'))}</p>`}
+        ${profileOrgsHtml((data && data.organizations) || [], false)}
       </div>`;
   }
 
@@ -2149,7 +2253,12 @@
   function refreshSoon() { setTimeout(() => refresh(), App.cfg.localDev ? 400 : 2500); }
   function startAutoRefresh() {
     if (App.refreshTimer) clearInterval(App.refreshTimer);
-    App.refreshTimer = setInterval(() => { const r = currentRoute(); if (['dashboard', 'election', 'evidence', 'disputes'].includes(r.tab)) refresh(); }, 6000);
+    // refresh() updates global state (role + activeOrgs) AND re-renders the
+    // current tab; for tabs whose render() fetches its own data (orgs, profile,
+    // admin, user) the re-render re-runs those fetches, so a still-syncing
+    // registration appears without a manual reload.
+    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
+    App.refreshTimer = setInterval(() => { const r = currentRoute(); if (tabs.includes(r.tab)) refresh(); }, 6000);
   }
 
   // ───────────────────────── Theme toggle ─────────────────────────
@@ -2159,6 +2268,27 @@
     const isDark = document.documentElement.classList.toggle('dark');
     localStorage.setItem('qc-theme', isDark ? 'dark' : 'light');
     themeBtn.textContent = isDark ? '☀️' : '🌙';
+  };
+
+  // ───────────────────────── Manual refresh ─────────────────────────
+  // Ask the server to ingest from chain right now, then re-render the current
+  // screen. Mirrors what runs automatically after a transaction. When no chain
+  // read source is configured (chainConfigured===false) triggerRefresh simply
+  // re-draws known state — the "on-chain sync not configured" banner still tells
+  // the user why nothing new arrives, so the toast stays neutral.
+  const refreshBtn = document.getElementById('refresh-btn');
+  if (refreshBtn) refreshBtn.onclick = async function () {
+    if (refreshBtn.dataset.busy === '1') return;
+    refreshBtn.dataset.busy = '1';
+    refreshBtn.classList.add('animate-spin');
+    try {
+      await triggerRefresh();
+      toast(t('toast_refreshed'));
+    } catch (_) { /* triggerRefresh is best-effort */ }
+    finally {
+      refreshBtn.classList.remove('animate-spin');
+      refreshBtn.dataset.busy = '0';
+    }
   };
 
   async function boot() {
