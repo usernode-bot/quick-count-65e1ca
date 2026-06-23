@@ -733,9 +733,10 @@ app.get('/api/public/profiles/:addr', async (req, res) => {
       }
     }
 
-    const visible = indexer.visibleElections({ viewer, admin: indexer.isAdmin(viewer) });
+    const admin = indexer.isAdmin(viewer);
+    const visible = indexer.visibleElections({ viewer, admin });
     const visibleEids = visible.map((el) => el.eid);
-    const activity = indexer.activityByAddr(addr, visibleEids);
+    const activity = indexer.activityByAddr(addr, visibleEids, { viewer, admin });
 
     res.json({
       usernode_pubkey: addr,
@@ -746,7 +747,9 @@ app.get('/api/public/profiles/:addr', async (req, res) => {
         results_submitted: activity.resultCount,
         elections: activity.electionCount,
         disputes_filed: activity.disputeCount,
+        organizations: activity.organizations.length,
       },
+      organizations: activity.organizations,
       history: activity.history,
     });
   } catch (err) {
@@ -872,6 +875,15 @@ async function seedStaging() {
      VALUES ($1, 'observer_one', 'Observer_One', 'en', 'Staging demo — observer profile for testing public profile links', '2026-06-01T00:00:00.000Z', NOW())
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [DEMO.obs1]
+  );
+  // Third demo profile — keyed to the Pollwatch Alliance owner, an ACTIVE org
+  // with NO elections (the "registered but no election yet" case). Its public
+  // profile shows a populated Organizations section with zero election activity.
+  await pool.query(
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
+     VALUES ($1, 'pollwatch_owner', 'Pollwatch_Owner', 'en', 'Staging demo — organizer who has registered an org but not yet created an election', '2026-06-01T00:00:00.000Z', NOW())
+     ON CONFLICT (usernode_pubkey) DO NOTHING`,
+    [DEMO.pollwatch]
   );
 }
 
