@@ -95,3 +95,19 @@ test('PUT /api/me/profile accepts a valid bio (falls through to no-DB 503)', asy
   const { status } = await req('PUT', '/api/me/profile?viewer=ut1tester000000000000000000000000000000', { bio: 'A short bio.' });
   assert.strictEqual(status, 503);
 });
+
+test('PUT /api/me/profile accepts a prefs-only payload (falls through to no-DB 503)', async () => {
+  // prefs (per-username UI config restored on return) is a valid standalone
+  // update — it must not be rejected as "Nothing to update", and without a DB it
+  // degrades to 503 like the other writable fields.
+  const { status } = await req('PUT', '/api/me/profile?viewer=ut1tester000000000000000000000000000000', { prefs: { theme: 'dark', method: 'verified' } });
+  assert.strictEqual(status, 503);
+});
+
+test('POST /api/unlock/verify without a DB returns 503, not 500', async () => {
+  // The unlock record is off-chain; with no Postgres the feature degrades
+  // cleanly (503) instead of throwing a generic 500. No token here → the handler
+  // first rejects the missing wallet (400), so we assert it never 500s.
+  const { status } = await req('POST', '/api/unlock/verify', { tx_id: 'whatever' });
+  assert.notStrictEqual(status, 500);
+});

@@ -109,6 +109,7 @@
     eid: '',            // selected election
     method: 'latest',
     wallet: { connected: false, address: null },
+    user: { username: null, address: null }, // active Usernode identity (username = UI/identity key)
     refreshTimer: null,
     me: null,           // last /api/me response
     lang: 'en',         // active UI language
@@ -139,6 +140,7 @@
 
   const I18N = {
     en: {
+      loading_connecting: 'Connecting to Usernode…', loading_verifying: 'Verifying your session…', loading_restoring: 'Restoring your data…',
       chain_unconfigured_banner: 'On-chain sync is not configured, so newly registered organizations will not appear here and platform stats stay at 0 until an administrator sets the chain read source.',
       toast_submitted_awaiting_sync: 'Submitted — waiting for on-chain sync',
       menu_profile: 'My Profile', menu_settings: 'Settings', menu_connected: 'Signed in as',
@@ -199,6 +201,7 @@
       tab_heatmap: 'Heatmap', heatmap_heading: 'Voter Turnout by Region', heatmap_select_election: 'Select an election to view turnout by region.', heatmap_no_regions: 'No regions are defined. Add a label to each station in the election workspace.', heatmap_col_region: 'Region', heatmap_col_stations: 'Stations', heatmap_col_ballots: 'Ballots cast', heatmap_col_valid_rate: 'Valid ballots', heatmap_col_invalid: 'Blank / invalid', heatmap_unlabeled: '(No region)', heatmap_summary: '{reported} of {total} stations reported · {regions} regions',
     },
     id: {
+      loading_connecting: 'Menghubungkan ke Usernode…', loading_verifying: 'Memverifikasi sesi Anda…', loading_restoring: 'Memulihkan data Anda…',
       chain_unconfigured_banner: 'Sinkronisasi on-chain belum dikonfigurasi, sehingga organisasi yang baru terdaftar tidak akan muncul di sini dan statistik platform tetap 0 hingga administrator menetapkan sumber baca rantai.',
       toast_submitted_awaiting_sync: 'Terkirim — menunggu sinkronisasi on-chain',
       menu_profile: 'Profil Saya', menu_settings: 'Pengaturan', menu_connected: 'Masuk sebagai',
@@ -257,6 +260,7 @@
       tab_heatmap: 'Peta Panas', heatmap_heading: 'Partisipasi Pemilih per Wilayah', heatmap_select_election: 'Pilih pemilihan untuk melihat partisipasi per wilayah.', heatmap_no_regions: 'Tidak ada wilayah yang ditentukan. Tambahkan label ke setiap TPS di ruang kerja pemilihan.', heatmap_col_region: 'Wilayah', heatmap_col_stations: 'TPS', heatmap_col_ballots: 'Surat suara masuk', heatmap_col_valid_rate: 'Surat suara sah', heatmap_col_invalid: 'Kosong / tidak sah', heatmap_unlabeled: '(Tanpa wilayah)', heatmap_summary: '{reported} dari {total} TPS dilaporkan · {regions} wilayah',
     },
     'zh-Hans': {
+      loading_connecting: '正在连接 Usernode…', loading_verifying: '正在验证您的会话…', loading_restoring: '正在恢复您的数据…',
       chain_unconfigured_banner: '链上同步尚未配置，因此新注册的机构不会显示在此处，平台统计数据将保持为 0，直到管理员设置链读取源。',
       toast_submitted_awaiting_sync: '已提交 — 等待链上同步',
       menu_profile: '我的资料', menu_settings: '设置', menu_connected: '当前登录',
@@ -315,6 +319,7 @@
       tab_heatmap: '热力图', heatmap_heading: '各地区选民参与率', heatmap_select_election: '选择一场选举以查看各地区的参与率。', heatmap_no_regions: '未定义地区。请在选举工作区中为每个投票站添加标签。', heatmap_col_region: '地区', heatmap_col_stations: '投票站', heatmap_col_ballots: '投票数', heatmap_col_valid_rate: '有效票', heatmap_col_invalid: '空白/无效', heatmap_unlabeled: '（无地区）', heatmap_summary: '{reported}/{total} 个投票站已上报 · {regions} 个地区',
     },
     es: {
+      loading_connecting: 'Conectando con Usernode…', loading_verifying: 'Verificando tu sesión…', loading_restoring: 'Restaurando tus datos…',
       chain_unconfigured_banner: 'La sincronización on-chain no está configurada, por lo que las organizaciones recién registradas no aparecerán aquí y las estadísticas de la plataforma permanecerán en 0 hasta que un administrador configure la fuente de lectura de la cadena.',
       toast_submitted_awaiting_sync: 'Enviado — esperando la sincronización on-chain',
       menu_profile: 'Mi perfil', menu_settings: 'Configuración', menu_connected: 'Sesión de',
@@ -374,6 +379,7 @@
       tab_heatmap: 'Mapa de calor', heatmap_heading: 'Participación por región', heatmap_select_election: 'Selecciona una elección para ver la participación por región.', heatmap_no_regions: 'No hay regiones definidas. Añade una etiqueta a cada mesa en el espacio de trabajo de la elección.', heatmap_col_region: 'Región', heatmap_col_stations: 'Mesas', heatmap_col_ballots: 'Votos emitidos', heatmap_col_valid_rate: 'Votos válidos', heatmap_col_invalid: 'En blanco / nulos', heatmap_unlabeled: '(Sin región)', heatmap_summary: '{reported} de {total} mesas reportadas · {regions} regiones',
     },
     hi: {
+      loading_connecting: 'Usernode से कनेक्ट हो रहा है…', loading_verifying: 'आपका सत्र सत्यापित किया जा रहा है…', loading_restoring: 'आपका डेटा पुनर्स्थापित किया जा रहा है…',
       chain_unconfigured_banner: 'ऑन-चेन सिंक कॉन्फ़िगर नहीं है, इसलिए नई पंजीकृत संस्थाएँ यहाँ दिखाई नहीं देंगी और प्लेटफ़ॉर्म आँकड़े 0 पर बने रहेंगे जब तक कोई प्रशासक चेन रीड स्रोत सेट नहीं करता।',
       toast_submitted_awaiting_sync: 'सबमिट किया गया — ऑन-चेन सिंक की प्रतीक्षा है',
       menu_profile: 'मेरी प्रोफ़ाइल', menu_settings: 'सेटिंग्स', menu_connected: 'साइन इन',
@@ -432,6 +438,7 @@
       tab_heatmap: 'हीटमैप', heatmap_heading: 'क्षेत्रवार मतदाता भागीदारी', heatmap_select_election: 'क्षेत्र के अनुसार भागीदारी देखने के लिए चुनाव चुनें।', heatmap_no_regions: 'कोई क्षेत्र परिभाषित नहीं है। चुनाव कार्यक्षेत्र में प्रत्येक बूथ में लेबल जोड़ें।', heatmap_col_region: 'क्षेत्र', heatmap_col_stations: 'बूथ', heatmap_col_ballots: 'डाले गए मत', heatmap_col_valid_rate: 'वैध मत', heatmap_col_invalid: 'रिक्त / अमान्य', heatmap_unlabeled: '(कोई क्षेत्र नहीं)', heatmap_summary: '{total} में से {reported} बूथों ने रिपोर्ट किया · {regions} क्षेत्र',
     },
     ar: {
+      loading_connecting: 'جارٍ الاتصال بـ Usernode…', loading_verifying: 'جارٍ التحقق من جلستك…', loading_restoring: 'جارٍ استعادة بياناتك…',
       chain_unconfigured_banner: 'لم تتم تهيئة المزامنة على السلسلة، لذلك لن تظهر المنظمات المسجّلة حديثًا هنا وستبقى إحصاءات المنصة عند 0 حتى يقوم المسؤول بتعيين مصدر قراءة السلسلة.',
       toast_submitted_awaiting_sync: 'تم الإرسال — في انتظار المزامنة على السلسلة',
       menu_profile: 'ملفي الشخصي', menu_settings: 'الإعدادات', menu_connected: 'تسجيل الدخول باسم',
@@ -490,6 +497,7 @@
       tab_heatmap: 'خريطة حرارية', heatmap_heading: 'مشاركة الناخبين حسب المنطقة', heatmap_select_election: 'اختر انتخابات لعرض المشاركة حسب المنطقة.', heatmap_no_regions: 'لا توجد مناطق محددة. أضف تسميات للمراكز في مساحة عمل الانتخابات.', heatmap_col_region: 'المنطقة', heatmap_col_stations: 'المراكز', heatmap_col_ballots: 'الأوراق المُدلى بها', heatmap_col_valid_rate: 'الأوراق الصالحة', heatmap_col_invalid: 'فارغة / غير صالحة', heatmap_unlabeled: '(بدون منطقة)', heatmap_summary: '{reported} من {total} مركز أبلغ · {regions} منطقة',
     },
     fr: {
+      loading_connecting: 'Connexion à Usernode…', loading_verifying: 'Vérification de votre session…', loading_restoring: 'Restauration de vos données…',
       chain_unconfigured_banner: "La synchronisation on-chain n'est pas configurée : les organisations nouvellement enregistrées n'apparaîtront pas ici et les statistiques de la plateforme resteront à 0 jusqu'à ce qu'un administrateur configure la source de lecture de la chaîne.",
       toast_submitted_awaiting_sync: "Envoyé — en attente de la synchronisation on-chain",
       menu_profile: 'Mon profil', menu_settings: 'Paramètres', menu_connected: 'Connecté en tant que',
@@ -642,12 +650,95 @@
     return j;
   }
   // Label for the wallet button: app-local display name if set, else the
-  // platform username / short address resolved by QCNames.
+  // active Usernode Username (identity key) / short address resolved by QCNames.
   function walletLabel() {
     const p = App.me && App.me.profile;
     if (p && p.display_name) return p.display_name;
-    if (App.me && App.me.username) return App.me.username;
+    const uname = (App.user && App.user.username) || (App.me && App.me.username);
+    if (uname) return uname;
     return nm(App.wallet.address);
+  }
+
+  // ── Usernode-Bridge-first identity resolution ───────────────────────────────
+  // The bridge is the PRIMARY identity source in every mode (production AND the
+  // local-dev/staging mock). We await a DEFINITE bridge outcome — an address or a
+  // bounded-timeout/transient failure that resolves to the anonymous public path —
+  // before any user-context render. The active Usernode Username comes from the
+  // verified session (/api/me, server-decoded from the JWT); in local-dev/staging
+  // the mock bridge supplies a simulated username so the same code path runs.
+  function withTimeout(promise, ms) {
+    return new Promise((resolve) => {
+      let done = false;
+      const tmr = setTimeout(() => { if (!done) { done = true; resolve(null); } }, ms);
+      Promise.resolve(promise).then((v) => { if (!done) { done = true; clearTimeout(tmr); resolve(v); } })
+        .catch(() => { if (!done) { done = true; clearTimeout(tmr); resolve(null); } });
+    });
+  }
+  // Resolve identity through the bridge, then bind the verified username. Always
+  // resolves (never throws): a missing address simply means the public path.
+  async function resolveIdentity() {
+    let addr = null;
+    try { addr = await withTimeout(window.QCBridge.getAddress(), 6000); } catch (_) { addr = null; }
+    // Reviewer deep-link override (?viewer=…) — local-dev / staging ONLY, mirroring
+    // the server's viewer fallback — so a wallet-less reviewer lands in a signed-in,
+    // username-labeled state. Ignored in production (server trusts req.user only).
+    if (!addr && URL_VIEWER && App.cfg && (App.cfg.localDev || App.cfg.staging)) addr = URL_VIEWER;
+    if (addr) { App.wallet.address = addr; App.wallet.connected = true; }
+    await loadMe();
+    // Username: verified session first, then the bridge/mock-supplied username.
+    let uname = (App.me && App.me.username) || null;
+    if (!uname) { try { uname = (window.usernode && window.usernode.username) || null; } catch (_) {} }
+    App.user = { username: uname, address: App.wallet.address || null };
+    return App.user;
+  }
+
+  // ── Per-username preferences (theme + last aggregation method) ──────────────
+  // Restored on return; persisted to the user's profile (prefs JSON) when signed
+  // in, with localStorage as the device-local fallback.
+  function applyTheme(dark) {
+    document.documentElement.classList.toggle('dark', !!dark);
+    try { localStorage.setItem('qc-theme', dark ? 'dark' : 'light'); } catch (_) {}
+    const tb = document.getElementById('theme-btn');
+    if (tb) tb.textContent = dark ? '☀️' : '🌙';
+  }
+  function restorePrefs() {
+    const prefs = (App.me && App.me.profile && App.me.profile.prefs) || null;
+    if (prefs && typeof prefs === 'object') {
+      if (prefs.theme === 'dark' || prefs.theme === 'light') applyTheme(prefs.theme === 'dark');
+      if (App.cfg && App.cfg.methods && App.cfg.methods.indexOf(prefs.method) !== -1) App.method = prefs.method;
+    }
+  }
+  let _prefsSaveTimer = null;
+  function savePrefs() {
+    if (!App.wallet.connected) return; // only signed-in users have a profile to write to
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const prefs = { theme, method: App.method };
+    if (App.me && App.me.profile) App.me.profile.prefs = prefs;
+    clearTimeout(_prefsSaveTimer);
+    _prefsSaveTimer = setTimeout(() => { putProfile({ prefs }).catch(() => {}); }, 400);
+  }
+
+  // ── Pending-tx cache, namespaced by username ────────────────────────────────
+  // "Confirming on-chain…" pills survive a reload: persisted under the active
+  // username and reconciled against the explorer on boot.
+  function pendingKey() {
+    const id = (App.user && App.user.username) || App.wallet.address || 'anon';
+    return 'qc_pending::' + id;
+  }
+  function persistPending() {
+    try { localStorage.setItem(pendingKey(), JSON.stringify(App.pending || [])); } catch (_) {}
+  }
+  async function restorePending() {
+    let saved = [];
+    try { saved = JSON.parse(localStorage.getItem(pendingKey()) || '[]'); } catch (_) { saved = []; }
+    if (!Array.isArray(saved) || !saved.length) return;
+    App.pending = saved.filter((p) => p && p.id);
+    renderPending();
+    // Reconcile in the background: drop any pill whose tx has since been included.
+    for (const p of App.pending.slice()) {
+      if (!p.txId) continue;
+      confirmTx(p.txId, { to: p.to, timeoutMs: 1 }).then((ok) => { if (ok) removePending(p.id); }).catch(() => {});
+    }
   }
 
   // ───────────────────────── Memo builders (mirror lib/memo.js) ─────────────────────────
@@ -807,15 +898,20 @@
   // ephemeral — the indexer remains the source of truth.
   App.pending = App.pending || [];
   let _pendingSeq = 0;
-  function addPending(label) {
+  function addPending(label, meta) {
     const id = 'p' + (++_pendingSeq);
-    App.pending.push({ id: id, label: label || t('confirming_generic') });
+    const entry = { id: id, label: label || t('confirming_generic') };
+    if (meta && meta.txId) entry.txId = meta.txId;
+    if (meta && meta.to) entry.to = meta.to;
+    App.pending.push(entry);
     renderPending();
+    persistPending();
     return id;
   }
   function removePending(id) {
     App.pending = App.pending.filter((p) => p.id !== id);
     renderPending();
+    persistPending();
   }
   function renderPending() {
     let el = document.getElementById('qc-pending');
@@ -953,7 +1049,7 @@
       results[i] = r;
       // The transaction was broadcast — now wait for the chain to include it.
       if (r) {
-        const pid = addPending(typeof lbl === 'string' ? lbl : null);
+        const pid = addPending(typeof lbl === 'string' ? lbl : null, { txId: r, to: spec.to });
         QCLoading.show(t('loading_confirming'));
         App.txState.confirmStartTime = Date.now();
         try {
@@ -1005,25 +1101,27 @@
   }
 
   async function connectWallet() {
-    if (App.cfg.localDev) {
-      App.wallet.address = window.QCMock.address();
-      App.wallet.connected = true;
-    } else {
-      let addr;
-      try {
-        addr = await window.QCBridge.getAddress();
-      } catch (e) {
-        handleTxFailure(e, { onRetry: connectWallet });
-        return;
-      }
-      if (!addr) { toast(t('toast_no_wallet'), 'error'); return; }
-      App.wallet.address = addr;
-      App.wallet.connected = true;
+    // Identity comes through the bridge in EVERY mode (the local-dev mock exposes
+    // window.getNodeAddress, so QCBridge.getAddress() is the single entry point).
+    let addr;
+    try {
+      addr = await window.QCBridge.getAddress();
+    } catch (e) {
+      handleTxFailure(e, { onRetry: connectWallet });
+      return;
     }
+    if (!addr) { toast(t('toast_no_wallet'), 'error'); return; }
+    App.wallet.address = addr;
+    App.wallet.connected = true;
     await loadMe();
+    let uname = (App.me && App.me.username) || null;
+    if (!uname) { try { uname = (window.usernode && window.usernode.username) || null; } catch (_) {} }
+    App.user = { username: uname, address: addr };
     // A saved profile language preference wins over the device default.
     const pref = App.me && App.me.profile && App.me.profile.preferred_lang;
     if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
+    restorePrefs();
+    await restorePending();
     await refresh();
     renderChrome();
   }
@@ -1148,7 +1246,7 @@
     const ep = document.getElementById('el-picker');
     if (ep) ep.onchange = () => { App.eid = ep.value; refresh(); };
     const mp = document.getElementById('method-picker');
-    if (mp) mp.onchange = () => { App.method = mp.value; refresh(); };
+    if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
   }
 
   // ───────────────────────── Dashboard ─────────────────────────
@@ -1314,7 +1412,7 @@
       <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)}</p>
       ${stationTable(d)}
       <div id="ws" class="mt-6 space-y-4"></div>`;
-    const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; refresh(); };
+    const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
 
     const ws = document.getElementById('ws');
     if (myObs) ws.appendChild(observerPanel(d, myObs));
@@ -1981,98 +2079,100 @@
     const isDark = document.documentElement.classList.toggle('dark');
     localStorage.setItem('qc-theme', isDark ? 'dark' : 'light');
     themeBtn.textContent = isDark ? '☀️' : '🌙';
+    savePrefs(); // persist theme to the active user's profile when signed in
   };
 
+  // Usernode-Bridge-first, gated initialization. We show Usernode Loading first
+  // and keep it up until every critical step has been received and verified:
+  // config → a DEFINITE bridge identity outcome → verified session/role →
+  // preference + transaction-status restore. Only then is the UI rendered, fully
+  // personalized. A bridge timeout / no session resolves to the anonymous public
+  // path rather than hanging. QCLoading.hide() runs in `finally` so a thrown init
+  // can never leave the overlay stuck.
   async function boot() {
-    App.cfg = await api('/__quickcount/config');
-    App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
-    // Point the hosted bridge's transaction reads/polls at our auth-exempt
-    // /explorer-api proxy. The bridge's nativeGetTransactions does
-    // `fetch(window.usernode.transactionsBaseUrl + "/transactions", …)`, and the
-    // server exposes POST <explorerApiBase>/<chainId>/transactions (in
-    // PUBLIC_PREFIXES) — so the base is "<explorerApiBase>/<chainId>". Setting
-    // this BEFORE any wallet connect / send means the bridge never hits its
-    // "transactionsBaseUrl not configured" guard when it reads or polls for a
-    // transaction. (In local-dev the bridge uses the mock path regardless, so we
-    // skip it there.) See PUBLIC_PREFIXES + the /explorer-api proxy in server.js.
-    if (!App.cfg.localDev) {
-      window.usernode = window.usernode || {};
-      const exBase = (App.cfg.explorerApiBase || '/explorer-api').replace(/\/+$/, '');
-      const chain = App.cfg.chainId || 'usernode';
-      window.usernode.transactionsBaseUrl = exBase + '/' + encodeURIComponent(chain);
-    }
-    // Fault-injection hook — local-dev / staging ONLY — so reviewers can
-    // exercise the resilience paths (?bridgefault=timeout|notready|reject).
-    // A strict no-op in production.
-    if (App.cfg.localDev || App.cfg.staging) {
-      const fault = new URLSearchParams(location.search).get('bridgefault');
-      if (fault && window.QCBridge) window.QCBridge.setFault(fault);
-    }
-    // Staging-only: a persistent "pending" row so the Confirming-on-chain
-    // indicator is reviewable without timing a real broadcast. Request-time,
-    // client-side only (no DB), and a strict no-op outside staging.
-    if (App.cfg.staging && new URLSearchParams(location.search).get('demo') === '1') {
-      addPending(t('pending_demo_label'));
-    }
-    if (App.cfg.localDev && !window.QCMock) {
-      // Server is in local-dev but the mock wallet shim never loaded. Falling
-      // through to the hosted-bridge path here is exactly what surfaces the
-      // confusing "Mock API not enabled" error, so make the misconfiguration
-      // explicit instead of silently degrading.
-      console.error('local-dev config reported but window.QCMock is missing — public/usernode-bridge.js failed to load; transactions will not work.');
-    }
-    if (App.cfg.localDev && window.QCMock) {
-      window.QCMock.init(App.cfg.personas || []);
-      document.getElementById('persona-select').onchange = async (e) => { window.QCMock.setPersona(Number(e.target.value)); await connectWallet(); };
-      // Auto-connect a persona in local-dev for a friction-free demo.
-      App.wallet.address = window.QCMock.address(); App.wallet.connected = true;
-    } else {
-      // Try a silent wallet connect inside the platform. Non-blocking: the
-      // read-only data (/__quickcount/state) renders regardless. If the bridge
-      // is unusually slow, show a small "Connecting…" hint that clears the
-      // instant we connect (or quietly disappears if it never does).
-      let hintShown = false;
-      const hintTimer = setTimeout(() => { hintShown = true; window.QCNotice.show({ message: t('notice_connecting') }); }, 2000);
-      window.QCBridge.getAddress().then(async (a) => {
-        clearTimeout(hintTimer); if (hintShown) window.QCNotice.hide();
-        if (!a) return;
-        App.wallet.address = a; App.wallet.connected = true;
-        await loadMe();
-        const pref = App.me && App.me.profile && App.me.profile.preferred_lang;
-        if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
-        renderChrome(); refresh();
-      }).catch(() => { clearTimeout(hintTimer); if (hintShown) window.QCNotice.hide(); });
-    }
-    // Wallet button: when connected it toggles the Profile/Settings menu;
-    // when not, it connects.
-    document.getElementById('wallet-btn').onclick = (e) => {
-      e.stopPropagation();
-      if (App.wallet.connected) { App.menuOpen = !App.menuOpen; renderChrome(); }
-      else connectWallet();
-    };
-    // Close the dropdown on any outside click.
-    document.addEventListener('click', (e) => {
-      if (App.menuOpen && !document.getElementById('wallet-wrap').contains(e.target)) {
-        App.menuOpen = false; renderChrome();
-      }
-    });
-    window.addEventListener('hashchange', render);
-
-    // Resolve language: saved profile pref > device-local > browser > English.
+    // Resolve a provisional language from the device so the loading copy is
+    // localized before the verified profile preference is known.
     let localPref = null;
     try { localPref = localStorage.getItem('qc_lang'); } catch (_) {}
-    await loadMe();
-    const profilePref = App.me && App.me.profile && App.me.profile.preferred_lang;
-    App.lang = resolveLang(profilePref, localPref);
+    App.lang = resolveLang(null, localPref);
     applyDir();
-    // Persist an auto-detected choice locally so it's stable next visit.
-    try { if (!localPref) localStorage.setItem('qc_lang', App.lang); } catch (_) {}
+    QCLoading.show(t('loading_connecting'));
+    try {
+      App.cfg = await api('/__quickcount/config');
+      App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
+      // Point the hosted bridge's transaction reads/polls at our auth-exempt
+      // /explorer-api proxy (see PUBLIC_PREFIXES + the /explorer-api proxy in
+      // server.js). Set BEFORE any connect/send. Skipped in local-dev (mock path).
+      if (!App.cfg.localDev) {
+        window.usernode = window.usernode || {};
+        const exBase = (App.cfg.explorerApiBase || '/explorer-api').replace(/\/+$/, '');
+        const chain = App.cfg.chainId || 'usernode';
+        window.usernode.transactionsBaseUrl = exBase + '/' + encodeURIComponent(chain);
+      }
+      // Fault-injection hook — local-dev / staging ONLY.
+      if (App.cfg.localDev || App.cfg.staging) {
+        const fault = new URLSearchParams(location.search).get('bridgefault');
+        if (fault && window.QCBridge) window.QCBridge.setFault(fault);
+      }
+      // In local-dev the mock bridge backs identity (it exposes window.getNodeAddress
+      // so QCBridge is still the single identity entry point). Wire the persona
+      // switcher BEFORE resolving identity so a persona change re-runs connect.
+      if (App.cfg.localDev && !window.QCMock) {
+        console.error('local-dev config reported but window.QCMock is missing — public/usernode-bridge.js failed to load; transactions will not work.');
+      }
+      if (App.cfg.localDev && window.QCMock) {
+        window.QCMock.init(App.cfg.personas || []);
+        window.QCMock.activate(); // install window.getNodeAddress so QCBridge backs identity
+        document.getElementById('persona-select').onchange = async (e) => {
+          window.QCMock.setPersona(Number(e.target.value));
+          QCLoading.show(t('loading_verifying'));
+          try { await connectWallet(); } finally { QCLoading.hide(); }
+        };
+      }
 
-    await refresh();
-    startAutoRefresh();
+      // Block on a DEFINITE bridge identity outcome (address or bounded-timeout
+      // public fallback) before rendering anything that needs user context.
+      QCLoading.show(t('loading_verifying'));
+      await resolveIdentity();
+
+      // Verified session language preference wins over the device default.
+      const profilePref = App.me && App.me.profile && App.me.profile.preferred_lang;
+      App.lang = resolveLang(profilePref, localPref);
+      applyDir();
+      try { if (!localPref) localStorage.setItem('qc_lang', App.lang); } catch (_) {}
+
+      // Restore the signed-in user's preferences + transaction status by username.
+      QCLoading.show(t('loading_restoring'));
+      restorePrefs();
+      await restorePending();
+
+      // Staging-only reviewable "pending" pill (no DB; strict no-op elsewhere).
+      if (App.cfg.staging && new URLSearchParams(location.search).get('demo') === '1') {
+        addPending(t('pending_demo_label'));
+      }
+
+      // Wallet button: connected → toggle the Profile/Settings menu; else connect.
+      document.getElementById('wallet-btn').onclick = (e) => {
+        e.stopPropagation();
+        if (App.wallet.connected) { App.menuOpen = !App.menuOpen; renderChrome(); }
+        else connectWallet();
+      };
+      document.addEventListener('click', (e) => {
+        if (App.menuOpen && !document.getElementById('wallet-wrap').contains(e.target)) {
+          App.menuOpen = false; renderChrome();
+        }
+      });
+      window.addEventListener('hashchange', render);
+
+      // Critical data verified — render once, fully personalized.
+      await refresh();
+      startAutoRefresh();
+    } finally {
+      QCLoading.hide();
+    }
   }
 
-  boot().catch((e) => { console.error(e); document.getElementById('view').innerHTML = '<p class="text-rose-400 text-sm p-4">Failed to start: ' + esc(e.message) + '</p>'; });
+  boot().catch((e) => { console.error(e); QCLoading.hide(); document.getElementById('view').innerHTML = '<p class="text-rose-400 text-sm p-4">Failed to start: ' + esc(e.message) + '</p>'; });
   </script>
 </body>
 </html>
