@@ -293,16 +293,18 @@ app.use((req, res, next) => {
 
 // Public config for the frontend (SPA).
 app.get('/__quickcount/config', (_req, res) => {
+  // Each persona carries a simulated Usernode Username so the identity-by-username
+  // flow runs identically offline (the mock bridge surfaces it as the active user).
   const personas = LOCAL_DEV ? [
-    { label: 'Org Owner — Citizens Count', addr: DEMO.orgA },
-    { label: 'Org Administrator', addr: DEMO.orgAdmin },
-    { label: 'Org Moderator', addr: DEMO.orgMod },
-    { label: 'Org Member', addr: DEMO.orgMember },
-    { label: 'Org Owner — Private Watchers', addr: DEMO.orgC },
-    { label: 'Observer One', addr: DEMO.obs1 },
-    { label: 'Observer Three (Station B)', addr: DEMO.obs3 },
-    { label: 'Platform Admin', addr: DEMO.admin },
-    { label: 'Fresh wallet', addr: null },
+    { label: 'Org Owner — Citizens Count', addr: DEMO.orgA, username: 'citizens_count' },
+    { label: 'Org Administrator', addr: DEMO.orgAdmin, username: null },
+    { label: 'Org Moderator', addr: DEMO.orgMod, username: null },
+    { label: 'Org Member', addr: DEMO.orgMember, username: null },
+    { label: 'Org Owner — Private Watchers', addr: DEMO.orgC, username: null },
+    { label: 'Observer One', addr: DEMO.obs1, username: 'observer_one' },
+    { label: 'Observer Three (Station B)', addr: DEMO.obs3, username: 'observer_three' },
+    { label: 'Platform Admin', addr: DEMO.admin, username: 'platform_admin' },
+    { label: 'Fresh wallet', addr: null, username: null },
   ] : null;
   res.json({
     localDev: LOCAL_DEV, staging: IS_STAGING, demo: IS_DEMO,
@@ -431,6 +433,20 @@ app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, 
     const refId = Number(req.params.refId);
     if (!isKind(kind)) return res.status(400).json({ error: 'unknown attachment kind' });
     if (!Number.isInteger(refId) || refId <= 0) return res.status(400).json({ error: 'bad ref id' });
+    // Off-chain images live in the DB; without one the feature is unavailable in
+    // this environment (degrade like profiles, never a 500).
+    if (!pool) return res.status(503).json({ error: 'Attachments are unavailable in this environment' });
+
+    const uploaderPubkey = (req.user && req.user.usernode_pubkey) || null;
+    const uploaderUsername = (req.user && req.user.username) || null;
+    // Org-ownership guard: only the election's organizing wallet (or an admin)
+    // may write its images. When the election isn't indexed yet (an organizer
+    // uploading at create time, before the on-chain `el` tx lands), we can't
+    // resolve the owner — allow it, since there is nothing to overwrite.
+    const el = indexer.elections.get(eid);
+    if (el && uploaderPubkey !== el.orgAddr && !indexer.isAdmin(uploaderPubkey)) {
+      return res.status(403).json({ error: 'Only the organizing wallet can upload this election\'s images' });
+    }
 
     const { mime, data_base64 } = req.body || {};
     if (typeof data_base64 !== 'string' || !data_base64) {
@@ -442,13 +458,14 @@ app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, 
     if (!check.ok) return res.status(check.status || 400).json({ error: check.error });
 
     await pool.query(
-      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, uploader_username, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
        ON CONFLICT (eid, kind, ref_id)
        DO UPDATE SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
                      byte_size = EXCLUDED.byte_size, uploader_pubkey = EXCLUDED.uploader_pubkey,
+                     uploader_username = EXCLUDED.uploader_username,
                      updated_at = NOW()`,
-      [eid, kind, refId, mime, buf, buf.length, (req.user && req.user.usernode_pubkey) || null]
+      [eid, kind, refId, mime, buf, buf.length, uploaderPubkey, uploaderUsername]
     );
     res.json({ ok: true, eid, kind, ref_id: refId, byte_size: buf.length });
   } catch (err) {
@@ -561,8 +578,12 @@ app.get('/api/public/elections/:eid', async (req, res) => {
 app.post('/api/unlock/verify', async (req, res) => {
   try {
     const pubkey = req.user && req.user.usernode_pubkey;
+    const username = (req.user && req.user.username) || null;
     if (!pubkey) return res.status(400).json({ error: 'Link a Usernode wallet first' });
     if (!UNLOCK_ENABLED) return res.status(503).json({ error: 'Unlocking is not configured' });
+    // Off-chain unlock records live in the DB; without one the feature is simply
+    // unavailable in this environment (degrade like profiles, never a 500).
+    if (!pool) return res.status(503).json({ error: 'Unlocking is unavailable in this environment' });
 
     // Already paid → idempotent success (never charge twice).
     if (await walletUnlocked(pubkey)) return res.json({ unlocked: true });
@@ -571,9 +592,9 @@ app.post('/api/unlock/verify', async (req, res) => {
       // No live chain in staging — record a clearly-labelled demo unlock so the
       // unlocked view is reviewable without a real payment.
       await pool.query(
-        `INSERT INTO unlocks (usernode_pubkey, tx_id, amount, recipient, created_at)
-         VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
-        [pubkey, 'staging-demo-' + pubkey, UNLOCK_PRICE, UNLOCK_RECIPIENT]
+        `INSERT INTO unlocks (usernode_pubkey, username, tx_id, amount, recipient, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
+        [pubkey, username, 'staging-demo-' + pubkey, UNLOCK_PRICE, UNLOCK_RECIPIENT]
       );
       return res.json({ unlocked: true, demo: true });
     }
@@ -589,9 +610,9 @@ app.post('/api/unlock/verify', async (req, res) => {
 
     try {
       await pool.query(
-        `INSERT INTO unlocks (usernode_pubkey, tx_id, amount, recipient, created_at)
-         VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
-        [pubkey, tx.txId, Number(tx.amount) || UNLOCK_PRICE, UNLOCK_RECIPIENT]
+        `INSERT INTO unlocks (usernode_pubkey, username, tx_id, amount, recipient, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
+        [pubkey, username, tx.txId, Number(tx.amount) || UNLOCK_PRICE, UNLOCK_RECIPIENT]
       );
     } catch (e) {
       // tx_id UNIQUE violation → this payment was already claimed by a wallet.
@@ -626,7 +647,11 @@ function profileKey(req) {
 app.get('/api/me', async (req, res) => {
   try {
     const pubkey = profileKey(req);
-    const username = (req.user && req.user.username) || null;
+    // The active Usernode Username comes from the verified JWT. In local-dev /
+    // staging there is no token, so fall back to the username stored on the
+    // viewer's profile row — this lets a wallet-less reviewer (?viewer=…) see the
+    // username-keyed personalization the production session would get.
+    let username = (req.user && req.user.username) || null;
     const id = (req.user && req.user.id) || null;
     let profile = null;
     if (pubkey && pool) {
@@ -635,15 +660,24 @@ app.get('/api/me', async (req, res) => {
          VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
         [pubkey, username]
       );
+      // Keep the username↔address binding current when a verified username is present.
+      if (username) {
+        await pool.query(
+          `UPDATE profiles SET username = $2, updated_at = NOW() WHERE usernode_pubkey = $1`,
+          [pubkey, username]
+        );
+      }
       const { rows } = await pool.query(
-        'SELECT display_name, preferred_lang, bio, created_at FROM profiles WHERE usernode_pubkey = $1',
+        'SELECT username, display_name, preferred_lang, bio, prefs, created_at FROM profiles WHERE usernode_pubkey = $1',
         [pubkey]
       );
       const r = rows[0] || {};
+      if (!username && (LOCAL_DEV || IS_STAGING)) username = r.username || null;
       profile = {
         display_name: r.display_name || null,
         preferred_lang: r.preferred_lang || null,
         bio: r.bio || null,
+        prefs: r.prefs || null,
         created_at: r.created_at instanceof Date ? r.created_at.toISOString() : (r.created_at || null),
       };
     }
@@ -663,7 +697,10 @@ app.put('/api/me/profile', async (req, res) => {
     const hasName = body.display_name != null && body.display_name !== '';
     const hasLang = body.preferred_lang != null && body.preferred_lang !== '';
     const hasBio = body.bio != null;  // empty string is valid (clears bio)
-    if (!hasName && !hasLang && !hasBio) return res.status(400).json({ error: 'Nothing to update' });
+    // prefs = per-username UI config (theme, last aggregation method) restored on
+    // return. Accept a plain object only; ignore anything else.
+    const hasPrefs = body.prefs != null && typeof body.prefs === 'object' && !Array.isArray(body.prefs);
+    if (!hasName && !hasLang && !hasBio && !hasPrefs) return res.status(400).json({ error: 'Nothing to update' });
     if (hasName && !isValidDisplayName(body.display_name)) {
       return res.status(400).json({ error: 'Display name must be 3–20 letters, numbers, or underscores' });
     }
@@ -677,21 +714,23 @@ app.put('/api/me/profile', async (req, res) => {
     const username = (req.user && req.user.username) || null;
     // Empty string clears the bio (stored as null); non-empty sets it.
     const newBio = hasBio ? (body.bio === '' ? null : body.bio) : null;
+    const newPrefs = hasPrefs ? JSON.stringify(body.prefs) : null;
 
     // Upsert; COALESCE / CASE keeps the existing value for fields not being changed.
-    // $6 (hasBio boolean) tells Postgres whether to apply the bio update at all,
-    // distinguishing "not sent" (keep existing) from "sent empty" (clear to null).
+    // $6 (hasBio) / $8 (hasPrefs) tell Postgres whether to apply that update at all,
+    // distinguishing "not sent" (keep existing) from "sent" (overwrite).
     const { rows } = await pool.query(
-      `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, prefs, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $7::jsonb, NOW(), NOW())
        ON CONFLICT (usernode_pubkey) DO UPDATE SET
          display_name = COALESCE($3, profiles.display_name),
          preferred_lang = COALESCE($4, profiles.preferred_lang),
          bio = CASE WHEN $6 THEN $5 ELSE profiles.bio END,
+         prefs = CASE WHEN $8 THEN $7::jsonb ELSE profiles.prefs END,
          username = COALESCE(profiles.username, EXCLUDED.username),
          updated_at = NOW()
-       RETURNING display_name, preferred_lang, bio, created_at`,
-      [pubkey, username, hasName ? body.display_name : null, hasLang ? body.preferred_lang : null, newBio, hasBio]
+       RETURNING display_name, preferred_lang, bio, prefs, created_at`,
+      [pubkey, username, hasName ? body.display_name : null, hasLang ? body.preferred_lang : null, newBio, hasBio, newPrefs, hasPrefs]
     );
     const r = rows[0] || {};
     res.json({
@@ -700,6 +739,7 @@ app.put('/api/me/profile', async (req, res) => {
         display_name: r.display_name || null,
         preferred_lang: r.preferred_lang || null,
         bio: r.bio || null,
+        prefs: r.prefs || null,
         created_at: r.created_at instanceof Date ? r.created_at.toISOString() : (r.created_at || null),
       },
     });
@@ -820,6 +860,17 @@ async function migrate() {
   await pool.query(`COMMENT ON TABLE profiles IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
+  // v3 — username-as-identity: `profiles` is the authoritative username↔address
+  // binding (resolve a Usernode Username to its wallet address for on-chain
+  // reads), and `prefs` holds per-username UI config (theme, last aggregation
+  // method) restored on return. Unique index is PARTIAL so the many rows that
+  // predate a captured username (NULL) don't collide.
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS prefs JSONB`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_uniq ON profiles (username) WHERE username IS NOT NULL`);
+  // Associate off-chain user data with the active Usernode Username (the wallet
+  // address stays the cryptographic/replay key; username is the restore key).
+  await pool.query(`ALTER TABLE unlocks ADD COLUMN IF NOT EXISTS username TEXT`);
+  await pool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS uploader_username TEXT`);
 }
 
 async function loadFromDb() {
@@ -841,7 +892,8 @@ async function loadFromDb() {
 // off-chain attachments table needs direct DB rows here.
 async function seedStaging() {
   if (!IS_STAGING || !pool) return;
-  const root = 'ut1demo00000000000000000000000000000000';
+  // Address the public-profile / user-page dapp.json tests reference by name.
+  const root = 'ut1stagingdemo00000000000000000000000000';
   const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6aGFTEMLQkAF/tKAS/fz4YAAAAASUVORK5CYII=';
   const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQTX6NFTEMLQkADGRcwcht3uAAAAAASUVORK5CYII=';
   const GRAY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGMoLKzCihiGlgQA/HdXAZV6UO0AAAAASUVORK5CYII=';
@@ -862,17 +914,19 @@ async function seedStaging() {
 
   // `profiles` is staging:private (schema-only in staging) → seed obviously-fake
   // rows so My Profile and public profile links are reviewable without real wallets.
+  // `username` + `prefs` populate the username-keyed restore path (theme + last
+  // aggregation method come back automatically on return).
   await pool.query(
-    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
-     VALUES ($1, 'Staging demo user', 'Staging_demo_user', 'en', 'Staging demo — election observer for Citizens Count', '2026-06-01T00:00:00.000Z', NOW())
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, prefs, created_at, updated_at)
+     VALUES ($1, 'staging_demo_user', 'Staging_demo_user', 'en', 'Staging demo — election observer for Citizens Count', '{"theme":"dark","method":"verified"}'::jsonb, '2026-06-01T00:00:00.000Z', NOW())
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [root]
   );
   // Second demo profile — keyed to the observer-one address used in demo elections,
   // so clicking their name in Disputes/Evidence shows a populated public profile.
   await pool.query(
-    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
-     VALUES ($1, 'observer_one', 'Observer_One', 'en', 'Staging demo — observer profile for testing public profile links', '2026-06-01T00:00:00.000Z', NOW())
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, prefs, created_at, updated_at)
+     VALUES ($1, 'observer_one', 'Observer_One', 'en', 'Staging demo — observer profile for testing public profile links', '{"theme":"light","method":"latest"}'::jsonb, '2026-06-01T00:00:00.000Z', NOW())
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [DEMO.obs1]
   );
@@ -884,6 +938,14 @@ async function seedStaging() {
      VALUES ($1, 'pollwatch_owner', 'Pollwatch_Owner', 'en', 'Staging demo — organizer who has registered an org but not yet created an election', '2026-06-01T00:00:00.000Z', NOW())
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [DEMO.pollwatch]
+  );
+  // Demo unlock row keyed to the staging demo user's username, so the unlock
+  // entitlement restore (live results stay unlocked on return) is reviewable.
+  await pool.query(
+    `INSERT INTO unlocks (usernode_pubkey, username, tx_id, amount, recipient, created_at)
+     VALUES ($1, 'staging_demo_user', 'staging-demo-unlock', $2, $3, NOW())
+     ON CONFLICT (usernode_pubkey) DO NOTHING`,
+    [root, UNLOCK_PRICE, UNLOCK_RECIPIENT || root]
   );
 }
 

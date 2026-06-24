@@ -202,3 +202,32 @@ test('normalizeTx maps field-name variants and amount', () => {
   assert.strictEqual(t.amount, 100);
   assert.strictEqual(t.createdAt, '2026-06-20T10:00:00.000Z');
 });
+
+// ── activityByAddr (username→address restore path) ──────────────────────────
+// activityByAddr is the address-keyed read the username-identity restore reuses:
+// the server resolves a Usernode Username to its wallet address (via the profiles
+// binding) and asks the indexer for that address's history. The indexer itself
+// stays purely address-driven.
+test('activityByAddr aggregates an observer\'s results/disputes scoped to visible elections', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild([
+    mk('o1', 'org', 'TREASURY', 100, memo.orgMemo('Org')),
+    mk('el1', 'org', 'org', 0, memo.electionMemo('E1')),
+    mk('c1', 'org', 'org', 0, memo.candidateMemo('el1', 1, 'Red')),
+    mk('s1', 'org', 'org', 0, memo.stationMemo('el1', 1, 'St1', 'North')),
+    mk('ob', 'org', 'org', 0, memo.observerMemo('el1', 'obsX')),
+    mk('r1', 'obsX', 'org', 0, memo.resultMemo('el1', 1, { 1: 10 }, 10, 0)),
+    mk('d1', 'obsX', 'org', 0, memo.disputeMemo('el1', 'r1', 'self-dispute for test')),
+  ]);
+  const visible = ix.visibleElections({}).map((e) => e.eid);
+  const act = ix.activityByAddr('obsX', visible);
+  assert.strictEqual(act.resultCount, 1);
+  assert.strictEqual(act.disputeCount, 1);
+  assert.strictEqual(act.electionCount, 1);
+  assert.strictEqual(act.history.length, 1);
+  assert.strictEqual(act.history[0].station_name, 'St1');
+  // Scoping: an election not in the visible set contributes nothing.
+  const none = ix.activityByAddr('obsX', []);
+  assert.strictEqual(none.resultCount, 0);
+  assert.strictEqual(none.history.length, 0);
+});

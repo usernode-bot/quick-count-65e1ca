@@ -198,6 +198,21 @@
       "expectText": "Confirming on-chain"
     },
     {
+      "name": "App boots through the Usernode Loading gate and renders the dashboard",
+      "path": "/#/dashboard",
+      "expectText": "Staging demo"
+    },
+    {
+      "name": "Signed-in chrome is labeled by the active Usernode Username",
+      "path": "/?viewer=ut1stagingdemo00000000000000000000000000#/profile",
+      "expectText": "staging_demo_user"
+    },
+    {
+      "name": "Profile reflects restored language preference for the active username",
+      "path": "/?viewer=ut1stagingdemo00000000000000000000000000#/settings",
+      "expectText": "Language"
+    },
+    {
       "name": "Verify evidence page renders",
       "path": "/#/verify",
       "expectText": "Verify evidence"
