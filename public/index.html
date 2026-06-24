@@ -65,6 +65,14 @@
   <script src="/usernode-usernames.js"></script>
   <script src="/usernode-bridge.js"></script>
   <script src="/csv-export.js"></script>
+  <!-- Evidence PDF: jsPDF + a QR encoder (CDN). Optional — the generator
+       degrades gracefully when these are unreachable (offline). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <!-- Shared fingerprint serializer (pure) + PDF generator + upload verifier. -->
+  <script src="/evidence-fingerprint.js"></script>
+  <script src="/evidence-pdf.js"></script>
+  <script src="/evidence-verify.js"></script>
   <!-- App-side bridge resilience: classifier (pure) then retry/notice layer.
        Must load AFTER the hosted bridge tag above. -->
   <script src="/usernode-bridge-classify.js"></script>
@@ -123,6 +131,7 @@
     { id: 'elections', label: 'Elections', icon: '🗳️' },
     { id: 'orgs', label: 'Orgs', icon: '🏛️' },
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
+    { id: 'verify', label: 'Verify', icon: '🛡️' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
     { id: 'heatmap', label: 'Heatmap', icon: '🗺️' },
     { id: 'profile', label: 'My Profile', icon: '👤', walletOnly: true },
@@ -158,7 +167,13 @@
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
-      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_disputes: 'Disputes', tab_admin: 'Admin',
+      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes', tab_admin: 'Admin',
+      evidence_pdf_download: 'Evidence PDF', evidence_pdf_generating: 'Generating…', evidence_pdf_unavailable: 'PDF tools unavailable — open this page online to enable Evidence PDFs.', evidence_pdf_ready: 'Evidence PDF downloaded ✓', evidence_pdf_ready_prompt: 'Result submitted on-chain. Download your Evidence PDF?',
+      verify_heading: 'Verify evidence', verify_intro: 'Drop an Evidence PDF below to check it on your device. Nothing is uploaded — the file is parsed locally, its fingerprint is recomputed, and (when a live chain is configured) it is cross-checked against the blockchain.',
+      verify_drop: 'Drop an Evidence PDF here, or click to choose a file', verify_checking: 'Checking…', verify_sample: 'Run a sample', verify_sample_hint: 'Generate and verify an Evidence PDF for the demo election.',
+      verify_verdict_verified: 'Verified', verify_verdict_offchain: 'Verified (off-chain only)', verify_verdict_fail: 'Failed',
+      verify_verdict_verified_desc: 'The document is internally sound and matches what was recorded on-chain.', verify_verdict_offchain_desc: 'The document is internally sound; no live chain was reachable to cross-check.', verify_verdict_fail_desc: 'One or more checks did not pass — see the details below.',
+      verify_fingerprint_label: 'Fingerprint', verify_status_pass: 'PASS', verify_status_fail: 'FAIL', verify_status_skip: 'SKIPPED', verify_error: 'Could not verify this file',
       method_latest: 'Latest submission', method_first: 'First submission', method_consensus: 'Consensus', method_median: 'Median', method_verified: 'Verified only',
       dashboard_heading: 'Dashboard', dashboard_select_election: 'Select an election to view live results.', dashboard_export_csv: 'Export CSV', dashboard_export_json: 'Export JSON', dashboard_by_station: 'By station', dashboard_no_stations: 'No candidates.', dashboard_last_submission: 'Last submission', dashboard_auto_refreshing: 'auto-refreshing', dashboard_no_submissions: 'No submissions yet', dashboard_stations_reported: 'stations reported', dashboard_votes: 'votes',
       elections_heading: 'Elections', elections_new: '+ New election', elections_no_elections: 'No elections yet.', elections_open_workspace: 'Open election workspace →',
@@ -1323,6 +1338,7 @@
       case 'elections': return renderElections(v);
       case 'orgs': return renderOrgs(v);
       case 'evidence': return renderEvidence(v);
+      case 'verify': return renderVerify(v);
       case 'disputes': return renderDisputes(v);
       case 'heatmap': return renderHeatmap(v);
       case 'admin': return renderAdmin(v);
@@ -1377,7 +1393,8 @@
       const label = `<td class="py-3 pr-2 sticky left-0 z-10 bg-white dark:bg-slate-950"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
       if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
       const cells = d.candidates.map((c) => `<td class="py-3 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
-      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-3 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap hidden sm:table-cell">${timeAgo(s.at)}</td></tr>`;
+      const pdfBtn = s.resultTx ? `<button data-sid="${s.sid}" class="ev-pdf ml-2 text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white" title="${t('evidence_pdf_download')}">📄</button>` : '';
+      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-3 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap hidden sm:table-cell">${timeAgo(s.at)}${pdfBtn}</td></tr>`;
     }).join('');
     return `<div class="relative"><div class="overflow-x-auto"><table class="w-full text-sm">
       <thead><tr class="text-left"><th class="py-3 pr-2 font-medium text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-950">${t('station_col_name')}</th>${head}<th class="py-3 pl-2 text-right font-medium text-slate-500 dark:text-slate-400 hidden sm:table-cell">${t('station_col_updated')}</th></tr></thead>
@@ -1432,6 +1449,7 @@
       <a class="mt-3 inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>`;
     document.getElementById('exp-csv').onclick = () => exportCsv(d);
     document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
+    wireEvidencePdf();
   }
   // One row per candidate (Rank, Candidate, Votes, Share %), sorted by votes
   // descending. The CSV string itself — including escaping and the UTF-8 BOM —
@@ -1542,6 +1560,7 @@
       p.textContent = t('election_detail_connect_note');
       ws.appendChild(p);
     }
+    wireEvidencePdf();
   }
 
   function panel(title, inner) {
@@ -1584,7 +1603,7 @@
         // Result submission is latest-wins (the aggregate methods collapse
         // repeats), so it is safe to auto-retry an ambiguous relay timeout.
         runTx({ to: d.election.orgAddr, amount: 0, memo: QC.res(d.election.eid, sid, votes, tot, inv, evHash), idempotent: true },
-          { loading: t('loading_submitting'), success: () => { toast(t('toast_submit_result')); refreshSoon(); } });
+          { loading: t('loading_submitting'), success: (results) => { toast(t('toast_submit_result')); refreshSoon(); offerSubmitPdf(d, sid, votes, tot, inv, evHash, results && results[0]); } });
       };
     });
     return p;
@@ -1922,6 +1941,163 @@
       { loading: t('loading_paying'), success: () => { txSuccessToast('toast_fee_paid'); refreshSoon(); } });
   }
 
+  // ───────────────────────── Evidence PDF (generate) ─────────────────────────
+  // Build + download a self-verifying Evidence PDF for one reported station.
+  // `stationOverride` lets the post-submit flow pass freshly-submitted values
+  // before the indexer has caught up; otherwise the station is read from `d`.
+  async function downloadEvidencePdf(d, sid, btn, stationOverride) {
+    if (!window.QCEvidencePDF || !window.QCEvidencePDF.available()) {
+      toast(t('evidence_pdf_unavailable'), 'error');
+      return;
+    }
+    const station = stationOverride || (d.stations || []).find((s) => s.sid === sid && s.reported && s.resultTx);
+    if (!station || !station.resultTx) { toast(t('toast_failed'), 'error'); return; }
+    let label;
+    if (btn) { label = btn.textContent; btn.disabled = true; btn.textContent = t('evidence_pdf_generating'); }
+    try {
+      await window.QCEvidencePDF.generate({ election: d.election, candidates: d.candidates }, station, { origin: location.origin });
+      toast(t('evidence_pdf_ready'));
+    } catch (e) {
+      console.error('[QCEvidence] PDF generation failed', e);
+      toast(t('toast_failed') + ' ' + (e && e.message || ''), 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    }
+  }
+
+  // Bind every .ev-pdf[data-sid] button rendered into the current view. Works
+  // across the dashboard, the election workspace, and the Evidence tab because
+  // all three render from App.state.detail.
+  function wireEvidencePdf() {
+    const d = App.state && App.state.detail;
+    if (!d) return;
+    document.querySelectorAll('.ev-pdf[data-sid]').forEach((b) => {
+      if (b._evWired) return;
+      b._evWired = true;
+      b.onclick = () => downloadEvidencePdf(d, Number(b.dataset.sid), b);
+    });
+  }
+
+  // After a successful result submission, offer the Evidence PDF via the
+  // non-blocking notice. Prefers canonical indexer data once available.
+  function offerSubmitPdf(d, sid, votes, tot, inv, evHash, txId) {
+    if (!window.QCEvidencePDF || !window.QCEvidencePDF.available() || !txId) return;
+    const known = (d.stations || []).find((s) => s.sid === sid) || {};
+    const submitted = {
+      sid: sid, name: known.name || ('Station ' + sid), label: known.label || '',
+      reported: true, votes: votes,
+      tot: (tot === '' || tot == null) ? null : Number(tot),
+      inv: (inv === '' || inv == null) ? null : Number(inv),
+      at: known.at || new Date().toISOString(), observer: App.wallet.address,
+      resultTx: txId, ev: evHash || null,
+    };
+    window.QCNotice.show({
+      message: t('evidence_pdf_ready_prompt'),
+      actionLabel: t('evidence_pdf_download'),
+      onAction: () => {
+        const cur = App.state && App.state.detail;
+        const live = cur && cur.election.eid === d.election.eid && (cur.stations || []).find((s) => s.resultTx === txId);
+        if (live) downloadEvidencePdf(cur, live.sid, null);
+        else downloadEvidencePdf(d, sid, null, submitted);
+      },
+    });
+  }
+
+  // ───────────────────────── Verify (upload verifier) ─────────────────────────
+  function renderVerify(v) {
+    const hash = location.hash || '';
+    const qi = hash.indexOf('?');
+    const params = {};
+    if (qi !== -1) new URLSearchParams(hash.slice(qi + 1)).forEach((val, key) => { params[key] = val; });
+    const isStagingLike = App.cfg && (App.cfg.demo || App.cfg.staging || App.cfg.localDev);
+    const pdfOk = window.QCEvidencePDF && window.QCEvidencePDF.available();
+
+    v.innerHTML = `
+      <h2 class="text-lg font-semibold mb-1">${t('verify_heading')}</h2>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('verify_intro')}</p>
+      <label id="vr-drop" class="block cursor-pointer p-8 text-center rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 text-slate-600 dark:text-slate-400">
+        <input id="vr-file" type="file" accept="application/pdf,.pdf" class="hidden">
+        <div class="text-3xl mb-2">🛡️</div>${t('verify_drop')}
+      </label>
+      ${isStagingLike && pdfOk ? `<div class="mt-3 flex items-center gap-2 flex-wrap"><button id="vr-sample" class="text-sm px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('verify_sample')}</button><span class="text-xs text-slate-500">${t('verify_sample_hint')}</span></div>` : ''}
+      <div id="vr-result" class="mt-5"></div>`;
+
+    const fileInput = document.getElementById('vr-file');
+    const drop = document.getElementById('vr-drop');
+    const out = document.getElementById('vr-result');
+
+    function run(promise) {
+      out.innerHTML = `<p class="text-sm text-slate-500">${t('verify_checking')}</p>`;
+      Promise.resolve(promise).then((res) => renderVerifyResult(out, res)).catch((e) => {
+        out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc(e && e.message || '')}</p>`;
+      });
+    }
+
+    fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg)); };
+    ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('border-indigo-500'); }));
+    ['dragleave'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('border-indigo-500'); }));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault(); drop.classList.remove('border-indigo-500');
+      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg));
+    });
+
+    if (params.fp && params.tx) run(window.QCEvidenceVerify.verifyFromQuery(params, App.cfg));
+
+    const sample = document.getElementById('vr-sample');
+    if (sample) sample.onclick = () => run(runSampleVerify());
+  }
+
+  function renderVerifyResult(out, res) {
+    if (!res || res.error) {
+      out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc((res && res.message) || '')}</p>`;
+      return;
+    }
+    const map = {
+      verified: ['verify_verdict_verified', 'verify_verdict_verified_desc', 'emerald'],
+      offchain: ['verify_verdict_offchain', 'verify_verdict_offchain_desc', 'amber'],
+      fail: ['verify_verdict_fail', 'verify_verdict_fail_desc', 'rose'],
+    };
+    const m = map[res.verdict] || map.fail;
+    const color = m[2];
+    const rows = (res.checks || []).map((c) => {
+      const sc = c.status === 'pass' ? ['emerald', t('verify_status_pass')]
+        : c.status === 'fail' ? ['rose', t('verify_status_fail')]
+        : ['slate', t('verify_status_skip')];
+      return `<div class="flex items-start gap-3 py-2 border-t border-slate-200 dark:border-slate-800">
+        <span class="badge bg-${sc[0]}-100 text-${sc[0]}-700 dark:bg-${sc[0]}-500/20 dark:text-${sc[0]}-300 mt-0.5 whitespace-nowrap">${sc[1]}</span>
+        <div><div class="text-sm font-medium">${esc(c.label)}</div><div class="text-xs text-slate-500 dark:text-slate-400">${esc(c.reason)}</div></div>
+      </div>`;
+    }).join('');
+    out.innerHTML = `
+      <div class="p-4 rounded-xl bg-${color}-50 border border-${color}-200 dark:bg-${color}-500/10 dark:border-${color}-500/30 mb-3">
+        <div class="text-lg font-semibold text-${color}-700 dark:text-${color}-300">${t(m[0])}</div>
+        <div class="text-sm text-slate-600 dark:text-slate-400">${t(m[1])}</div>
+        ${res.fingerprint ? `<div class="text-[0.65rem] font-mono text-slate-500 break-all mt-2">${t('verify_fingerprint_label')}: ${esc(res.fingerprint)}</div>` : ''}
+      </div>
+      <div>${rows}</div>`;
+  }
+
+  // Staging-only round-trip: generate an Evidence PDF for an obviously-fake demo
+  // result, then verify the same record in place. Chain check reports "skipped".
+  function sampleDemoDetail() {
+    return {
+      election: { eid: 'staging-demo-election', name: 'Staging demo election', orgAddr: 'ut1demo00000000000000000000000000000000', orgName: 'Staging demo — Citizens Count' },
+      candidates: [{ cid: 1, name: 'Staging demo — Candidate A' }, { cid: 2, name: 'Staging demo — Candidate B' }],
+    };
+  }
+  function sampleDemoStation() {
+    return {
+      sid: 1, name: 'Staging demo — Station 1', label: 'North district', reported: true,
+      votes: { 1: 120, 2: 80 }, tot: 205, inv: 5, at: '2026-06-01T00:00:00.000Z',
+      observer: 'ut1stagingdemo00000000000000000000000000', resultTx: 'staging-demo-result-tx-0001', ev: null,
+    };
+  }
+  async function runSampleVerify() {
+    const d = sampleDemoDetail(), s = sampleDemoStation();
+    const prep = await window.QCEvidencePDF.generate(d, s, { origin: location.origin });
+    return window.QCEvidenceVerify.verifyRecord(prep.record, prep.fingerprint, App.cfg);
+  }
+
   // ───────────────────────── Evidence gallery ─────────────────────────
   function renderEvidence(v) {
     v.innerHTML = electionPicker() + '<div id="ev-body"></div>';
@@ -1936,7 +2112,10 @@
         ${e.invalid ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
         <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
         <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
-        <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify mt-2 text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
+        <div class="flex gap-2 flex-wrap mt-2">
+          <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
+          <button data-sid="${e.sid}" class="ev-pdf text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">📄 ${t('evidence_pdf_download')}</button>
+        </div>
       </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('evidence_no_evidence')}</p>`;
 
     body.innerHTML = `<h2 class="text-lg font-semibold mb-1">${t('evidence_heading')} — ${esc(d.election.name)}</h2>
@@ -1964,6 +2143,7 @@
       if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = `<span class="text-emerald-400 font-semibold">${t('evidence_match_yes')}</span>`;
       else r.innerHTML = `<span class="text-rose-400 font-semibold">${t('evidence_match_no')}</span>`;
     };
+    wireEvidencePdf();
   }
 
   // ───────────────────────── Disputes ─────────────────────────

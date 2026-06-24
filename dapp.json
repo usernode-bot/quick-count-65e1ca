@@ -211,6 +211,16 @@
       "name": "Profile reflects restored language preference for the active username",
       "path": "/?viewer=ut1stagingdemo00000000000000000000000000#/settings",
       "expectText": "Language"
+    },
+    {
+      "name": "Verify evidence page renders",
+      "path": "/#/verify",
+      "expectText": "Verify evidence"
+    },
+    {
+      "name": "Verify page shows the Evidence PDF drop zone",
+      "path": "/#/verify",
+      "expectSelector": "#vr-drop"
     }
   ]
 }
