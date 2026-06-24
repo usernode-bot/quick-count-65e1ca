@@ -178,6 +178,21 @@
       "expectText": "North district"
     },
     {
+      "name": "Orgs tab renders the organizations heading",
+      "path": "/#/orgs",
+      "expectText": "Organizations"
+    },
+    {
+      "name": "Orgs tab shows the Member of section",
+      "path": "/#/orgs",
+      "expectText": "Member of"
+    },
+    {
+      "name": "Orgs endpoint returns the seeded owner roster",
+      "path": "/__quickcount/orgs?viewer=ut1democitizenscount0000000000000000000000",
+      "expectText": "\"viewerRole\":\"owner\""
+    },
+    {
       "name": "Confirming-on-chain indicator shows for a pending submission",
       "path": "/?demo=1#/dashboard",
       "expectText": "Confirming on-chain"

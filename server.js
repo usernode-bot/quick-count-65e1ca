@@ -56,10 +56,15 @@ const DEMO = {
   admin: 'ut1demoadmin000000000000000000000000000000',
   orgA: 'ut1democitizenscount0000000000000000000000',
   orgB: 'ut1demounpaidorg000000000000000000000000000',
-  orgC: 'ut1demopollwatchalliance00000000000000000000',
+  orgC: 'ut1demoprivateorg00000000000000000000000000', // private org
+  orgD: 'ut1demodeletedorg00000000000000000000000000', // tombstoned org
+  pollwatch: 'ut1demopollwatchalliance00000000000000000000',
   obs1: 'ut1demoobserverone000000000000000000000000',
   obs2: 'ut1demoobservertwo000000000000000000000000',
   obs3: 'ut1demoobserverthree00000000000000000000000',
+  orgAdmin: 'ut1demoorgadmin0000000000000000000000000000',
+  orgMod: 'ut1demoorgmod000000000000000000000000000000',
+  orgMember: 'ut1demoorgmember00000000000000000000000000',
 };
 const ADMIN_ADDRS = (process.env.ADMIN_ADDRS || '').split(',').map((s) => s.trim()).filter(Boolean);
 if (IS_DEMO) ADMIN_ADDRS.push(DEMO.admin);
@@ -155,7 +160,7 @@ function buildDemoTxs() {
     mk('demo_org_b', DEMO.orgB, TREASURY_ADDR, 0, memo.orgMemo('Staging demo — Unpaid Org', 'Demo Republic')),
     // Active org with NO elections — proves "Organisasi aktif" lists active orgs
     // directly, not derived from elections.
-    mk('demo_org_c', DEMO.orgC, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Pollwatch Alliance', 'Demo Republic')),
+    mk('demo_pollwatch', DEMO.pollwatch, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Pollwatch Alliance', 'Demo Republic')),
     // Election + candidates (by the active org).
     mk(eid, DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — General Election')),
     mk('demo_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(eid, 1, 'Demo Candidate Red')),
@@ -183,6 +188,32 @@ function buildDemoTxs() {
     mk('demo_disp_open', DEMO.obs2, DEMO.orgA, 0, memo.disputeMemo(eid, 'demo_res_s2_a', 'Numbers look inconsistent with turnout')),
     mk('demo_disp_up', DEMO.obs2, DEMO.orgA, 0, memo.disputeMemo(eid, 'demo_res_s3_a', 'Tally sheet altered', ev2)),
     mk('demo_dres_up', DEMO.orgA, DEMO.orgA, 0, memo.resolveMemo(eid, 'demo_disp_up', 'uphold')),
+
+    // ── Organization management (members, roles, visibility, deletion) ──────
+    // Citizens Count (orgA, active/public) gets a full roster, all addressed to
+    // the org wallet so the poller discovers them.
+    mk('demo_mem_admin', DEMO.orgA, DEMO.orgA, 0, memo.memberMemo(DEMO.orgA, DEMO.orgAdmin, 'admin')),
+    mk('demo_mem_mod', DEMO.orgA, DEMO.orgA, 0, memo.memberMemo(DEMO.orgA, DEMO.orgMod, 'mod')),
+    mk('demo_mem_member', DEMO.orgA, DEMO.orgA, 0, memo.memberMemo(DEMO.orgA, DEMO.orgMember, 'member')),
+    // Promote/demote demo: obs1 is added as a member, promoted to moderator,
+    // then demoted back to member — three verifiable on-chain events.
+    mk('demo_mem_obs1_a', DEMO.orgA, DEMO.orgA, 0, memo.memberMemo(DEMO.orgA, DEMO.obs1, 'member')),
+    mk('demo_mem_obs1_b', DEMO.orgAdmin, DEMO.orgA, 0, memo.memberMemo(DEMO.orgA, DEMO.obs1, 'mod')),
+    mk('demo_mem_obs1_c', DEMO.orgA, DEMO.orgA, 0, memo.memberMemo(DEMO.orgA, DEMO.obs1, 'member')),
+
+    // A second, PRIVATE org with a private election visible only to its members.
+    mk('demo_org_c', DEMO.orgC, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Private Watchers', 'Demo Republic')),
+    mk('demo_org_c_vis', DEMO.orgC, DEMO.orgC, 0, memo.visibilityMemo(DEMO.orgC, 'private')),
+    mk('demo_org_c_mem', DEMO.orgC, DEMO.orgC, 0, memo.memberMemo(DEMO.orgC, DEMO.orgMember, 'member')),
+    mk('demo_elc', DEMO.orgC, DEMO.orgC, 0, memo.electionMemo('Staging demo — Private Election')),
+    mk('demo_elc_c1', DEMO.orgC, DEMO.orgC, 0, memo.candidateMemo('demo_elc', 1, 'Private Candidate A')),
+    mk('demo_elc_c2', DEMO.orgC, DEMO.orgC, 0, memo.candidateMemo('demo_elc', 2, 'Private Candidate B')),
+    mk('demo_elc_s1', DEMO.orgC, DEMO.orgC, 0, memo.stationMemo('demo_elc', 1, 'Private Station 1', 'Central')),
+
+    // A deleted (tombstoned) org — registered, then deleted by its owner.
+    mk('demo_org_d', DEMO.orgD, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Retired Org', 'Demo Republic')),
+    mk('demo_org_d_mem', DEMO.orgD, DEMO.orgD, 0, memo.memberMemo(DEMO.orgD, DEMO.orgMember, 'member')),
+    mk('demo_org_d_del', DEMO.orgD, DEMO.orgD, 0, memo.deleteOrgMemo(DEMO.orgD)),
   ];
   return txs;
 }
@@ -265,7 +296,11 @@ app.get('/__quickcount/config', (_req, res) => {
   // Each persona carries a simulated Usernode Username so the identity-by-username
   // flow runs identically offline (the mock bridge surfaces it as the active user).
   const personas = LOCAL_DEV ? [
-    { label: 'Org — Citizens Count', addr: DEMO.orgA, username: 'citizens_count' },
+    { label: 'Org Owner — Citizens Count', addr: DEMO.orgA, username: 'citizens_count' },
+    { label: 'Org Administrator', addr: DEMO.orgAdmin, username: null },
+    { label: 'Org Moderator', addr: DEMO.orgMod, username: null },
+    { label: 'Org Member', addr: DEMO.orgMember, username: null },
+    { label: 'Org Owner — Private Watchers', addr: DEMO.orgC, username: null },
     { label: 'Observer One', addr: DEMO.obs1, username: 'observer_one' },
     { label: 'Observer Three (Station B)', addr: DEMO.obs3, username: 'observer_three' },
     { label: 'Platform Admin', addr: DEMO.admin, username: 'platform_admin' },
@@ -350,6 +385,18 @@ app.get('/__quickcount/state', (req, res) => {
       detail = can ? indexer.electionDetail(req.query.eid, method) : null;
     }
     res.json({ role, elections, detail, method, activeOrgs: indexer.activeOrgs() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Organizations the viewer owns or belongs to, each with its roster + the
+// viewer's role. Read-only chain replay; auth-exempt under /__quickcount/.
+app.get('/__quickcount/orgs', (req, res) => {
+  try {
+    const viewer = (req.query.viewer || '').toString() || null;
+    const admin = indexer.isAdmin(viewer);
+    res.json(indexer.orgsForViewer(viewer, { admin }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -726,9 +773,10 @@ app.get('/api/public/profiles/:addr', async (req, res) => {
       }
     }
 
-    const visible = indexer.visibleElections({ viewer, admin: indexer.isAdmin(viewer) });
+    const admin = indexer.isAdmin(viewer);
+    const visible = indexer.visibleElections({ viewer, admin });
     const visibleEids = visible.map((el) => el.eid);
-    const activity = indexer.activityByAddr(addr, visibleEids);
+    const activity = indexer.activityByAddr(addr, visibleEids, { viewer, admin });
 
     res.json({
       usernode_pubkey: addr,
@@ -739,7 +787,9 @@ app.get('/api/public/profiles/:addr', async (req, res) => {
         results_submitted: activity.resultCount,
         elections: activity.electionCount,
         disputes_filed: activity.disputeCount,
+        organizations: activity.organizations.length,
       },
+      organizations: activity.organizations,
       history: activity.history,
     });
   } catch (err) {
@@ -879,6 +929,15 @@ async function seedStaging() {
      VALUES ($1, 'observer_one', 'Observer_One', 'en', 'Staging demo — observer profile for testing public profile links', '{"theme":"light","method":"latest"}'::jsonb, '2026-06-01T00:00:00.000Z', NOW())
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [DEMO.obs1]
+  );
+  // Third demo profile — keyed to the Pollwatch Alliance owner, an ACTIVE org
+  // with NO elections (the "registered but no election yet" case). Its public
+  // profile shows a populated Organizations section with zero election activity.
+  await pool.query(
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
+     VALUES ($1, 'pollwatch_owner', 'Pollwatch_Owner', 'en', 'Staging demo — organizer who has registered an org but not yet created an election', '2026-06-01T00:00:00.000Z', NOW())
+     ON CONFLICT (usernode_pubkey) DO NOTHING`,
+    [DEMO.pollwatch]
   );
   // Demo unlock row keyed to the staging demo user's username, so the unlock
   // entitlement restore (live results stay unlocked on return) is reviewable.
