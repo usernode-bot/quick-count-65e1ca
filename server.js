@@ -461,7 +461,7 @@ app.get('/api/public/config', (_req, res) => {
 });
 
 // Visibility-aware app state. `viewer` is the connected wallet (or empty).
-app.get('/__quickcount/state', (req, res) => {
+app.get('/__quickcount/state', async (req, res) => {
   try {
     const viewer = (req.query.viewer || '').toString() || null;
     const method = require('./lib/aggregate').METHODS.includes(req.query.method) ? req.query.method : 'latest';
@@ -473,6 +473,9 @@ app.get('/__quickcount/state', (req, res) => {
     if (req.query.eid) {
       const can = visible.some((el) => el.eid === req.query.eid);
       detail = can ? indexer.electionDetail(req.query.eid, method) : null;
+      // Fold in the off-chain working tally so the workspace can hydrate the
+      // inline vote-entry rows + upper bars on load.
+      if (detail) detail.workTally = await loadWorkTally(req.query.eid);
     }
     res.json({ role, elections, detail, method, activeOrgs: indexer.activeOrgs() });
   } catch (err) {
@@ -507,6 +510,105 @@ app.get('/__quickcount/admin', (req, res) => {
       orgFee: ORG_FEE,
     },
   });
+});
+
+// ── Off-chain working tallies (per-station inline vote entry) ────────────────
+// The election workspace lets an organizer key a quick "working tally" straight
+// onto each polling-station row. This is NON-CONSENSUS off-chain data — not
+// signed, not on-chain, never rebuilt by the indexer — kept separate from the
+// official observer/QC.res reporting flow. It is persisted here (Postgres) so it
+// survives reload and is reflected on the dashboard. Keyed by (eid, sid),
+// latest-write-wins, like attachments.
+//
+// The inline form uses a fixed candidate set (mirrors QuickCountInline.CANDIDATES
+// in public/inline-entry.js). We sanitize to these slugs so a bad body can never
+// poison the stored votes.
+const WORK_TALLY_SLUGS = ['evan', 'salah', 'circle'];
+function sanitizeWorkVotes(raw) {
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const out = {};
+  for (const slug of WORK_TALLY_SLUGS) {
+    const n = Number(src[slug]);
+    out[slug] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  return out;
+}
+// Read every saved station tally for an election. Returns [] without a pool so
+// the feature degrades cleanly in pure-memory mode (the platform always sets
+// DATABASE_URL, so this is the dev-only path).
+async function loadWorkTally(eid) {
+  if (!pool) return [];
+  try {
+    const { rows } = await pool.query(
+      'SELECT sid, votes, updated_at FROM work_tallies WHERE eid = $1 ORDER BY sid',
+      [eid]
+    );
+    return rows.map((r) => ({
+      sid: Number(r.sid),
+      votes: r.votes || {},
+      updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : (r.updated_at || null),
+    }));
+  } catch (e) {
+    console.error('loadWorkTally failed:', e.message);
+    return [];
+  }
+}
+
+// Authenticated: save (or replace) a station's working tally. Org-ownership
+// guard mirrors the attachments PUT: only the election's organizing wallet —
+// Owner, Administrator, or Moderator (canOperate) — or a platform admin may
+// write. When the election isn't indexed yet, allow (nothing to overwrite).
+app.put('/api/elections/:eid/worktally/:sid', async (req, res) => {
+  try {
+    const { eid } = req.params;
+    const sid = Number(req.params.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return res.status(400).json({ error: 'bad station id' });
+
+    // Authorization first (so "not allowed" wins over "unavailable"): only the
+    // election's organizing wallet — Owner, Administrator, or Moderator — or a
+    // platform admin may write. When the election isn't indexed yet (organizer
+    // saving before the chain tx lands) we can't resolve the owner — allow it,
+    // since there is nothing to overwrite.
+    const authorPubkey = (req.user && req.user.usernode_pubkey) || null;
+    const authorUsername = (req.user && req.user.username) || null;
+    const el = indexer.elections.get(eid);
+    if (el && !indexer.canOperate(el.orgAddr, authorPubkey) && !indexer.isAdmin(authorPubkey)) {
+      return res.status(403).json({ error: 'Only the organizing wallet can save this election\'s working tally' });
+    }
+
+    // Off-chain working tallies live in the DB; without one the feature is
+    // unavailable in this environment (degrade like attachments/profiles).
+    if (!pool) return res.status(503).json({ error: 'Working tallies are unavailable in this environment' });
+
+    const votes = sanitizeWorkVotes((req.body && req.body.votes) || req.body);
+    const { rows } = await pool.query(
+      `INSERT INTO work_tallies (eid, sid, votes, author_pubkey, author_username, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, $5, NOW())
+       ON CONFLICT (eid, sid)
+       DO UPDATE SET votes = EXCLUDED.votes, author_pubkey = EXCLUDED.author_pubkey,
+                     author_username = EXCLUDED.author_username, updated_at = NOW()
+       RETURNING sid, votes, updated_at`,
+      [eid, sid, JSON.stringify(votes), authorPubkey, authorUsername]
+    );
+    const r = rows[0] || {};
+    res.json({
+      ok: true, eid, sid,
+      votes: r.votes || votes,
+      updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : (r.updated_at || null),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: every saved working tally for an election (for the standalone
+// dashboard). Public — aggregate vote counts only, no PII.
+app.get('/api/public/elections/:eid/worktally', async (req, res) => {
+  try {
+    res.json({ workTally: await loadWorkTally(req.params.eid) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Off-chain image attachments ──────────────────────────────────────────────
@@ -634,12 +736,17 @@ app.get('/api/public/elections/:eid', async (req, res) => {
     // locked (anonymous / unpaid) and unlocked (paid wallet) viewers.
     const unlocked = await walletUnlocked(req.user && req.user.usernode_pubkey);
 
+    // Off-chain working tally — separate from the pay-to-unlock official
+    // results, so it is served to locked and unlocked viewers alike.
+    const workTally = await loadWorkTally(eid);
+
     const base = {
       election: { eid: d.election.eid, name: d.election.name, root_pubkey: d.election.orgAddr },
       candidates,
       reporting: d.reporting,
       lastUpdated: d.lastUpdated,
       locked: !unlocked,
+      workTally,
     };
 
     if (unlocked) {
@@ -934,6 +1041,21 @@ async function migrate() {
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (eid, kind, ref_id)
     )`);
+  // Off-chain per-station working tallies (inline vote entry in the workspace).
+  // PUBLIC table: only aggregate vote counts shown on the dashboard, so a
+  // stranger seeing every row is by design. No FK to candidates/stations on
+  // purpose — rows may be written before the indexer has caught up, same as
+  // attachments. Latest-write-wins per (eid, sid).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS work_tallies (
+      eid TEXT NOT NULL,
+      sid INTEGER NOT NULL,
+      votes JSONB NOT NULL,
+      author_pubkey TEXT,
+      author_username TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (eid, sid)
+    )`);
   // App-local user profiles: editable display name + preferred UI language,
   // keyed by the Usernode wallet. PRIVATE — it ties a wallet to a chosen
   // personal name and language (PII), like `unlocks`. Schema-only in staging;
@@ -1052,6 +1174,26 @@ async function seedStaging() {
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [root, UNLOCK_PRICE, UNLOCK_RECIPIENT || root]
   );
+  // Working-tally rows (off-chain) so the workspace upper bars + the dashboard
+  // "Working tally" section render non-empty in PR previews / proposal checks
+  // without a tester typing first. Obviously-fake counts, authored by the
+  // staging demo root address. Seeds two stations each for the Pilpres demo
+  // and the generic demo-election. Idempotent — replaces the old client-only
+  // maybeSeedDemoInline() seeding.
+  const demoWork = [
+    [PILPRES_EID, 1, { evan: 412, salah: 286, circle: 173 }],
+    [PILPRES_EID, 2, { evan: 168, salah: 503, circle: 241 }],
+    ['demo-election', 1, { evan: 412, salah: 286, circle: 173 }],
+    ['demo-election', 2, { evan: 168, salah: 503, circle: 241 }],
+  ];
+  for (const [eid, sid, votes] of demoWork) {
+    await pool.query(
+      `INSERT INTO work_tallies (eid, sid, votes, author_pubkey, author_username, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, 'staging_demo_user', NOW())
+       ON CONFLICT (eid, sid) DO NOTHING`,
+      [eid, sid, JSON.stringify(votes), root]
+    );
+  }
 }
 
 async function start() {
@@ -1095,4 +1237,4 @@ if (require.main === module) {
   start().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source, PILPRES_EID };
+module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source, PILPRES_EID, sanitizeWorkVotes, loadWorkTally, migrate };
