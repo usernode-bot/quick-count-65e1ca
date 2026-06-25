@@ -133,6 +133,11 @@
       "expectSelector": "[data-strow]"
     },
     {
+      "name": "TPS rows render a rotating expand chevron",
+      "path": "/#/election/demo-election",
+      "expectSelector": "svg.transition-transform"
+    },
+    {
       "name": "Theme toggle button present on main app",
       "path": "/#/dashboard",
       "expectSelector": "#theme-btn"
