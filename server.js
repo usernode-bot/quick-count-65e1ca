@@ -158,8 +158,6 @@ async function pollOnce() {
 // ── Demo seed (obviously fake; only in local-dev / staging) ──────────────────
 // Election id for the 2024 Indonesian presidential presentation dataset.
 const PILPRES_EID = 'demo-pilpres-2024';
-// Inline TPS vote-entry demo election (candidates Evan / Salah / Circle).
-const TPS_DEMO_EID = 'demo-tps-tani';
 function evHash(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
 
 function buildDemoTxs() {
@@ -271,24 +269,6 @@ function buildDemoTxs() {
     // Station 4 (East Java): Prabowo dominant.
     mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 110, 2: 400, 3: 90 }, 622, 14)),
     // Station 5 (North Sumatra): no submission → "4 of 5 stations reported".
-
-    // ── Inline TPS vote-entry demo: "Staging demo — Pemilihan TPS" ──────────
-    // A small election with candidates Evan / Salah / Circle and a "Tani"
-    // polling station left WITHOUT a result, so the row renders "Menunggu
-    // hasil" and exercises the tap-to-expand inline result form + the
-    // "Simulasi Isi Suara via AI" quick-fill (Evan:1, Salah:2, Circle:3).
-    // Owned by the existing active org (orgA) so it shows alongside the others.
-    mk(TPS_DEMO_EID, DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — Pemilihan TPS')),
-    mk('demo_tps_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(TPS_DEMO_EID, 1, 'Evan')),
-    mk('demo_tps_c2', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(TPS_DEMO_EID, 2, 'Salah')),
-    mk('demo_tps_c3', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo(TPS_DEMO_EID, 3, 'Circle')),
-    // Two stations awaiting results (the headline "Tani" row + a second one).
-    mk('demo_tps_s1', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(TPS_DEMO_EID, 1, 'Tani', 'Kecamatan Sample')),
-    mk('demo_tps_s2', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(TPS_DEMO_EID, 2, 'Tani Hilir', 'Kecamatan Sample')),
-    // One already-reported station so the summary badge is visible on first load.
-    mk('demo_tps_s3', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo(TPS_DEMO_EID, 3, 'Tani Hulu', 'Kecamatan Sample')),
-    mk('demo_tps_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo(TPS_DEMO_EID, DEMO.obs1)),
-    mk('demo_tps_r3', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo(TPS_DEMO_EID, 3, { 1: 1, 2: 2, 3: 3 })),
   ];
   return txs;
 }
