@@ -2557,6 +2557,21 @@
 
   // ───────────────────────── Boot ─────────────────────────
   function refreshSoon() { setTimeout(() => refresh(), App.cfg.localDev ? 400 : 2500); }
+  // True while the user is actively editing a form field inside #view. Each
+  // render() rewrites #view via innerHTML, which destroys and recreates the
+  // focused <input>/<textarea> and drops the cursor — so the auto-refresh
+  // timer skips its tick while a field is focused and resumes on the next tick
+  // once the field is blurred. Only the timer consults this; explicit refreshes
+  // (manual ↻, post-tx refreshSoon, picker changes, navigation) are unaffected.
+  function isEditingField() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    const editable = tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+    if (!editable) return false;
+    const view = document.getElementById('view');
+    return !!(view && view.contains(el));
+  }
   function startAutoRefresh() {
     if (App.refreshTimer) clearInterval(App.refreshTimer);
     // refresh() updates global state (role + activeOrgs) AND re-renders the
@@ -2564,7 +2579,11 @@
     // admin, user) the re-render re-runs those fetches, so a still-syncing
     // registration appears without a manual reload.
     const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
-    App.refreshTimer = setInterval(() => { const r = currentRoute(); if (tabs.includes(r.tab)) refresh(); }, 6000);
+    App.refreshTimer = setInterval(() => {
+      if (isEditingField()) return; // don't yank focus out of a field mid-type
+      const r = currentRoute();
+      if (tabs.includes(r.tab)) refresh();
+    }, 6000);
   }
 
   // ───────────────────────── Theme toggle ─────────────────────────
