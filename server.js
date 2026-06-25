@@ -231,9 +231,10 @@ function buildDemoTxs() {
 
     // ── Presentation dataset: 2024 Indonesian presidential election ─────────
     // A recognizable, realistic sample election that sits ALONGSIDE the generic
-    // demo-election above (which is left untouched). Tallies are illustrative
-    // samples approximating the public 2024 result (Prabowo–Gibran ahead,
-    // Anies–Muhaimin second, Ganjar–Mahfud third), not certified results. The
+    // demo-election above (which is left untouched). Tallies are fictional
+    // samples TUNED so the aggregated national shares track the published 2024
+    // result — ~24.95% Anies–Muhaimin, ~58.59% Prabowo–Gibran, ~16.47%
+    // Ganjar–Mahfud — for display only; these are NOT certified results. The
     // "Staging demo —" prefix keeps it obviously fake; the organizing org is a
     // fictional watchdog, NOT Indonesia's real election commission.
     mk('demo_pilpres_org', DEMO.orgID, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Pemilu Watch (Indonesia)', 'Indonesia')),
@@ -253,16 +254,20 @@ function buildDemoTxs() {
     mk('demo_pilpres_o1', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs1)),
     mk('demo_pilpres_o2', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs2)),
     mk('demo_pilpres_o3', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs3)),
+    // Reported-station tallies are tuned so the 'latest'-per-station national
+    // aggregate lands on the real 2024 shares: Anies 522 / Prabowo 1226 /
+    // Ganjar 345 (n=2093) → 24.94% / 58.58% / 16.48%.
     // Station 1 (Jakarta): Anies strongest.
-    mk('demo_pilpres_r1', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 1, { 1: 142, 2: 121, 3: 49 }, 320, 8)),
+    mk('demo_pilpres_r1', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 1, { 1: 195, 2: 165, 3: 55 }, 430, 9)),
     // Station 2 (West Java): Prabowo dominant.
-    mk('demo_pilpres_r2', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 2, { 1: 70, 2: 240, 3: 38 }, 355, 7)),
+    mk('demo_pilpres_r2', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 2, { 1: 125, 2: 365, 3: 50 }, 560, 12)),
     // Station 3 (Central Java): Prabowo leads, Ganjar elevated — two observers
-    // disagree slightly, exercising the consensus / median view.
-    mk('demo_pilpres_r3a', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 55, 2: 150, 3: 120 }, 332, 7)),
-    mk('demo_pilpres_r3b', DEMO.obs3, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 57, 2: 148, 3: 122 }, 333, 6)),
+    // disagree slightly, exercising the consensus / median view. The later
+    // submission (r3b) is the 'latest' row that feeds the headline aggregate.
+    mk('demo_pilpres_r3a', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 90, 2: 298, 3: 151 }, 558, 10)),
+    mk('demo_pilpres_r3b', DEMO.obs3, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 92, 2: 296, 3: 150 }, 558, 10)),
     // Station 4 (East Java): Prabowo dominant.
-    mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 64, 2: 210, 3: 71 }, 352, 7)),
+    mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 110, 2: 400, 3: 90 }, 622, 14)),
     // Station 5 (North Sumatra): no submission → "4 of 5 stations reported".
   ];
   return txs;

@@ -54,3 +54,26 @@ test('Pilpres 2024 has 4 of 5 stations reported with a dual-submission station',
   const s3 = results.filter((r) => r.sid === 3);
   assert.strictEqual(s3.length, 2, 'station 3 has two submissions');
 });
+
+test('Pilpres 2024 latest-aggregate national shares track the real 2024 result', () => {
+  const ix = index();
+  // The Dashboard's default aggregation method is 'latest' (config.methods[0]);
+  // the displayed national shares come from this tally.
+  const detail = ix.electionDetail(PILPRES_EID, 'latest');
+  const tally = detail.tally;
+  const total = Object.values(tally).reduce((s, n) => s + Number(n || 0), 0);
+  assert.ok(total > 0, 'has votes');
+
+  const pct = (cid) => (100 * Number(tally[cid] || 0)) / total;
+  const TARGET = { 1: 24.95, 2: 58.59, 3: 16.47 }; // Anies / Prabowo / Ganjar
+  for (const cid of [1, 2, 3]) {
+    const diff = Math.abs(pct(cid) - TARGET[cid]);
+    assert.ok(
+      diff <= 0.5,
+      `cid ${cid} share ${pct(cid).toFixed(2)}% within 0.5pp of ${TARGET[cid]}% (off by ${diff.toFixed(2)})`
+    );
+  }
+  // Prabowo–Gibran (cid 2) is the clear winner.
+  assert.ok(Number(tally[2]) > Number(tally[1]), 'Prabowo leads Anies');
+  assert.ok(Number(tally[2]) > Number(tally[3]), 'Prabowo leads Ganjar');
+});
