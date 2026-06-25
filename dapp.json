@@ -251,6 +251,21 @@
       "name": "Mock submit surface is enabled so submissions ingest locally",
       "path": "/__mock/enabled",
       "expectText": "\"enabled\":true"
+    },
+    {
+      "name": "Elections list shows the inline TPS vote-entry demo election",
+      "path": "/#/elections",
+      "expectText": "Pemilihan TPS"
+    },
+    {
+      "name": "TPS election detail renders the awaiting-result station table",
+      "path": "/#/election/demo-tps-tani",
+      "expectText": "Menunggu hasil"
+    },
+    {
+      "name": "TPS election detail exposes the Evan candidate column",
+      "path": "/#/election/demo-tps-tani",
+      "expectText": "Evan"
     }
   ]
 }
