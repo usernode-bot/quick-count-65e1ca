@@ -123,6 +123,8 @@
     me: null,           // last /api/me response
     lang: 'en',         // active UI language
     menuOpen: false,    // wallet dropdown menu open?
+    openStation: null,  // sid of the TPS row whose inline result form is expanded (election detail)
+    draftVotes: {},     // { [cid]: rawString } in-progress votes for the open TPS form (survives re-render)
     txState: { sentTime: null, confirmStartTime: null, lastError: null, retryCount: 0 }, // transaction state tracking
   };
 
@@ -198,6 +200,7 @@
       loading_confirming: 'Confirming on-chain…', confirming_onchain: 'Confirming on-chain…', confirming_generic: 'Confirming submission', pending_demo_label: 'Staging demo — pending submission', notice_confirm_timeout: 'Submitted — still confirming on the network. It will appear once the chain includes it.',
       timeago_s: '{n}s ago', timeago_m: '{n}m ago', timeago_h: '{n}h ago', timeago_d: '{n}d ago',
       station_awaiting: 'Awaiting result', station_col_name: 'Station', station_col_updated: 'Updated', station_badge_invalidated: 'invalidated', station_badge_disputed: 'disputed', station_badge_review: 'review', station_badge_reports: '{n} reports',
+      station_enter_result: 'Enter result', station_save_result: 'Save result', station_simulate_ai: 'Simulate vote fill via AI', station_votes_unit: 'Votes', station_invalid_votes: 'Enter whole non-negative numbers only.', station_entry_readonly: 'Only authorized observers or the organizer can submit results for this station.',
       margin_needs_review: '⚠ Needs review', margin_stable_lead: '✓ Stable lead', margin_lead_pct: 'lead margin {lead}%', margin_uncertainty: 'uncertainty ±{pct}%', margin_disagreement_note: 'disagreements or disputes could affect the outcome.',
       elections_connect_org: 'Connect an organization wallet to create elections. Register one under the {orgs_link} tab.', elections_pending_org: 'Your organization is pending — pay the registration fee under {orgs_link} to publish elections.',
       elections_card_stations: 'stations', elections_card_candidates: 'candidates', elections_card_disputes: 'disputes', elections_none_published: 'No elections published yet.', elections_pending_suffix: '(pending)',
@@ -264,6 +267,7 @@
       loading_creating_election: 'Membuat pemilihan…', loading_adding_candidate: 'Menambahkan kandidat {i}/{n}…', loading_importing_station: 'Mengimpor TPS {i}/{n}…',
       timeago_s: '{n}dtk lalu', timeago_m: '{n}mnt lalu', timeago_h: '{n}j lalu', timeago_d: '{n}h lalu',
       station_awaiting: 'Menunggu hasil', station_col_name: 'TPS', station_col_updated: 'Diperbarui', station_badge_invalidated: 'dibatalkan', station_badge_disputed: 'disengketakan', station_badge_review: 'ditinjau', station_badge_reports: '{n} laporan',
+      station_enter_result: 'Isi hasil', station_save_result: 'Simpan Hasil', station_simulate_ai: 'Simulasi Isi Suara via AI', station_votes_unit: 'Suara', station_invalid_votes: 'Masukkan hanya bilangan bulat non-negatif.', station_entry_readonly: 'Hanya pengamat yang berwenang atau penyelenggara yang dapat mengirim hasil untuk TPS ini.',
       margin_needs_review: '⚠ Perlu tinjauan', margin_stable_lead: '✓ Unggul stabil', margin_lead_pct: 'unggul {lead}%', margin_uncertainty: 'ketidakpastian ±{pct}%', margin_disagreement_note: 'ketidaksepakatan atau sengketa dapat mempengaruhi hasilnya.',
       elections_connect_org: 'Hubungkan dompet organisasi untuk membuat pemilihan. Daftarkan di tab {orgs_link}.', elections_pending_org: 'Organisasi Anda menunggu — bayar biaya pendaftaran di {orgs_link} untuk menerbitkan pemilihan.',
       elections_card_stations: 'TPS', elections_card_candidates: 'kandidat', elections_card_disputes: 'sengketa', elections_none_published: 'Belum ada pemilihan yang diterbitkan.', elections_pending_suffix: '(menunggu)',
@@ -1356,6 +1360,9 @@
     const route = currentRoute();
     const v = document.getElementById('view');
     if (route.tab !== 'orgs') App.orgView = null; // leaving Orgs closes any open workspace
+    // Leaving an election workspace (or switching to a different one) closes any
+    // open inline TPS result form and discards its draft.
+    if (route.tab !== 'election' || (route.arg && route.arg !== App.eid)) { App.openStation = null; App.draftVotes = {}; }
     if (route.tab === 'election' && route.arg) { App.eid = route.arg; return renderElectionDetail(v); }
     switch (route.tab) {
       case 'dashboard': return renderDashboard(v);
@@ -1406,23 +1413,121 @@
         </div>`;
       }).join('');
   }
-  function stationTable(d) {
+  // Compact "Evan: 1 | Salah: 2 | Circle: 3" summary used in the TPS row's label
+  // cell once a station has reported — the at-a-glance replacement for the
+  // "Menunggu hasil" text.
+  function stationSummaryBadge(d, s) {
+    const parts = d.candidates.map((c) => `${esc(c.name)}: ${Number((s.votes || {})[c.cid] || 0)}`).join(' | ');
+    return `<span class="badge bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-mono">${parts}</span>`;
+  }
+  // Whether the current viewer may submit a result for this station: the org
+  // owner may submit any station; an observer may submit only the station they
+  // are scoped to (or any, if unscoped). Mirrors who sees observerPanel.
+  function canSubmitStation(d, s) {
+    if (App.role.org && App.role.org.addr === d.election.orgAddr) return true;
+    const myObs = (App.role.observerOf || []).find((o) => o.eid === d.election.eid);
+    if (!myObs) return false;
+    return myObs.sid == null || Number(myObs.sid) === Number(s.sid);
+  }
+  // Inline per-candidate vote-entry form rendered inside an expanded TPS row.
+  // Horizontal "name — number input — Suara" lines (tablet-friendly), a mock
+  // "Simulasi Isi Suara via AI" fill, and "Simpan Hasil". Inputs seed from
+  // App.draftVotes so an open form survives a background re-render.
+  function stationEntryForm(d, s) {
+    const rows = d.candidates.map((c) => {
+      const draft = App.draftVotes[c.cid] != null ? App.draftVotes[c.cid] : '';
+      return `<div class="flex items-center gap-3 flex-wrap">
+        <label class="flex-1 min-w-[7rem] text-sm text-slate-700 dark:text-slate-200 truncate" for="sv-${s.sid}-${c.cid}">${esc(c.name)}</label>
+        <input id="sv-${s.sid}-${c.cid}" type="number" min="0" inputmode="numeric" data-cid="${c.cid}" value="${esc(draft)}" class="sv-input w-24 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-right text-sm">
+        <span class="w-12 text-xs text-slate-500 dark:text-slate-400">${t('station_votes_unit')}</span>
+      </div>`;
+    }).join('');
+    const actions = canSubmitStation(d, s)
+      ? `<div class="flex flex-wrap items-center gap-2 mt-3">
+           <button type="button" class="sv-sim text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-medium">${t('station_simulate_ai')}</button>
+           <button type="button" class="sv-save text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold">${t('station_save_result')}</button>
+         </div>
+         <p class="sv-err hidden mt-2 text-xs text-rose-400"></p>`
+      : `<p class="mt-2 text-xs text-slate-500 dark:text-slate-400">${t('station_entry_readonly')}</p>`;
+    return `<div class="p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 max-w-xl">
+      <h4 class="text-sm font-semibold mb-3">${t('station_enter_result')} — ${esc(s.name)}</h4>
+      <div class="space-y-2">${rows}</div>
+      ${actions}
+    </div>`;
+  }
+  function stationTable(d, interactive) {
+    const colCount = d.candidates.length + 2;
     const head = d.candidates.map((c) => `<th class="py-3 px-2 text-right font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
     const rows = d.stations.map((s) => {
+      const open = interactive && Number(App.openStation) === Number(s.sid);
       const badges = [];
       if (s.invalid) badges.push(`<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>`);
       else if (s.disputed) badges.push(`<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('station_badge_disputed')}</span>`);
       if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">${t('station_badge_review')}</span>`);
       if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
-      const label = `<td class="py-3 pr-2 sticky left-0 z-10 bg-white dark:bg-slate-950"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
-      if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
+      if (s.reported) badges.push(stationSummaryBadge(d, s));
+      const caret = interactive ? `<span class="inline-block w-3 text-slate-500">${open ? '▾' : '▸'}</span> ` : '';
+      const labelCls = interactive ? 'cursor-pointer st-toggle select-none' : '';
+      const label = `<td data-sid="${s.sid}" class="py-3 pr-2 sticky left-0 z-10 bg-white dark:bg-slate-950 ${labelCls}"><div class="flex items-center">${caret}<span>${esc(s.name)}</span></div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500 pl-3">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5 flex-wrap pl-3">${badges.join('')}</div></td>`;
+      const expansion = open ? `<tr class="bg-slate-50 dark:bg-slate-900/40"><td colspan="${colCount}" class="px-2 pb-4">${stationEntryForm(d, s)}</td></tr>` : '';
+      if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>${expansion}`;
       const cells = d.candidates.map((c) => `<td class="py-3 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
       const pdfBtn = s.resultTx ? `<button data-sid="${s.sid}" class="ev-pdf ml-2 text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white" title="${t('evidence_pdf_download')}">📄</button>` : '';
-      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-3 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap hidden sm:table-cell">${timeAgo(s.at)}${pdfBtn}</td></tr>`;
+      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-3 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap hidden sm:table-cell">${timeAgo(s.at)}${pdfBtn}</td></tr>${expansion}`;
     }).join('');
     return `<div class="relative"><div class="overflow-x-auto"><table class="w-full text-sm">
       <thead><tr class="text-left"><th class="py-3 pr-2 font-medium text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-950">${t('station_col_name')}</th>${head}<th class="py-3 pl-2 text-right font-medium text-slate-500 dark:text-slate-400 hidden sm:table-cell">${t('station_col_updated')}</th></tr></thead>
       <tbody>${rows}</tbody></table></div><div class="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white dark:from-slate-950 pointer-events-none sm:hidden"></div></div>`;
+  }
+  // Wire tap-to-expand toggles + the open station's inline form. Input handlers
+  // mutate App only (never render/refresh) to avoid re-render loops; toggling
+  // re-renders the election detail exactly once.
+  function wireStationTable(d, root) {
+    root.querySelectorAll('.st-toggle').forEach((el) => {
+      el.onclick = () => {
+        const sid = Number(el.dataset.sid);
+        App.openStation = Number(App.openStation) === sid ? null : sid;
+        App.draftVotes = {};
+        renderElectionDetail(root);
+      };
+    });
+    if (App.openStation == null) return;
+    const s = (d.stations || []).find((x) => Number(x.sid) === Number(App.openStation));
+    if (!s) return;
+    root.querySelectorAll('.sv-input').forEach((inp) => {
+      inp.oninput = () => { App.draftVotes[inp.dataset.cid] = inp.value; };
+    });
+    const sim = root.querySelector('.sv-sim');
+    if (sim) sim.onclick = () => {
+      const mockMap = { evan: 1, salah: 2, circle: 3 };
+      d.candidates.forEach((c, i) => {
+        const mapped = mockMap[String(c.name).trim().toLowerCase()];
+        const val = String(mapped != null ? mapped : (i + 1));
+        App.draftVotes[c.cid] = val;
+        const inp = root.querySelector('.sv-input[data-cid="' + c.cid + '"]');
+        if (inp) inp.value = val;
+      });
+    };
+    const save = root.querySelector('.sv-save');
+    const err = root.querySelector('.sv-err');
+    if (save) save.onclick = () => {
+      const votes = {};
+      let bad = false;
+      d.candidates.forEach((c) => {
+        const raw = (App.draftVotes[c.cid] != null ? App.draftVotes[c.cid] : '').toString().trim();
+        if (raw === '') { votes[c.cid] = 0; return; } // blank defaults to 0
+        if (!/^\d+$/.test(raw)) { bad = true; return; } // reject negatives / decimals / non-numbers
+        votes[c.cid] = Number(raw);
+      });
+      if (bad) { if (err) { err.textContent = t('station_invalid_votes'); err.classList.remove('hidden'); } return; }
+      if (err) err.classList.add('hidden');
+      const sid = Number(App.openStation);
+      runTx({ to: d.election.orgAddr, amount: 0, memo: QC.res(d.election.eid, sid, votes), idempotent: true },
+        { loading: t('loading_submitting'), success: () => {
+            App.openStation = null; App.draftVotes = {};
+            toast(t('toast_submit_result')); refreshSoon();
+          } });
+    };
   }
   function marginBanner(d) {
     const m = d.margin;
@@ -1556,7 +1661,16 @@
   // ───────────────────────── Election detail / workspace ─────────────────────────
   async function renderElectionDetail(v) {
     const d = App.state && App.state.detail;
-    if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
+    // On a deep link (or right after switching elections) the last /state fetch
+    // may carry detail for a different eid — kick exactly one refresh for the
+    // current eid rather than rendering the wrong election. Guarded by
+    // App._detailFetching so an invisible/unknown eid can't loop.
+    if (!d || (d.election && d.election.eid !== App.eid)) {
+      v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`;
+      if (App.eid && App._detailFetching !== App.eid) { App._detailFetching = App.eid; refresh(); }
+      return;
+    }
+    App._detailFetching = null;
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
     const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
@@ -1571,9 +1685,10 @@
       ${marginBanner(d)}
       <div class="mb-5">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
       <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)}</p>
-      ${stationTable(d)}
+      ${stationTable(d, true)}
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
+    wireStationTable(d, v);
 
     const ws = document.getElementById('ws');
     if (myObs) ws.appendChild(observerPanel(d, myObs));
@@ -2563,7 +2678,12 @@
   // timer skips its tick while a field is focused and resumes on the next tick
   // once the field is blurred. Only the timer consults this; explicit refreshes
   // (manual ↻, post-tx refreshSoon, picker changes, navigation) are unaffected.
-  function isEditingField() {
+  // True while the user is mid-interaction with a form in #view and a wholesale
+  // re-render would lose their work: either a field is focused, OR an inline
+  // editor (the expandable TPS result form) is open with a draft on screen.
+  // Both the auto-refresh timer and post-action refreshes consult this.
+  function isBusyEditing() {
+    if (App.openStation != null) return true; // an inline TPS result form is open
     const el = document.activeElement;
     if (!el) return false;
     const tag = el.tagName;
@@ -2572,6 +2692,8 @@
     const view = document.getElementById('view');
     return !!(view && view.contains(el));
   }
+  // Back-compat alias (kept so any other caller keeps working).
+  function isEditingField() { return isBusyEditing(); }
   function startAutoRefresh() {
     if (App.refreshTimer) clearInterval(App.refreshTimer);
     // refresh() updates global state (role + activeOrgs) AND re-renders the
@@ -2580,7 +2702,7 @@
     // registration appears without a manual reload.
     const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
     App.refreshTimer = setInterval(() => {
-      if (isEditingField()) return; // don't yank focus out of a field mid-type
+      if (isBusyEditing()) return; // don't yank focus out of a field, or collapse an open inline form, mid-edit
       const r = currentRoute();
       if (tabs.includes(r.tab)) refresh();
     }, 6000);
