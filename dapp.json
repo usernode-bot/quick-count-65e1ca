@@ -138,6 +138,11 @@
       "expectSelector": "svg.transition-transform"
     },
     {
+      "name": "Workspace renders the inline working-tally vote-share bars",
+      "path": "/#/election/demo-election",
+      "expectSelector": "#ws-tally-bars [data-inl-bar]"
+    },
+    {
       "name": "Theme toggle button present on main app",
       "path": "/#/dashboard",
       "expectSelector": "#theme-btn"
