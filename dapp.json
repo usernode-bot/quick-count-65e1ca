@@ -104,6 +104,16 @@
       "expectText": "stations reported"
     },
     {
+      "name": "Elections list shows the Pilpres 2024 demo election",
+      "path": "/#/elections",
+      "expectText": "Pilpres 2024"
+    },
+    {
+      "name": "Pilpres 2024 demo dashboard shows a candidate pair",
+      "path": "/dashboard.html?eid=demo-pilpres-2024",
+      "expectText": "Prabowo"
+    },
+    {
       "name": "Dashboard shows the locked pay-to-unlock overlay",
       "path": "/dashboard.html?eid=demo-election",
       "expectText": "Unlock live results"
