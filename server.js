@@ -66,6 +66,7 @@ const DEMO = {
   orgB: 'ut1demounpaidorg000000000000000000000000000',
   orgC: 'ut1demoprivateorg00000000000000000000000000', // private org
   orgD: 'ut1demodeletedorg00000000000000000000000000', // tombstoned org
+  orgID: 'ut1demopemiluwatchid00000000000000000000000', // Pilpres 2024 (Indonesia) demo org
   pollwatch: 'ut1demopollwatchalliance00000000000000000000',
   obs1: 'ut1demoobserverone000000000000000000000000',
   obs2: 'ut1demoobservertwo000000000000000000000000',
@@ -155,6 +156,8 @@ async function pollOnce() {
 }
 
 // ── Demo seed (obviously fake; only in local-dev / staging) ──────────────────
+// Election id for the 2024 Indonesian presidential presentation dataset.
+const PILPRES_EID = 'demo-pilpres-2024';
 function evHash(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
 
 function buildDemoTxs() {
@@ -225,6 +228,42 @@ function buildDemoTxs() {
     mk('demo_org_d', DEMO.orgD, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Retired Org', 'Demo Republic')),
     mk('demo_org_d_mem', DEMO.orgD, DEMO.orgD, 0, memo.memberMemo(DEMO.orgD, DEMO.orgMember, 'member')),
     mk('demo_org_d_del', DEMO.orgD, DEMO.orgD, 0, memo.deleteOrgMemo(DEMO.orgD)),
+
+    // ── Presentation dataset: 2024 Indonesian presidential election ─────────
+    // A recognizable, realistic sample election that sits ALONGSIDE the generic
+    // demo-election above (which is left untouched). Tallies are illustrative
+    // samples approximating the public 2024 result (Prabowo–Gibran ahead,
+    // Anies–Muhaimin second, Ganjar–Mahfud third), not certified results. The
+    // "Staging demo —" prefix keeps it obviously fake; the organizing org is a
+    // fictional watchdog, NOT Indonesia's real election commission.
+    mk('demo_pilpres_org', DEMO.orgID, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Pemilu Watch (Indonesia)', 'Indonesia')),
+    mk(PILPRES_EID, DEMO.orgID, DEMO.orgID, 0, memo.electionMemo('Staging demo — Pilpres 2024 (Indonesia)')),
+    // Candidate pairs, by official ballot number (president & vice-president).
+    mk('demo_pilpres_c1', DEMO.orgID, DEMO.orgID, 0, memo.candidateMemo(PILPRES_EID, 1, 'Anies Baswedan & Muhaimin Iskandar')),
+    mk('demo_pilpres_c2', DEMO.orgID, DEMO.orgID, 0, memo.candidateMemo(PILPRES_EID, 2, 'Prabowo Subianto & Gibran Rakabuming')),
+    mk('demo_pilpres_c3', DEMO.orgID, DEMO.orgID, 0, memo.candidateMemo(PILPRES_EID, 3, 'Ganjar Pranowo & Mahfud MD')),
+    // Polling stations, each tagged with its province (feeds the Turnout heatmap).
+    mk('demo_pilpres_s1', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 1, 'TPS DKI Jakarta — Sample', 'DKI Jakarta')),
+    mk('demo_pilpres_s2', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 2, 'TPS Jawa Barat — Sample', 'Jawa Barat')),
+    mk('demo_pilpres_s3', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 3, 'TPS Jawa Tengah — Sample', 'Jawa Tengah')),
+    mk('demo_pilpres_s4', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 4, 'TPS Jawa Timur — Sample', 'Jawa Timur')),
+    mk('demo_pilpres_s5', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 5, 'TPS Sumatera Utara — Sample', 'Sumatera Utara')),
+    // Observers (reuse the existing demo observer wallets — an observer may be
+    // authorized on multiple elections).
+    mk('demo_pilpres_o1', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs1)),
+    mk('demo_pilpres_o2', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs2)),
+    mk('demo_pilpres_o3', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs3)),
+    // Station 1 (Jakarta): Anies strongest.
+    mk('demo_pilpres_r1', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 1, { 1: 142, 2: 121, 3: 49 }, 320, 8)),
+    // Station 2 (West Java): Prabowo dominant.
+    mk('demo_pilpres_r2', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 2, { 1: 70, 2: 240, 3: 38 }, 355, 7)),
+    // Station 3 (Central Java): Prabowo leads, Ganjar elevated — two observers
+    // disagree slightly, exercising the consensus / median view.
+    mk('demo_pilpres_r3a', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 55, 2: 150, 3: 120 }, 332, 7)),
+    mk('demo_pilpres_r3b', DEMO.obs3, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 57, 2: 148, 3: 122 }, 333, 6)),
+    // Station 4 (East Java): Prabowo dominant.
+    mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 64, 2: 210, 3: 71 }, 352, 7)),
+    // Station 5 (North Sumatra): no submission → "4 of 5 stations reported".
   ];
   return txs;
 }
@@ -340,6 +379,7 @@ app.get('/__quickcount/config', (_req, res) => {
     { label: 'Org Moderator', addr: DEMO.orgMod, username: null },
     { label: 'Org Member', addr: DEMO.orgMember, username: null },
     { label: 'Org Owner — Private Watchers', addr: DEMO.orgC, username: null },
+    { label: 'Org Owner — Pemilu Watch (Indonesia)', addr: DEMO.orgID, username: 'pemilu_watch_id' },
     { label: 'Observer One', addr: DEMO.obs1, username: 'observer_one' },
     { label: 'Observer Three (Station B)', addr: DEMO.obs3, username: 'observer_three' },
     { label: 'Platform Admin', addr: DEMO.admin, username: 'platform_admin' },
@@ -942,18 +982,24 @@ async function seedStaging() {
   const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6aGFTEMLQkAF/tKAS/fz4YAAAAASUVORK5CYII=';
   const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQTX6NFTEMLQkADGRcwcht3uAAAAAASUVORK5CYII=';
   const GRAY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGMoLKzCihiGlgQA/HdXAZV6UO0AAAAASUVORK5CYII=';
+  const GREEN_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQWhCHFTEMLQkAE2xIAZF2mmQAAAAASUVORK5CYII=';
   const demoAtt = [
-    ['cand_avatar', 1, RED_PNG],
-    ['cand_avatar', 2, BLUE_PNG],
-    ['station_c1', 1, GRAY_PNG],
+    // Generic demo-election avatars / C1 scan.
+    ['demo-election', 'cand_avatar', 1, RED_PNG],
+    ['demo-election', 'cand_avatar', 2, BLUE_PNG],
+    ['demo-election', 'station_c1', 1, GRAY_PNG],
+    // Pilpres 2024 (Indonesia) candidate-pair avatars (placeholders, not real photos).
+    [PILPRES_EID, 'cand_avatar', 1, RED_PNG],
+    [PILPRES_EID, 'cand_avatar', 2, BLUE_PNG],
+    [PILPRES_EID, 'cand_avatar', 3, GREEN_PNG],
   ];
-  for (const [kind, refId, b64] of demoAtt) {
+  for (const [eid, kind, refId, b64] of demoAtt) {
     const buf = Buffer.from(b64, 'base64');
     await pool.query(
       `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
-       VALUES ('demo-election', $1, $2, 'image/png', $3, $4, $5, NOW())
+       VALUES ($1, $2, $3, 'image/png', $4, $5, $6, NOW())
        ON CONFLICT (eid, kind, ref_id) DO NOTHING`,
-      [kind, refId, buf, buf.length, root]
+      [eid, kind, refId, buf, buf.length, root]
     );
   }
 
@@ -983,6 +1029,15 @@ async function seedStaging() {
      VALUES ($1, 'pollwatch_owner', 'Pollwatch_Owner', 'en', 'Staging demo — organizer who has registered an org but not yet created an election', '2026-06-01T00:00:00.000Z', NOW())
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [DEMO.pollwatch]
+  );
+  // Fourth demo profile — keyed to the Pemilu Watch (Indonesia) org owner, so the
+  // 2024 Pilpres presentation election has a populated organizer profile. Clearly
+  // fictional; NOT Indonesia's real election commission.
+  await pool.query(
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
+     VALUES ($1, 'pemilu_watch_id', 'Pemilu_Watch_ID', 'en', 'Staging demo — independent election-watch organizer (fictional)', '2026-06-01T00:00:00.000Z', NOW())
+     ON CONFLICT (usernode_pubkey) DO NOTHING`,
+    [DEMO.orgID]
   );
   // Demo unlock row keyed to the staging demo user's username, so the unlock
   // entitlement restore (live results stay unlocked on return) is reviewable.
@@ -1035,4 +1090,4 @@ if (require.main === module) {
   start().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source };
+module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source, PILPRES_EID };
