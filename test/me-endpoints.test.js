@@ -44,11 +44,13 @@ function req(method, path, body) {
   });
 }
 
-test('GET /__mock/enabled is absent (404) outside local-dev', async () => {
-  // LOCAL_DEV is false here (no --local-dev / APP_MODE), so the whole /__mock/*
-  // block — including the bridge probe — is never mounted.
-  const { status } = await req('GET', '/__mock/enabled');
-  assert.strictEqual(status, 404);
+test('GET /__mock/enabled is present (200) with the default always-on mock flow', async () => {
+  // LOCAL_DEV is false here, but MOCK_TX_FLOW defaults on in every environment,
+  // so the bridge probe is mounted and reports enabled — this is what makes the
+  // hosted bridge route submissions through the self-contained local-ingest path.
+  const { status, json } = await req('GET', '/__mock/enabled');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(json.enabled, true);
 });
 
 test('GET /api/me without auth returns null identity (no 401)', async () => {

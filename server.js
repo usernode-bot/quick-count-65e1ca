@@ -37,6 +37,14 @@ try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode *
 const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const IS_DEMO = LOCAL_DEV || IS_STAGING; // seed obviously-fake data so every screen renders
+// Always-on local-ingest ("mock") transaction flow. When true (the default in
+// EVERY environment), submissions are ingested directly into the event log via
+// /__mock/submit → ingestRaw → rebuild, with NO dependence on NODE_RPC_URL /
+// EXPLORER_API_URL / chain polling / chain read-back. Kept deliberately separate
+// from LOCAL_DEV and IS_DEMO so the developer-only affordances (persona switcher,
+// `viewer` identity override, demo seeding) stay gated on those and are NOT
+// enabled in staging/production. Set MOCK_TX_FLOW=false to restore real-chain reads.
+const MOCK_TX_FLOW = process.env.MOCK_TX_FLOW !== 'false';
 const PORT = process.env.PORT || 3000;
 const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
 // Canonical chain read path: the public block explorer, addressed per-chain as
@@ -125,7 +133,10 @@ async function resyncFromChain({ truncateDb = false } = {}) {
 
 async function pollOnce() {
   let added = false;
-  if (LOCAL_DEV) {
+  if (LOCAL_DEV || MOCK_TX_FLOW) {
+    // Self-contained ingest: replay the in-process mock ledger (fed by
+    // /__mock/submit). No chain read-back, so NODE_RPC_URL / EXPLORER_API_URL
+    // are never consulted for the transaction path.
     for (const raw of mock.all()) if (ingestRaw(raw)) added = true;
   } else {
     for (const [addr, cursor] of watched) {
@@ -239,30 +250,58 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // may POST only { to, amount, memo }; the app's own QCMock always sends `from`.
 const MOCK_FALLBACK_ADDR = 'ut1mockwallet000000000000000000000000000000';
 
-// Local-dev mock chain endpoints — mounted BEFORE the auth gate, 404 otherwise.
-if (LOCAL_DEV) {
+// Populate req.user from the iframe token BEFORE the mock routes below (which are
+// registered ahead of the gating middleware and would otherwise never see it).
+// This only IDENTIFIES the caller — it never gates — so /__mock/submit can derive
+// the real wallet from req.user and resist a spoofed `from`. The gating middleware
+// further down still enforces auth for everything else.
+app.use((req, _res, next) => {
+  if (!req.user) {
+    const token = req.query.token || req.headers['x-usernode-token'];
+    if (token && JWT_SECRET) { try { req.user = jwt.verify(token, JWT_SECRET); } catch { /* ignore */ } }
+  }
+  next();
+});
+
+// Mock / local-ingest chain endpoints — mounted BEFORE the auth gate so the
+// /__mock/ prefix (in PUBLIC_PREFIXES) is reachable from the iframe. With
+// MOCK_TX_FLOW on (the default everywhere) this is the canonical, self-contained
+// transaction surface: the hosted bridge enters mock mode (the GET /__mock/enabled
+// probe returns 200) and the app routes every submission here, where it is
+// ingested directly into the event log. No chain broadcast / read-back occurs.
+if (MOCK_TX_FLOW || LOCAL_DEV) {
   // Probed by the hosted bridge to decide whether to enter mock mode. A 200
   // here makes the bridge route transactions through /__mock/* instead of
-  // failing with "Mock API not enabled". Only mounted in local-dev, so it 404s
-  // (mock mode off) under staging/production, exactly as intended.
+  // failing with "Mock API not enabled".
   app.get('/__mock/enabled', (_req, res) => res.json({ enabled: true }));
   app.post('/__mock/submit', async (req, res) => {
     const { from, to, amount, memo: m } = req.body || {};
-    // `from` defaults to a stable mock address so the hosted bridge's mock
-    // submit (which omits it) works end-to-end; QCMock still sends its own.
-    const sender = from || MOCK_FALLBACK_ADDR;
+    // Reject undecodable memos up front so a bad payload can never poison the
+    // event log (rebuild() replays every row in txLog).
+    if (memo.decode(m) == null) return res.status(400).json({ error: 'invalid memo' });
+    // Sender precedence: the authenticated wallet (req.user, populated from the
+    // JWT before the public-prefix gate) wins so org ownership is the real user
+    // and a client cannot spoof `from`. Falls back to the client-supplied sender
+    // (local-dev personas / QCMock) and finally a stable mock address.
+    const sender = (req.user && req.user.usernode_pubkey) || from || MOCK_FALLBACK_ADDR;
     const tx = mock.append({ from: sender, to: to || sender, amount: amount || 0, memo: m });
     await pollOnce();
     res.json({ txId: tx.txId, ok: true });
   });
   app.get('/__mock/transactions', (_req, res) => res.json({ transactions: mock.all() }));
-  app.post('/__mock/reset', async (_req, res) => { mock.reset(); txLog.length = 0; seen.clear(); rebuild(); res.json({ ok: true }); });
-  app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
+  // Destructive / test-only surface stays gated to developer + demo environments
+  // so it can never be hit by a real user in production.
+  if (LOCAL_DEV || IS_DEMO) {
+    app.post('/__mock/reset', async (_req, res) => { mock.reset(); txLog.length = 0; seen.clear(); rebuild(); res.json({ ok: true }); });
+    app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
+  } else {
+    app.all(['/__mock/reset', '/__mock/seed'], (_req, res) => res.status(404).json({ error: 'mock admin disabled' }));
+  }
 } else {
-  // Outside local-dev the mock surface must be genuinely absent: explicitly
-  // 404 every /__mock/* path so the SPA catch-all (app.get('*')) can't answer
-  // the bridge's GET /__mock/enabled probe with a 200 index.html — which would
-  // wrongly switch the bridge into mock mode in staging/production.
+  // MOCK_TX_FLOW explicitly disabled (real-chain reads): the mock surface must
+  // be genuinely absent so the SPA catch-all (app.get('*')) can't answer the
+  // bridge's GET /__mock/enabled probe with a 200 index.html — which would
+  // wrongly switch the bridge into mock mode.
   app.all('/__mock/*', (_req, res) => res.status(404).json({ error: 'mock disabled' }));
 }
 
@@ -308,13 +347,17 @@ app.get('/__quickcount/config', (_req, res) => {
   ] : null;
   res.json({
     localDev: LOCAL_DEV, staging: IS_STAGING, demo: IS_DEMO,
+    // Self-contained local-ingest mode: the client confirms optimistically and
+    // suppresses the "on-chain sync not configured" banner / awaiting-sync notice.
+    mockMode: MOCK_TX_FLOW,
     treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
     methods: require('./lib/aggregate').METHODS, personas,
     // Chain read config for the client confirmation poll. The browser builds
     // <explorerApiBase>/<chainId>/transactions; both are auth-exempt.
     // chainConfigured=false (no explorer/node upstream) tells the client to
-    // confirm optimistically rather than dead-end on a 20s timeout.
-    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: source.configured,
+    // confirm optimistically rather than dead-end on a 20s timeout. In mock mode
+    // there is nothing to poll, so report configured (the banner is mockMode-driven).
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: MOCK_TX_FLOW ? true : source.configured,
   });
 });
 
@@ -358,6 +401,7 @@ async function walletUnlocked(pubkey) {
 app.get('/api/public/config', (_req, res) => {
   res.json({
     staging: IS_STAGING,
+    mockMode: MOCK_TX_FLOW,
     unlock: {
       enabled: UNLOCK_ENABLED,
       recipient: UNLOCK_RECIPIENT || null,
@@ -365,8 +409,9 @@ app.get('/api/public/config', (_req, res) => {
     },
     // Chain read config so the public dashboard can confirm the unlock payment
     // against the same explorer proxy the main app uses. chainConfigured=false
-    // makes the dashboard confirm optimistically instead of timing out.
-    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: source.configured,
+    // makes the dashboard confirm optimistically instead of timing out. In mock
+    // mode there is nothing to poll, so report configured.
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: MOCK_TX_FLOW ? true : source.configured,
   });
 });
 
@@ -961,7 +1006,14 @@ async function start() {
   // which the SPA surfaces as a persistent banner on the Orgs/Admin screens and
   // a neutral "submitted — awaiting on-chain sync" notice instead of a false
   // success toast. We still log here so operators see it in container logs.
-  if (source.backend === 'none' && !LOCAL_DEV) {
+  if (MOCK_TX_FLOW && !LOCAL_DEV) {
+    console.log(
+      '[QuickCount] running in self-contained local-ingest mode (MOCK_TX_FLOW) — ' +
+      'submissions are recorded directly into the event log via /__mock/submit and ' +
+      'persisted to chain_txs when DATABASE_URL is set; no chain broadcast/read-back. ' +
+      'Set MOCK_TX_FLOW=false to restore real-chain reads.'
+    );
+  } else if (source.backend === 'none' && !LOCAL_DEV) {
     console.warn(
       '[QuickCount] WARNING: no chain read source configured — set EXPLORER_API_URL ' +
       'or NODE_RPC_URL. On-chain transactions will broadcast but the indexer will not ' +

@@ -17,9 +17,12 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 
 // Configure a chain read source BEFORE requiring server.js (env read at load).
+// MOCK_TX_FLOW=false selects the real-chain read-back path this test exercises
+// (the default mock flow ingests via /__mock/submit and ignores the explorer).
 process.env.EXPLORER_API_URL = 'https://ex.test/explorer-api';
 process.env.CHAIN_ID = 'usernode';
 process.env.USERNODE_ENV = 'production';
+process.env.MOCK_TX_FLOW = 'false';
 delete process.env.NODE_RPC_URL;
 delete process.env.APP_MODE;
 delete process.env.DATABASE_URL;

@@ -245,10 +245,10 @@
     // chain), where the payment path is a server-recorded demo unlock anyway.
     async function confirmTx(txId, to) {
       if (!txId) return true;
-      // Auto-confirm when there's no live chain to poll: staging, or a deploy
-      // with no chain read source configured (chainConfigured===false). The
-      // server-side verify (which reads the chain directly) is the source of truth.
-      if (cfg && (cfg.staging || cfg.chainConfigured === false)) return true;
+      // Auto-confirm when there's no live chain to poll: mock mode (self-contained
+      // local ingest), staging, or a deploy with no chain read source configured
+      // (chainConfigured===false). The server-side verify is the source of truth.
+      if (cfg && (cfg.mockMode || cfg.staging || cfg.chainConfigured === false)) return true;
       const base = ((cfg && cfg.explorerApiBase) || '/explorer-api').replace(/\/+$/, '');
       const chain = (cfg && cfg.chainId) || 'usernode';
       const url = base + '/' + encodeURIComponent(chain) + '/transactions';

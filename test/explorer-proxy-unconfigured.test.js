@@ -12,10 +12,14 @@ const assert = require('node:assert');
 const http = require('node:http');
 
 // Strip every chain source BEFORE requiring server.js (read at module load).
+// MOCK_TX_FLOW=false selects the real-chain read path so the degradation
+// contract (503 proxy + chainConfigured=false) is the behaviour under test;
+// with mock mode on, chainConfigured is forced true and there is nothing to poll.
 delete process.env.EXPLORER_API_URL;
 delete process.env.NODE_RPC_URL;
 delete process.env.APP_MODE;
 delete process.env.DATABASE_URL;
+process.env.MOCK_TX_FLOW = 'false';
 process.env.USERNODE_ENV = 'production';
 
 const { app } = require('../server');

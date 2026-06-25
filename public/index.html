@@ -1060,11 +1060,12 @@
   async function confirmTx(txId, opts) {
     opts = opts || {};
     if (!txId) return true;
-    // No live chain to poll: staging / local-dev (auto-confirm so the
-    // pending→confirmed flow stays reviewable), or a deploy with no chain read
-    // source configured (chainConfigured===false) — confirm optimistically and
-    // let the background poll reconcile, rather than dead-ending on a timeout.
-    if (App.cfg && (App.cfg.staging || App.cfg.localDev || App.cfg.chainConfigured === false)) return true;
+    // No live chain to poll: mock mode (self-contained local ingest), staging /
+    // local-dev (auto-confirm so the pending→confirmed flow stays reviewable), or
+    // a deploy with no chain read source configured (chainConfigured===false) —
+    // confirm optimistically and let the ingest reconcile, rather than dead-ending
+    // on a timeout. In mock mode the submission is already ingested server-side.
+    if (App.cfg && (App.cfg.mockMode || App.cfg.staging || App.cfg.localDev || App.cfg.chainConfigured === false)) return true;
     const base = ((App.cfg && App.cfg.explorerApiBase) || '/explorer-api').replace(/\/+$/, '');
     const chain = (App.cfg && App.cfg.chainId) || 'usernode';
     const url = base + '/' + encodeURIComponent(chain) + '/transactions';
@@ -1258,7 +1259,30 @@
         sender: (a, b, c) => window.QCMock.send(a, b, c),
       });
     }
+    // Platform mock mode: ingest locally instead of broadcasting to a chain.
+    // Route through QCBridge.send (keeping its resilience/retry wrapper) but back
+    // it with an app-owned sender that POSTs to /__mock/submit with the connected
+    // wallet as `from` and the iframe token attached — so org ownership is the
+    // real user and the server can prefer req.user over the body. The server still
+    // resolves `from` from req.user when authenticated, so this is spoof-resistant.
+    if (App.cfg.mockMode) {
+      return window.QCBridge.send(to, amount || 0, memoStr, {
+        idempotent: opts.idempotent,
+        sender: (a, b, c) => mockSubmit(a, b, c),
+      });
+    }
     return window.QCBridge.send(to, amount || 0, memoStr, { idempotent: opts.idempotent });
+  }
+  // App-owned local-ingest submit used in platform mock mode. Returns the txId.
+  async function mockSubmit(to, amount, memoStr) {
+    const r = await fetch('/__mock/submit', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ from: App.wallet.address || '', to: to, amount: amount || 0, memo: memoStr }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    return j.txId;
   }
 
   // ───────────────────────── Data ─────────────────────────
@@ -1749,7 +1773,9 @@
   // (the mock ledger is a source) and in staging demo (seeded data renders
   // regardless). Driven by /__quickcount/config chainConfigured (= source.configured).
   function chainSyncBanner() {
-    if (!App.cfg || App.cfg.chainConfigured !== false || App.cfg.localDev || App.cfg.demo) return '';
+    // Mock mode ingests submissions locally (no read-back gap), so the banner is
+    // never applicable; also hidden in local-dev and staging demo.
+    if (!App.cfg || App.cfg.mockMode || App.cfg.chainConfigured !== false || App.cfg.localDev || App.cfg.demo) return '';
     return `<div class="p-3 mb-4 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-200 text-sm">${esc(t('chain_unconfigured_banner'))}</div>`;
   }
   // Success toast for a state-changing tx. When the chain read source is absent
@@ -1757,7 +1783,9 @@
   // so show a neutral "submitted — awaiting on-chain sync" notice instead of a
   // green ✓ that would falsely claim the change landed.
   function txSuccessToast(okKey) {
-    if (App.cfg && App.cfg.chainConfigured === false) toast(t('toast_submitted_awaiting_sync'), 'warn');
+    // Mock mode persists the submission immediately, so show the green ✓; the
+    // awaiting-sync notice is only for a real-chain deploy with no read source.
+    if (App.cfg && !App.cfg.mockMode && App.cfg.chainConfigured === false) toast(t('toast_submitted_awaiting_sync'), 'warn');
     else toast(t(okKey));
   }
 
@@ -2591,8 +2619,9 @@
       App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
       // Point the hosted bridge's transaction reads/polls at our auth-exempt
       // /explorer-api proxy (see PUBLIC_PREFIXES + the /explorer-api proxy in
-      // server.js). Set BEFORE any connect/send. Skipped in local-dev (mock path).
-      if (!App.cfg.localDev) {
+      // server.js). Set BEFORE any connect/send. Skipped in local-dev and in
+      // mock mode (both ingest locally — there is nothing to poll).
+      if (!App.cfg.localDev && !App.cfg.mockMode) {
         window.usernode = window.usernode || {};
         const exBase = (App.cfg.explorerApiBase || '/explorer-api').replace(/\/+$/, '');
         const chain = App.cfg.chainId || 'usernode';

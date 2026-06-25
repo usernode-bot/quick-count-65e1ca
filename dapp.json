@@ -221,6 +221,16 @@
       "name": "Verify page shows the Evidence PDF drop zone",
       "path": "/#/verify",
       "expectSelector": "#vr-drop"
+    },
+    {
+      "name": "Config advertises self-contained mock-ingest mode",
+      "path": "/__quickcount/config",
+      "expectText": "\"mockMode\":true"
+    },
+    {
+      "name": "Mock submit surface is enabled so submissions ingest locally",
+      "path": "/__mock/enabled",
+      "expectText": "\"enabled\":true"
     }
   ]
 }
