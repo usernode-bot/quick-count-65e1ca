@@ -128,6 +128,11 @@
       "path": "/api/public/elections/demo-election/attachments/cand_avatar/1"
     },
     {
+      "name": "Election workspace renders click-to-expand TPS vote-entry rows",
+      "path": "/#/election/demo-election",
+      "expectSelector": "[data-strow]"
+    },
+    {
       "name": "Theme toggle button present on main app",
       "path": "/#/dashboard",
       "expectSelector": "#theme-btn"
