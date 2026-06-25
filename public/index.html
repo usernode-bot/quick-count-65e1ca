@@ -177,6 +177,7 @@
       verify_fingerprint_label: 'Fingerprint', verify_status_pass: 'PASS', verify_status_fail: 'FAIL', verify_status_skip: 'SKIPPED', verify_error: 'Could not verify this file',
       method_latest: 'Latest submission', method_first: 'First submission', method_consensus: 'Consensus', method_median: 'Median', method_verified: 'Verified only',
       dashboard_heading: 'Dashboard', dashboard_select_election: 'Select an election to view live results.', dashboard_export_csv: 'Export CSV', dashboard_export_json: 'Export JSON', dashboard_by_station: 'By station', dashboard_no_stations: 'No candidates.', dashboard_last_submission: 'Last submission', dashboard_auto_refreshing: 'auto-refreshing', dashboard_no_submissions: 'No submissions yet', dashboard_stations_reported: 'stations reported', dashboard_votes: 'votes',
+      dashboard_working_tally: 'Working tally', dashboard_working_tally_desc: 'Entered by organizers in the workspace — separate from official results.', dashboard_working_tally_reported: '{reported} of {total} stations entered',
       elections_heading: 'Elections', elections_new: '+ New election', elections_no_elections: 'No elections yet.', elections_open_workspace: 'Open election workspace →',
       orgs_heading: 'Organizations', orgs_active_orgs: 'Active organizations', orgs_register_heading: 'Register your organization', orgs_register_desc: 'Registration pays a one-time fee of {fee} to the platform treasury. Until it confirms, your elections stay hidden.', orgs_register_button: 'Register & pay fee', orgs_pay_fee: 'Pay registration fee', orgs_name_placeholder: 'Organization name', orgs_jur_placeholder: 'Jurisdiction (optional)', orgs_active_badge: 'Active', orgs_pending_badge: 'Pending — fee not paid', orgs_connect_first: 'Connect your wallet first.', orgs_manage_elections: 'Your elections are live. Manage them under Elections.',
       orgs_owned_heading: 'Owned', orgs_member_heading: 'Member of', orgs_none_member: 'You are not a member of any other organization yet.', orgs_no_active: 'No active organizations yet.',
@@ -255,6 +256,7 @@
       tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa', tab_admin: 'Admin',
       method_latest: 'Laporan terbaru', method_first: 'Laporan pertama', method_consensus: 'Konsensus', method_median: 'Median', method_verified: 'Terverifikasi saja',
       dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
+      dashboard_working_tally: 'Hitungan kerja', dashboard_working_tally_desc: 'Dimasukkan oleh penyelenggara di ruang kerja — terpisah dari hasil resmi.', dashboard_working_tally_reported: '{reported} dari {total} TPS dimasukkan',
       elections_heading: 'Pemilihan', elections_new: '+ Pemilihan baru', elections_no_elections: 'Belum ada pemilihan.', elections_open_workspace: 'Buka ruang kerja pemilihan →',
       orgs_heading: 'Organisasi', orgs_active_orgs: 'Organisasi aktif', orgs_register_heading: 'Daftarkan organisasi Anda', orgs_register_desc: 'Pendaftaran membayar biaya satu kali sebesar {fee} ke perbendaharaan platform. Hingga dikonfirmasi, pemilihan Anda disembunyikan.', orgs_register_button: 'Daftar & bayar biaya', orgs_pay_fee: 'Bayar biaya pendaftaran', orgs_name_placeholder: 'Nama organisasi', orgs_jur_placeholder: 'Yurisdiksi (opsional)', orgs_active_badge: 'Aktif', orgs_pending_badge: 'Menunggu — biaya belum dibayar', orgs_connect_first: 'Hubungkan dompet Anda terlebih dahulu.', orgs_manage_elections: 'Pemilihan Anda aktif. Kelola di tab Pemilihan.',
       evidence_heading: 'Bukti', evidence_upload_label: 'Bukti (lembar penghitungan) — di-hash secara lokal, file tidak diunggah', evidence_submit: 'Verifikasi file terhadap ini', evidence_no_evidence: 'Tidak ada hash bukti yang tercatat untuk pemilihan ini.',
@@ -1407,33 +1409,36 @@
         </div>`;
       }).join('');
   }
-  // ── Inline TPS vote-entry (client-side / ephemeral) ──
+  // ── Inline TPS vote-entry (off-chain working tally) ──
   // Working tally entered straight on a station row in the election workspace.
-  // Keyed by `${App.eid}:${sid}` so switching elections never bleeds. Lives in
-  // memory only: it survives the auto-refresh re-renders (the table is rebuilt
-  // from this map) but is intentionally NOT persisted to the DB or the chain —
-  // it's separate from the official observer/QC.res reporting flow. The fixed
+  // Keyed by `${App.eid}:${sid}` so switching elections never bleeds. It is
+  // persisted to Postgres (the `work_tallies` table) — separate from the
+  // official observer/QC.res reporting flow — so it survives reload and shows on
+  // the dashboard. The map is hydrated from detail.workTally on load. The fixed
   // Evan/Salah/Circle candidates come from QuickCountInline.CANDIDATES.
   const inlineEntry = {};
   function inlineKey(sid) { return App.eid + ':' + sid; }
-  // Staging/demo only: prefill a couple of TPS with obviously-fake working
-  // counts the first time an election workspace is opened, so the upper bars
-  // render non-zero (and animate) in screenshots and proposal checks without a
-  // tester typing anything. Strictly a no-op outside demo mode, seeds once per
-  // election, and never overwrites a station the user already entered.
-  const demoSeededInline = new Set();
-  function maybeSeedDemoInline(d) {
-    if (!(App.cfg && App.cfg.demo) || !window.QuickCountInline) return;
-    if (!d || demoSeededInline.has(App.eid)) return;
-    demoSeededInline.add(App.eid);
-    const stations = d.stations || [];
-    const fake = [{ evan: 412, salah: 286, circle: 173 }, { evan: 168, salah: 503, circle: 241 }];
-    fake.forEach((votes, i) => {
-      const s = stations[i];
-      if (!s) return;
-      const k = inlineKey(s.sid);
-      if (inlineEntry[k] && inlineEntry[k].saved) return;
-      inlineEntry[k] = { open: false, draft: Object.assign({}, votes), votes: votes, saved: true };
+  // Whether the current viewer may enter/edit the working tally for an election
+  // owned by `orgAddr`: the org's owner, administrator, or moderator, or a
+  // platform admin. Mirrors the server-side canOperate/isAdmin guard.
+  let workEditable = false;
+  function canEditWorkTally(orgAddr) {
+    if (!orgAddr || !App.role) return false;
+    if (App.role.isAdmin) return true;
+    if (App.role.org && App.role.org.addr === orgAddr) return true; // owner
+    return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod'));
+  }
+  // Hydrate the inlineEntry map from the persisted working tally returned in the
+  // election detail. Each saved station becomes a saved (collapsed) entry. Never
+  // clobbers a row the viewer is mid-edit (open or unsaved-draft locally).
+  function hydrateInlineFromWorkTally(d) {
+    if (!d || !window.QuickCountInline) return;
+    const saved = (d.workTally || []);
+    saved.forEach((row) => {
+      const k = inlineKey(row.sid);
+      const cur = inlineEntry[k];
+      if (cur && (cur.open || (cur.saved === false))) return; // mid-edit — leave alone
+      inlineEntry[k] = { open: false, draft: Object.assign({}, row.votes || {}), votes: row.votes || {}, saved: true };
     });
   }
   function inlineFormRow(d, sid, entry) {
@@ -1459,6 +1464,9 @@
   function stationTable(d, opts) {
     opts = opts || {};
     const inline = !!opts.inlineEntry && !!window.QuickCountInline;
+    // `editable` gates the interactive form (clickable rows + Save). When false,
+    // any saved working tally still shows read-only (badges + summary).
+    const editable = inline && !!opts.editable;
     const head = d.candidates.map((c) => `<th class="py-3 px-2 text-right font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
     const rows = d.stations.map((s) => {
       const entry = inline ? inlineEntry[inlineKey(s.sid)] : null;
@@ -1469,22 +1477,22 @@
       if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">${t('station_badge_review')}</span>`);
       if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
       if (saved) badges.push(`<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('inline_done_badge')} · ${QuickCountInline.totalVotes(entry.votes).toLocaleString()}</span>`);
-      const open = !!(inline && entry && entry.open);
+      const open = !!(editable && entry && entry.open);
       // Active-row highlight: lighter sticky-cell tone + a left accent bar that
       // lines up with the form panel below. A transparent border in the closed
       // state keeps the row width stable so toggling doesn't shift content.
       const labelTone = open ? 'bg-slate-50 dark:bg-slate-900' : 'bg-white dark:bg-slate-950';
-      const labelEdge = inline ? (open ? ' border-l-4 border-purple-500' : ' border-l-4 border-transparent') : '';
+      const labelEdge = editable ? (open ? ' border-l-4 border-purple-500' : ' border-l-4 border-transparent') : '';
       const label = `<td class="py-3 pr-2 pl-2 sticky left-0 z-10 ${labelTone}${labelEdge}"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex flex-wrap gap-1 mt-0.5">${badges.join('')}</div></td>`;
-      const rowAttrs = inline
+      const rowAttrs = editable
         ? ` data-strow="${s.sid}" role="button" tabindex="0" aria-expanded="${open ? 'true' : 'false'}" class="border-t border-slate-200 dark:border-slate-800 cursor-pointer transition-colors hover:bg-slate-100 dark:hover:bg-slate-800/60${open ? ' bg-slate-50 dark:bg-slate-900/40' : ''}"`
         : ` class="border-t border-slate-200 dark:border-slate-800"`;
-      // Chevron sits in its own trailing column (added only in inline mode) so
+      // Chevron sits in its own trailing column (added only in editable mode) so
       // it is at the far right of both reported and unreported rows, and stays
       // visible on mobile (unlike the sm-only "Updated" cell). It rotates 180°
       // when the row's form is open; the full re-render re-emits the class.
       const chev = `<svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 inline-block shrink-0 text-slate-400 dark:text-slate-500 transition-transform duration-200${open ? ' rotate-180' : ''}"><path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-      const chevCell = inline ? `<td class="py-3 pl-1 pr-2 text-right align-middle w-6">${chev}</td>` : '';
+      const chevCell = editable ? `<td class="py-3 pl-1 pr-2 text-right align-middle w-6">${chev}</td>` : '';
       const formRow = open ? inlineFormRow(d, s.sid, entry) : '';
       let main;
       if (!s.reported) {
@@ -1500,18 +1508,18 @@
       return main + formRow;
     }).join('');
     return `<div class="relative"><div class="overflow-x-auto"><table class="w-full text-sm">
-      <thead><tr class="text-left"><th class="py-3 pr-2 font-medium text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-950">${t('station_col_name')}</th>${head}<th class="py-3 pl-2 text-right font-medium text-slate-500 dark:text-slate-400 hidden sm:table-cell">${t('station_col_updated')}</th>${inline ? '<th class="w-6" aria-hidden="true"></th>' : ''}</tr></thead>
+      <thead><tr class="text-left"><th class="py-3 pr-2 font-medium text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-950">${t('station_col_name')}</th>${head}<th class="py-3 pl-2 text-right font-medium text-slate-500 dark:text-slate-400 hidden sm:table-cell">${t('station_col_updated')}</th>${editable ? '<th class="w-6" aria-hidden="true"></th>' : ''}</tr></thead>
       <tbody>${rows}</tbody></table></div><div class="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white dark:from-slate-950 pointer-events-none sm:hidden"></div></div>`;
   }
   // Re-render just the workspace station table after a toggle/save so other
   // open forms and unsaved drafts (held in `inlineEntry`) are preserved without
-  // a full refetch.
+  // a full refetch. Only the authorized roles get the interactive form.
   function rerenderStations() {
     const wrap = document.getElementById('station-table-wrap');
     const d = App.state && App.state.detail;
     if (!wrap || !d) return;
-    wrap.innerHTML = stationTable(d, { inlineEntry: true });
-    wireStationRows(wrap);
+    wrap.innerHTML = stationTable(d, { inlineEntry: true, editable: workEditable });
+    if (workEditable) wireStationRows(wrap);
   }
   // Saved inline-entry `votes` objects for the currently-open election, in
   // station order. Drives the workspace's upper bars + reporting tracker, which
@@ -1616,12 +1624,31 @@
           draft[key] = inp.value;
           votes[key] = QuickCountInline.sanitizeCount(inp.value);
         });
+        // Optimistic local update + re-render, then persist to Postgres so the
+        // entry survives reload and reaches the dashboard.
         inlineEntry[k] = { open: true, draft: draft, votes: votes, saved: true };
         toast(t('inline_done_badge') + ' · ' + QuickCountInline.totalVotes(votes).toLocaleString());
         rerenderStations();
         rerenderInlineSummary();
+        saveWorkTally(sid, votes);
       });
     });
+  }
+  // Persist one station's working tally. Token-forwarded like putProfile; the
+  // server enforces the owner/admin/mod guard. A failure surfaces the shared
+  // recoverable-error notice (the optimistic local state is kept).
+  async function saveWorkTally(sid, votes) {
+    try {
+      const r = await fetch('/api/elections/' + encodeURIComponent(App.eid) + '/worktally/' + encodeURIComponent(sid), {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ votes: votes }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    } catch (err) {
+      handleTxFailure(err, { onRetry: () => saveWorkTally(sid, votes) });
+    }
   }
   function marginBanner(d) {
     const m = d.margin;
@@ -1631,6 +1658,35 @@
       · ${t('margin_lead_pct').replace('{lead}', m.leadMarginPct)} · ${t('margin_uncertainty').replace('{pct}', m.uncertaintyPct)}
       ${m.needsReview ? ' — ' + t('margin_disagreement_note') : ''}
     </div>`;
+  }
+  // Labelled "Working tally" section for the dashboard, built from the persisted
+  // off-chain detail.workTally (saved inline station entries). Uses the fixed
+  // QuickCountInline candidate set and the same bar markup as the workspace.
+  // Returns '' when nothing has been entered yet.
+  function workTallySection(d) {
+    const QC = window.QuickCountInline;
+    if (!QC || !d) return '';
+    const saved = (d.workTally || []);
+    if (!saved.length) return '';
+    const votesList = saved.map((r) => r.votes || {});
+    const totals = QC.aggregateVotes(votesList);
+    const shares = QC.voteShares(totals);
+    const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
+    if (grand <= 0) return '';
+    const bars = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
+      .sort((a, b) => b.votes - a.votes)
+      .map(({ c, i, votes, pct }) => `<div class="mb-3">
+        <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
+      </div>`).join('');
+    const reported = t('dashboard_working_tally_reported')
+      .replace('{reported}', saved.length)
+      .replace('{total}', (d.stations || []).length || saved.length);
+    return `<div class="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">
+      <h3 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-0.5">${t('dashboard_working_tally')}</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">${esc(t('dashboard_working_tally_desc'))} · ${esc(reported)} · ${grand.toLocaleString()} ${t('dashboard_votes')}</p>
+      ${bars}</div>`;
   }
   function renderDashboard(v) {
     v.innerHTML = electionPicker() + '<div id="dash-body"></div>';
@@ -1668,6 +1724,7 @@
       <div class="mb-6">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
       <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('dashboard_by_station')}</h3>
       ${stationTable(d)}
+      ${workTallySection(d)}
       <p class="mt-4 text-xs text-slate-700 dark:text-slate-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
       <a class="mt-3 inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>`;
     document.getElementById('exp-csv').onclick = () => exportCsv(d);
@@ -1758,6 +1815,10 @@
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
+    // Hydrate the inline working tally from the persisted detail.workTally and
+    // decide whether this viewer may edit it (owner/admin/mod or platform admin).
+    workEditable = canEditWorkTally(d.election.orgAddr);
+    hydrateInlineFromWorkTally(d);
     const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
 
     v.innerHTML = `
@@ -1770,7 +1831,7 @@
       ${marginBanner(d)}
       <div id="ws-tally-bars" class="mb-5"></div>
       <p id="ws-reporting" class="text-sm text-slate-500 dark:text-slate-400 mb-2"></p>
-      <div id="station-table-wrap">${stationTable(d, { inlineEntry: true })}</div>
+      <div id="station-table-wrap">${stationTable(d, { inlineEntry: true, editable: workEditable })}</div>
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
 
@@ -1783,9 +1844,8 @@
       p.textContent = t('election_detail_connect_note');
       ws.appendChild(p);
     }
-    maybeSeedDemoInline(d);
     // rerenderStations rebuilds the table from inlineEntry (picking up any
-    // seeded/saved rows) and wires the row handlers, so no separate
+    // hydrated/saved rows) and wires the row handlers, so no separate
     // wireStationRows call is needed here.
     rerenderStations();
     rerenderInlineSummary();

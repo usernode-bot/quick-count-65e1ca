@@ -128,19 +128,29 @@
       "path": "/api/public/elections/demo-election/attachments/cand_avatar/1"
     },
     {
-      "name": "Election workspace renders click-to-expand TPS vote-entry rows",
-      "path": "/#/election/demo-election",
+      "name": "Election workspace renders click-to-expand TPS vote-entry rows for an organizer",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
       "expectSelector": "[data-strow]"
     },
     {
-      "name": "TPS rows render a rotating expand chevron",
-      "path": "/#/election/demo-election",
+      "name": "TPS rows render a rotating expand chevron for an organizer",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
       "expectSelector": "svg.transition-transform"
     },
     {
       "name": "Workspace renders the inline working-tally vote-share bars",
       "path": "/#/election/demo-election",
       "expectSelector": "#ws-tally-bars [data-inl-bar]"
+    },
+    {
+      "name": "Dashboard shows the persisted Working tally section",
+      "path": "/#/dashboard",
+      "expectText": "Working tally"
+    },
+    {
+      "name": "Working-tally reader returns the seeded station rows",
+      "path": "/api/public/elections/demo-election/worktally",
+      "expectText": "\"sid\""
     },
     {
       "name": "Theme toggle button present on main app",
