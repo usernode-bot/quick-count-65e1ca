@@ -9,6 +9,11 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
+const memo = require('../lib/memo');
+
+// A valid app-envelope memo — /__mock/submit now rejects undecodable memos, so
+// every submit must carry one.
+const MEMO = memo.encode(memo.orgMemo('Mock Endpoint Org', 'Testland'));
 
 // Must be set before server.js is required — LOCAL_DEV is read at module load.
 process.env.APP_MODE = 'local-dev';
@@ -52,7 +57,7 @@ test('GET /__mock/enabled returns 200 {enabled:true} in local-dev', async () => 
 });
 
 test('POST /__mock/submit succeeds without `from` (defaults the sender)', async () => {
-  const { status, json } = await req('POST', '/__mock/submit', { to: 'ut1someone0000000000000000000000000000000', amount: 0 });
+  const { status, json } = await req('POST', '/__mock/submit', { to: 'ut1someone0000000000000000000000000000000', amount: 0, memo: MEMO });
   assert.strictEqual(status, 200);
   assert.strictEqual(json.ok, true);
   assert.match(json.txId, /^mocktx_/);
@@ -61,11 +66,21 @@ test('POST /__mock/submit succeeds without `from` (defaults the sender)', async 
   assert.ok(list.transactions.some((tx) => tx.txId === json.txId), 'submitted tx is in the ledger');
 });
 
-test('POST /__mock/submit still honours an explicit `from`', async () => {
+test('POST /__mock/submit still honours an explicit `from` (no JWT here)', async () => {
   const from = 'ut1explicit000000000000000000000000000000';
-  const { status, json } = await req('POST', '/__mock/submit', { from, to: from, amount: 0 });
+  const { status, json } = await req('POST', '/__mock/submit', { from, to: from, amount: 0, memo: MEMO });
   assert.strictEqual(status, 200);
   assert.strictEqual(json.ok, true);
   const { json: list } = await req('GET', '/__mock/transactions');
   assert.ok(list.transactions.some((tx) => tx.txId === json.txId && tx.from === from), 'explicit sender preserved');
+});
+
+test('POST /__mock/submit rejects an undecodable memo (400) without recording it', async () => {
+  const { json: before } = await req('GET', '/__mock/transactions');
+  const beforeN = before.transactions.length;
+  const { status, json } = await req('POST', '/__mock/submit', { to: 'ut1x000000000000000000000000000000000000', amount: 0, memo: 'not-a-memo' });
+  assert.strictEqual(status, 400);
+  assert.ok(json.error, 'error reported');
+  const { json: after } = await req('GET', '/__mock/transactions');
+  assert.strictEqual(after.transactions.length, beforeN, 'bad memo did not poison the ledger');
 });
