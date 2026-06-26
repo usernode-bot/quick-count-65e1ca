@@ -94,6 +94,13 @@
       <span id="staging-badge" class="hidden badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
+        <!-- Inline offline badge: shown only when the local-first election queue
+             is parked offline. Lives in the status cluster (next to the
+             identity/wallet controls) instead of floating over the nav tabs. -->
+        <span id="qc-offline-badge" class="hidden items-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500"></span>
+          <span id="qc-offline-badge-msg"></span>
+        </span>
         <button id="refresh-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Refresh">↻</button>
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
         <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none"></select>
@@ -1083,7 +1090,24 @@
   }
   function renderElq() {
     let el = document.getElementById('qc-localq');
-    if (!App.elq || !App.elq.length) { if (el) el.style.display = 'none'; return; }
+    const badge = document.getElementById('qc-offline-badge');
+    const hideBadge = () => { if (badge) { badge.classList.remove('flex'); badge.classList.add('hidden'); } };
+    if (!App.elq || !App.elq.length) { if (el) el.style.display = 'none'; hideBadge(); return; }
+    // Offline (every queued entry has exhausted its retries) is a persistent
+    // state, so it renders as a small inline badge in the header status cluster
+    // rather than a floating pill that overlaps the navigation tabs. The active
+    // "Saved locally — retrying…" state keeps the transient floating pill.
+    if (ELQ.allExhausted(App.elq)) {
+      if (el) el.style.display = 'none';
+      if (badge) {
+        const m = badge.querySelector('#qc-offline-badge-msg');
+        if (m) m.textContent = ELQ.summaryLabel(App.elq, t);
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+      }
+      return;
+    }
+    hideBadge();
     if (!el) {
       el = document.createElement('div');
       el.id = 'qc-localq';
@@ -1099,15 +1123,13 @@
       el.appendChild(dot); el.appendChild(msg);
       document.body.appendChild(el);
     }
-    // Once every queued entry has exhausted its retries the pill goes static:
-    // a solid (non-spinning) slate dot + the "Saved Locally (Offline)" label, so
-    // the UI never implies "still working on it" forever. The dot style is set on
-    // each render so an entry transitioning to offline actually stops spinning.
-    const offline = ELQ.allExhausted(App.elq);
+    // This floating pill now renders ONLY the active "Saved locally — retrying…"
+    // state (the offline/exhausted state returned early above as an inline header
+    // badge), so the dot always spins.
     const dot = el.querySelector('#qc-localq-dot');
     if (dot) {
-      dot.style.background = offline ? '#94a3b8' : '#6366f1';
-      dot.style.animation = offline ? 'none' : 'qcspin 1s linear infinite';
+      dot.style.background = '#6366f1';
+      dot.style.animation = 'qcspin 1s linear infinite';
     }
     const dark = document.documentElement.classList.contains('dark');
     el.style.background = dark ? '#1e293b' : '#eef2ff';
