@@ -87,36 +87,19 @@
   </div>
 
   <script>
-    // Tailwind bar classes + matching hex for the conic-gradient pie.
+    // Tailwind bar classes for the working-tally bars.
     const COLORS = ['bg-indigo-500', 'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-fuchsia-500', 'bg-teal-500'];
-    const HEX = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#d946ef', '#14b8a6'];
 
     const qs = new URLSearchParams(location.search);
     let currentEid = qs.get('eid') || '';
     const token = qs.get('token') || '';
     const authHeaders = token ? { 'x-usernode-token': token } : {};
 
-    // Unlock memo must match lib/unlock.js isUnlockMemo().
-    const UNLOCK_MEMO = JSON.stringify({ v: 1, t: 'unlock' });
-
-    let cfg = { staging: false, unlock: { enabled: false, recipient: null, price: 0 } };
+    let cfg = { staging: false };
     let lastData = null;
-    let unlocking = false; // pause auto-refresh during a payment
 
     function escapeHtml(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-    // Auto-generated avatar placeholder: up to two initials from the candidate
-    // name (first letters of the first one or two whitespace tokens), uppercased.
-    // Falls back to '?' for empty / symbol-only names. No uploads.
-    function initials(name) {
-      const tokens = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
-      let out = '';
-      for (const t of tokens) {
-        const ch = t.charAt(0);
-        if (/[A-Za-z0-9]/.test(ch)) { out += ch.toUpperCase(); if (out.length === 2) break; }
-      }
-      return out || '?';
     }
     function timeAgo(iso) {
       if (!iso) return '';
@@ -127,118 +110,29 @@
       const hrs = Math.round(mins / 60);
       return hrs + 'h ago';
     }
-    function priceLabel() {
-      const p = (cfg.unlock && cfg.unlock.price) || 0;
-      return p + ' test token' + (p === 1 ? '' : 's');
-    }
-
-    // ── Bridge helpers — now delegated to the shared resilience layer
-    // (window.QCBridge, see public/usernode-resilience.js). The duplicated
-    // bridgeReady()/extractTxId() that lived here were removed in favour of it.
-
-    // ── Chart rendering ──────────────────────────────────────────────
-    function pieGradient(entries) {
-      const emptyColor = document.documentElement.classList.contains('dark') ? '#334155' : '#cbd5e1';
-      if (!entries.length) return 'conic-gradient(' + emptyColor + ' 0% 100%)';
-      let acc = 0;
-      const stops = entries.map((e) => {
-        const start = acc; acc += e.pct;
-        return e.color + ' ' + start.toFixed(3) + '% ' + acc.toFixed(3) + '%';
-      });
-      return 'conic-gradient(' + stops.join(', ') + ')';
-    }
-
-    // Build the chart + per-station table. When `locked`, every figure is a
-    // placeholder ("•••") and slices are even — the real numbers aren't even
-    // present in the locked API response.
-    function resultsHtml(d, locked) {
-      const cands = d.candidates || [];
-      const tallyByCid = (!locked && d.tally) ? d.tally : {};
-      const totalVotes = Object.values(tallyByCid).reduce((s, n) => s + Number(n || 0), 0);
-      const n = cands.length || 1;
-      const isDark = document.documentElement.classList.contains('dark');
-      const pieHoleBg = isDark ? '#020617' : '#ffffff';
-
-      const entries = cands.map((c, i) => ({
-        color: HEX[i % HEX.length],
-        pct: locked ? (100 / n) : (totalVotes ? (Number(tallyByCid[c.cid] || 0) / totalVotes) * 100 : 100 / n),
-      }));
-
-      const pie = '<div class="relative shrink-0 mx-auto sm:mx-0" style="width:160px;height:160px">'
-        + '<div class="rounded-full w-full h-full" style="background:' + pieGradient(entries) + '"></div>'
-        + '<div class="absolute rounded-full" style="inset:36px;background:' + pieHoleBg + '"></div>'
-        + '<div class="absolute inset-0 flex items-center justify-center text-center">'
-        + '<div><div class="text-lg font-bold">' + (locked ? '•••' : totalVotes.toLocaleString()) + '</div>'
-        + '<div class="text-[10px] uppercase tracking-wide text-slate-600 dark:text-slate-500">votes</div></div></div>'
-        + '</div>';
-
-      const bars = cands
-        .map((c, i) => ({ c, i, votes: Number(tallyByCid[c.cid] || 0) }))
-        .sort((a, b) => locked ? 0 : (b.votes - a.votes))
-        .map(({ c, i, votes }) => {
-          const pct = locked ? Math.round(100 / n) : (totalVotes ? Math.round((votes / totalVotes) * 100) : 0);
-          const num = locked ? '•••' : (votes.toLocaleString() + ' <span class="text-slate-600 dark:text-slate-500">(' + pct + '%)</span>');
-          // Initials-based avatar placeholder — no photo uploads. Colored to match
-          // this candidate's result bar and pie slice (COLORS[i]).
-          const avatar = '<span class="h-8 w-8 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold text-white ' + COLORS[i % COLORS.length] + '">' + escapeHtml(initials(c.name)) + '</span>';
-          return '<div class="mb-3 flex items-center gap-3">'
-            + avatar
-            + '<div class="flex-1 min-w-0">'
-            + '<div class="flex justify-between text-sm mb-1"><span class="truncate">' + escapeHtml(c.name) + '</span>'
-            + '<span class="font-mono text-slate-700 dark:text-slate-300 shrink-0 ml-2">' + num + '</span></div>'
-            + '<div class="h-3 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ' + COLORS[i % COLORS.length] + '" style="width:' + pct + '%"></div></div>'
-            + '</div>'
-            + '</div>';
-        }).join('');
-
-      const chartRow = '<div class="flex flex-col sm:flex-row sm:items-center gap-6 mb-6">'
-        + pie + '<div class="flex-1 w-full">' + (bars || '<p class="text-slate-600 dark:text-slate-500 text-sm">No candidates.</p>') + '</div></div>';
-
-      const headCells = cands.map((c) => '<th class="py-2 px-2 text-right font-medium text-slate-500 dark:text-slate-400">' + escapeHtml(c.name) + '</th>').join('');
-      const c1Link = (s) => (!locked && s.c1)
-        ? ' <a href="' + escapeHtml(s.c1) + '" target="_blank" rel="noopener" class="ml-1 text-xs px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 hover:bg-slate-300 dark:hover:bg-slate-700 align-middle" title="View uploaded C1 form scan">C1</a>'
-        : '';
-      const stationRows = (d.stations || []).map((s) => {
-        const nameCell = escapeHtml(s.name) + c1Link(s);
-        if (!s.reported) {
-          return '<tr class="border-t border-slate-200 dark:border-slate-800"><td class="py-2 pr-2">' + nameCell + '</td>'
-            + '<td class="py-2 text-slate-600 dark:text-slate-500" colspan="' + (cands.length + 1) + '">Awaiting result</td></tr>';
-        }
-        const cells = cands.map((c) => {
-          const val = locked ? '•••' : Number((s.votes || {})[c.cid] || 0).toLocaleString();
-          return '<td class="py-2 px-2 text-right font-mono">' + val + '</td>';
-        }).join('');
-        const upd = locked ? '•••' : timeAgo(s.at);
-        return '<tr class="border-t border-slate-200 dark:border-slate-800"><td class="py-2 pr-2">' + nameCell + '</td>'
-          + cells + '<td class="py-2 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap">' + upd + '</td></tr>';
-      }).join('');
-
-      const table = '<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">By station (latest submission)</h3>'
-        + '<div class="overflow-x-auto"><table class="w-full text-sm">'
-        + '<thead><tr class="text-left"><th class="py-2 pr-2 font-medium text-slate-500 dark:text-slate-400">Station</th>' + headCells
-        + '<th class="py-2 pl-2 text-right font-medium text-slate-500 dark:text-slate-400">Updated</th></tr></thead>'
-        + '<tbody>' + stationRows + '</tbody></table></div>';
-
-      return chartRow + table;
-    }
 
     // ── Working tally (off-chain, organizer-entered) ─────────────────
-    // Mirrors workTallySection() in index.html. Built from d.workTally (the
-    // off-chain inline station entries the server returns to locked and unlocked
-    // viewers alike), using the fixed QuickCountInline candidate set — a separate
-    // dimension from the on-chain d.candidates, so it gets its own section.
-    // Returns '' when nothing has been entered yet, so an empty election shows
-    // no card. Rendered OUTSIDE the lock/blur overlay since it is never gated.
+    // The public dashboard is now a focused view of the off-chain working
+    // tally, headed by the active election's name — the election title replaces
+    // the old "Working tally" heading and sits directly above the bars. Built
+    // from d.workTally (the off-chain inline station entries the server returns
+    // to every viewer) using the fixed QuickCountInline candidate set. The old
+    // official-results chart, the per-station table and the lock/unlock paywall
+    // were removed: the working tally is non-official data, never gated. Always
+    // renders the title; shows an empty-state line when nothing is entered yet.
     function workTallySection(d) {
       const QC = window.QuickCountInline;
-      if (!QC || !d) return '';
+      if (!d || !d.election) return '';
+      const title = '<h2 class="text-lg font-semibold text-purple-700 dark:text-purple-300 mb-0.5">' + escapeHtml(d.election.name) + '</h2>';
+      const wrap = (inner) => '<div id="work-tally" class="p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">' + title + inner + '</div>';
       const saved = (d.workTally || []);
-      if (!saved.length) return '';
       const votesList = saved.map((r) => r.votes || {});
-      const totals = QC.aggregateVotes(votesList);
-      const shares = QC.voteShares(totals);
-      const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
-      if (grand <= 0) return '';
+      const totals = QC ? QC.aggregateVotes(votesList) : {};
+      const shares = QC ? QC.voteShares(totals) : {};
+      const grand = QC ? QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0) : 0;
+      if (!QC || !saved.length || grand <= 0) {
+        return wrap('<p class="text-sm text-slate-600 dark:text-slate-500 mt-1">No submissions yet</p>');
+      }
       const bars = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
         .sort((a, b) => b.votes - a.votes)
         .map(({ c, i, votes, pct }) => '<div class="mb-3">'
@@ -251,131 +145,7 @@
       const total = (d.stations || []).length || saved.length;
       const reported = 'Live count entered by the organizer · ' + saved.length + ' of ' + total
         + ' stations entered · ' + grand.toLocaleString() + ' votes';
-      return '<div id="work-tally" class="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">'
-        + '<h3 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-0.5">Working tally</h3>'
-        + '<p class="text-xs text-slate-500 dark:text-slate-400 mb-3">' + escapeHtml(reported) + '</p>'
-        + bars + '</div>';
-    }
-
-    // ── Lock overlay ─────────────────────────────────────────────────
-    function card(title, body, action) {
-      return '<div class="max-w-xs text-center p-5 rounded-2xl bg-slate-100/85 dark:bg-slate-900/85 backdrop-blur border border-slate-300 dark:border-slate-700 shadow-2xl">'
-        + '<div class="text-3xl mb-2">🔒</div>'
-        + '<h3 class="font-semibold mb-1">' + escapeHtml(title) + '</h3>'
-        + '<p class="text-sm text-slate-500 dark:text-slate-400 mb-3">' + escapeHtml(body) + '</p>'
-        + (action || '') + '</div>';
-    }
-
-    function updateOverlay() {
-      const ov = document.getElementById('lock-overlay');
-      if (!ov) return;
-      const enabled = cfg.unlock && cfg.unlock.enabled;
-      let html;
-      if (!enabled) {
-        html = card('Live results are locked', 'Unlocking is unavailable right now — no payment recipient is configured.', '');
-      } else if (!token) {
-        html = card('Unlock live results',
-          'Open this dashboard inside Usernode and sign in with your wallet to pay ' + priceLabel() + ' once and unlock the live charts permanently.',
-          '<a href="https://social-vibecoding.usernodelabs.org" target="_blank" class="inline-block px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">Open in Usernode</a>');
-      } else {
-        html = card('Unlock live results',
-          'Pay ' + priceLabel() + ' once with your Usernode wallet to unlock the live charts permanently for this wallet.',
-          '<button id="unlock-btn" class="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-50">Unlock live results — ' + priceLabel() + '</button>'
-          + '<div id="unlock-status" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></div>');
-      }
-      ov.innerHTML = html;
-      const b = document.getElementById('unlock-btn');
-      if (b) b.addEventListener('click', doUnlock);
-    }
-
-    // Poll the public explorer proxy until `txId` is visible on the ledger, or a
-    // timeout elapses (transient throw → caught by doUnlock's recoverable path).
-    // Mirrors confirmTx() in public/index.html. Auto-confirms in staging (no live
-    // chain), where the payment path is a server-recorded demo unlock anyway.
-    async function confirmTx(txId, to) {
-      if (!txId) return true;
-      // Auto-confirm when there's no live chain to poll: mock mode (self-contained
-      // local ingest), staging, or a deploy with no chain read source configured
-      // (chainConfigured===false). The server-side verify is the source of truth.
-      if (cfg && (cfg.mockMode || cfg.staging || cfg.chainConfigured === false)) return true;
-      const base = ((cfg && cfg.explorerApiBase) || '/explorer-api').replace(/\/+$/, '');
-      const chain = (cfg && cfg.chainId) || 'usernode';
-      const url = base + '/' + encodeURIComponent(chain) + '/transactions';
-      const account = to || '';
-      const deadline = Date.now() + 20000;
-      let attempt = 0;
-      while (Date.now() < deadline) {
-        try {
-          const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account: account, recipient: to, limit: 200 }),
-          });
-          if (r.ok) {
-            const data = await r.json().catch(() => null);
-            const list = Array.isArray(data) ? data : ((data && (data.transactions || data.txs || data.results)) || []);
-            for (const raw of list) {
-              const id = (window.QCBridge && window.QCBridge.extractTxId) ? window.QCBridge.extractTxId(raw) : null;
-              if (id && id === txId) return true;
-            }
-          }
-        } catch (_) { /* transient — keep polling until the deadline */ }
-        const delay = (window.QCBridgeClassify && window.QCBridgeClassify.backoffDelay)
-          ? window.QCBridgeClassify.backoffDelay(attempt++, Math.random) : 800;
-        await new Promise((res) => setTimeout(res, delay));
-      }
-      const e = new Error('Awaiting confirmation timed out'); e.qcKind = 'transient';
-      throw e;
-    }
-
-    async function doUnlock() {
-      const btn = document.getElementById('unlock-btn');
-      const status = document.getElementById('unlock-status');
-      const setStatus = (t) => { if (status) status.textContent = t; };
-      if (!cfg.unlock || !cfg.unlock.enabled) { setStatus('Unlocking unavailable.'); return; }
-      if (!token) { setStatus('Open this dashboard inside Usernode to unlock.'); return; }
-      unlocking = true;
-      if (btn) btn.disabled = true;
-      try {
-        let txId = null;
-        if (cfg.staging) {
-          // Staging has no live chain — the server records a demo unlock.
-          setStatus('Unlocking (staging demo)…');
-        } else {
-          const addr = await window.QCBridge.getAddress();
-          if (!addr) throw new Error('No wallet address');
-          setStatus('Awaiting wallet approval…');
-          // Unlock payment is NOT idempotent — never auto-resend an ambiguous
-          // relay timeout; surface it so the viewer can retry deliberately.
-          txId = await window.QCBridge.send(cfg.unlock.recipient, cfg.unlock.price, UNLOCK_MEMO);
-          if (!txId) throw new Error('Could not read the payment transaction id');
-          // App-level confirmation gate: wait for the payment to be visible on
-          // the ledger before asking the server to verify it. A timeout throws
-          // transient and is caught below as a retry-by-clicking-again message.
-          setStatus('Confirming on-chain…');
-          await confirmTx(txId, cfg.unlock.recipient);
-          setStatus('Confirming payment…');
-        }
-        const r = await fetch('/api/unlock/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ tx_id: txId }),
-        });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.unlocked) throw new Error(j.error || 'Verification failed');
-        setStatus('Unlocked ✓');
-        unlocking = false;
-        await render();
-      } catch (e) {
-        // Recoverable failures (bridge slow / relay timeout) → friendly,
-        // retry-by-clicking-again message; terminal ones show the raw reason.
-        const kind = (window.QCBridgeClassify && (e && e.qcKind ? e.qcKind : window.QCBridgeClassify.classifyBridgeError(e))) || 'unknown';
-        if (kind === 'terminal') setStatus('Failed: ' + (e.message || e));
-        else setStatus("Couldn't reach the wallet service — tap Unlock to try again.");
-      } finally {
-        unlocking = false;
-        if (btn) btn.disabled = false;
-      }
+      return wrap('<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-3">' + escapeHtml(reported) + '</p>' + bars);
     }
 
     // ── Data loading + render ────────────────────────────────────────
@@ -399,7 +169,7 @@
     }
 
     async function render() {
-      if (!currentEid || unlocking) return;
+      if (!currentEid) return;
       let d;
       try {
         const r = await fetch('/api/public/elections/' + encodeURIComponent(currentEid), { headers: authHeaders });
@@ -410,74 +180,19 @@
         return;
       }
       lastData = d;
-      const locked = !!d.locked;
-      const totalVotes = (!locked && d.tally) ? Object.values(d.tally).reduce((s, n) => s + Number(n || 0), 0) : null;
 
-      const votesLine = locked ? 'live count locked' : (totalVotes.toLocaleString() + ' votes counted');
-
-      // Reporting-progress summary (stations reported ÷ total). Lives in the
-      // headline area, OUTSIDE #results, so it stays crisp when the live count
-      // is locked/blurred — progress is "how much work is done", not "who's
-      // winning", so it is never withheld.
-      const total = d.reporting.total, reported = d.reporting.reported;
-      const pct = total ? Math.round(reported / total * 100) : 0;
-      let progressBlock;
-      if (!total) {
-        progressBlock = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-5">No polling stations yet</p>';
-      } else {
-        const suffix = pct === 100 ? ' · counting complete' : '';
-        progressBlock = '<div id="reporting-progress" class="mb-5">'
-          + '<div class="flex items-baseline justify-between mb-1.5">'
-          + '<span class="text-sm font-semibold">' + pct + '% reported' + suffix + '</span>'
-          + '<span class="text-xs text-slate-500 dark:text-slate-400">' + reported + ' of ' + total + ' stations · ' + votesLine + '</span>'
-          + '</div>'
-          + '<div class="h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">'
-          + '<div class="h-full rounded-full bg-indigo-500 transition-[width] duration-500" style="width:' + pct + '%"></div>'
-          + '</div></div>';
-      }
-
-      document.getElementById('content').innerHTML =
-        '<h2 class="text-lg font-semibold mb-1">' + escapeHtml(d.election.name) + '</h2>'
-        + progressBlock
-        + '<div id="stage" class="relative">'
-        + '  <div id="results">' + resultsHtml(d, locked) + '</div>'
-        + '  <div id="lock-overlay" class="hidden absolute inset-0 flex items-start justify-center pt-10"></div>'
-        + '</div>'
-        // Working tally lives OUTSIDE #stage so it is never blurred/locked — it is
-        // off-chain, non-official data the server serves to every viewer.
-        + workTallySection(d);
-
-      const results = document.getElementById('results');
-      results.classList.toggle('blur-md', locked);
-      results.classList.toggle('select-none', locked);
-      results.classList.toggle('pointer-events-none', locked);
-      document.getElementById('lock-overlay').classList.toggle('hidden', !locked);
-      if (locked) updateOverlay();
+      // The dashboard is now a single working-tally board headed by the election
+      // name — no official chart, no per-station table, no lock/unlock paywall.
+      document.getElementById('content').innerHTML = workTallySection(d);
 
       document.getElementById('updated').textContent = d.lastUpdated
-        ? (locked ? 'Live · auto-refreshing' : 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing')
+        ? 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing'
         : 'No submissions yet · auto-refreshing';
     }
 
     async function loadConfig() {
       try { cfg = await (await fetch('/api/public/config')).json(); } catch (_) {}
-      // Point the hosted bridge's transaction reads at our auth-exempt
-      // /explorer-api proxy so it never hits its "transactionsBaseUrl not
-      // configured" guard. The bridge appends "/transactions", so the base is
-      // "<explorerApiBase>/<chainId>" (mirrors boot() in index.html).
-      if (cfg && !cfg.localDev) {
-        window.usernode = window.usernode || {};
-        const exBase = (cfg.explorerApiBase || '/explorer-api').replace(/\/+$/, '');
-        const chain = cfg.chainId || 'usernode';
-        window.usernode.transactionsBaseUrl = exBase + '/' + encodeURIComponent(chain);
-      }
       if (cfg && cfg.staging) document.getElementById('staging-badge').classList.remove('hidden');
-      // Fault-injection hook — staging ONLY (no-op in production) — so reviewers
-      // can exercise the unlock resilience path (?bridgefault=timeout|notready|reject).
-      if (cfg && cfg.staging && window.QCBridge) {
-        const fault = new URLSearchParams(location.search).get('bridgefault');
-        if (fault) window.QCBridge.setFault(fault);
-      }
     }
 
     // ── Theme toggle ─────────────────────────────────────────────────

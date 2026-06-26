@@ -18,6 +18,11 @@
   'use strict';
 
   var MAX_BACKOFF_MS = 30000;
+  // Hard cap on failed persistence attempts. After this many failures the entry
+  // is parked "offline" and the auto-retry loop stops driving it (so the pill
+  // can't spin forever against a server that keeps 5xx-ing). A regained
+  // connection (the `online` event) or a reload re-arms it.
+  var MAX_ATTEMPTS = 3;
 
   // Generate a client-side unique id without depending on Date.now()/Math.random
   // call-sites being mockable: crypto.randomUUID() in the browser, falling back
@@ -53,8 +58,11 @@
       candidates: cands,
       txId: seed.txId || null,
       eid: seed.eid || null,
-      attempts: 0,
+      attempts: typeof seed.attempts === 'number' && seed.attempts >= 0 ? seed.attempts : 0,
       status: seed.status || 'queued', // 'queued' → 'confirming' → (removed on confirm)
+      // Parked after MAX_ATTEMPTS failures: the driver skips it and the pill
+      // settles to a static "Saved Locally (Offline)" badge.
+      offline: !!seed.offline,
       lastError: null,
       // txIds of already-broadcast steps, so a resumed drive never re-sends a
       // step that already landed. sent[0] is the create tx (=== eid).
@@ -125,6 +133,7 @@
         eid: e.eid || (e.txId || null),
         attempts: typeof e.attempts === 'number' && e.attempts >= 0 ? e.attempts : 0,
         status: e.status === 'confirming' ? 'confirming' : 'queued',
+        offline: !!e.offline,
         lastError: typeof e.lastError === 'string' ? e.lastError : null,
         sent: Array.isArray(e.sent) ? e.sent.slice() : [],
         demo: !!e.demo,
@@ -138,11 +147,31 @@
               typeof e.name === 'string' && e.name);
   }
 
-  // Pill label. `t` is the app's translator; we look up `queue_saved_locally`
-  // and, for n > 1, append the count via `queue_saved_locally_n` ({n} token).
+  // An entry has exhausted its retries when it hit the attempt cap or was
+  // explicitly parked offline. The driver stops retrying it once this is true.
+  function isExhausted(entry) {
+    if (!entry) return false;
+    if (entry.offline === true) return true;
+    return typeof entry.attempts === 'number' && entry.attempts >= MAX_ATTEMPTS;
+  }
+
+  // True when the queue is non-empty and EVERY entry has given up — the signal
+  // for the pill to settle into its static "offline" state (no spinner).
+  function allExhausted(queue) {
+    var list = Array.isArray(queue) ? queue : [];
+    if (!list.length) return false;
+    for (var i = 0; i < list.length; i++) { if (!isExhausted(list[i])) return false; }
+    return true;
+  }
+
+  // Pill label. `t` is the app's translator. When every queued entry has
+  // exhausted its retries the pill reads `queue_saved_offline` (static); while
+  // any entry is still retrying it reads `queue_saved_locally`, with the count
+  // appended via `queue_saved_locally_n` ({n} token) for n > 1.
   function summaryLabel(queue, t) {
     var n = Array.isArray(queue) ? queue.length : 0;
     var tr = typeof t === 'function' ? t : function (k) { return k; };
+    if (allExhausted(queue)) return tr('queue_saved_offline');
     if (n <= 1) return tr('queue_saved_locally');
     var tpl = tr('queue_saved_locally_n');
     if (tpl && tpl.indexOf('{n}') !== -1) return tpl.replace('{n}', String(n));
@@ -151,9 +180,12 @@
 
   return {
     MAX_BACKOFF_MS: MAX_BACKOFF_MS,
+    MAX_ATTEMPTS: MAX_ATTEMPTS,
     makeEntry: makeEntry,
     markBroadcast: markBroadcast,
     isConfirmed: isConfirmed,
+    isExhausted: isExhausted,
+    allExhausted: allExhausted,
     nextBackoff: nextBackoff,
     serialize: serialize,
     deserialize: deserialize,

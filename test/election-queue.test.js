@@ -147,3 +147,53 @@ test('summaryLabel: falls back to "(n)" when template lacks {n}', () => {
     'Retrying (2)'
   );
 });
+
+test('MAX_ATTEMPTS: caps failed retries at 3', () => {
+  assert.strictEqual(ELQ.MAX_ATTEMPTS, 3);
+});
+
+test('isExhausted: true only at/after the attempt cap or when parked offline', () => {
+  assert.strictEqual(ELQ.isExhausted(null), false);
+  assert.strictEqual(ELQ.isExhausted({ attempts: 0 }), false);
+  assert.strictEqual(ELQ.isExhausted({ attempts: 1 }), false);
+  assert.strictEqual(ELQ.isExhausted({ attempts: 2 }), false);
+  assert.strictEqual(ELQ.isExhausted({ attempts: 3 }), true); // hit MAX_ATTEMPTS
+  assert.strictEqual(ELQ.isExhausted({ attempts: 7 }), true);
+  assert.strictEqual(ELQ.isExhausted({ attempts: 0, offline: true }), true); // explicit park
+});
+
+test('allExhausted: every entry must be exhausted; empty queue is not', () => {
+  assert.strictEqual(ELQ.allExhausted([]), false);
+  assert.strictEqual(ELQ.allExhausted([{ attempts: 3 }]), true);
+  assert.strictEqual(ELQ.allExhausted([{ attempts: 3 }, { attempts: 1 }]), false); // one still retrying
+  assert.strictEqual(ELQ.allExhausted([{ attempts: 3 }, { offline: true }]), true);
+});
+
+test('summaryLabel: offline label once every entry is exhausted', () => {
+  const t = (k) => ({
+    queue_saved_locally: 'Saved locally — retrying…',
+    queue_saved_locally_n: 'Saved locally — retrying… ({n})',
+    queue_saved_offline: 'Saved Locally (Offline)',
+  }[k] || k);
+  // All exhausted → static offline label, regardless of count.
+  assert.strictEqual(ELQ.summaryLabel([{ id: '1', name: 'a', attempts: 3 }], t), 'Saved Locally (Offline)');
+  assert.strictEqual(
+    ELQ.summaryLabel([{ id: '1', name: 'a', offline: true }, { id: '2', name: 'b', attempts: 3 }], t),
+    'Saved Locally (Offline)'
+  );
+  // Mixed: at least one still retrying → keep the retrying (counted) label.
+  assert.strictEqual(
+    ELQ.summaryLabel([{ id: '1', name: 'a', attempts: 3 }, { id: '2', name: 'b', attempts: 1 }], t),
+    'Saved locally — retrying… (2)'
+  );
+});
+
+test('makeEntry / deserialize: carry the offline flag', () => {
+  const e = ELQ.makeEntry({ name: 'X', candidates: ['a'] },
+    { id: 'staging-demo-offline', demo: true, offline: true, attempts: 3 });
+  assert.strictEqual(e.offline, true);
+  assert.strictEqual(e.attempts, 3);
+  const round = ELQ.deserialize(ELQ.serialize([e]));
+  assert.strictEqual(round[0].offline, true);
+  assert.strictEqual(round[0].attempts, 3);
+});
