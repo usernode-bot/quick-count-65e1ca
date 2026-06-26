@@ -101,7 +101,12 @@
     {
       "name": "Demo election shows reporting progress",
       "path": "/dashboard.html?eid=demo-election",
-      "expectText": "stations reported"
+      "expectText": "% reported"
+    },
+    {
+      "name": "Demo election renders the reporting-progress bar",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectSelector": "#reporting-progress"
     },
     {
       "name": "Elections list shows the Pilpres 2024 demo election",

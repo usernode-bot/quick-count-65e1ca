@@ -103,6 +103,18 @@
     function escapeHtml(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
+    // Auto-generated avatar placeholder: up to two initials from the candidate
+    // name (first letters of the first one or two whitespace tokens), uppercased.
+    // Falls back to '?' for empty / symbol-only names. No uploads.
+    function initials(name) {
+      const tokens = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
+      let out = '';
+      for (const t of tokens) {
+        const ch = t.charAt(0);
+        if (/[A-Za-z0-9]/.test(ch)) { out += ch.toUpperCase(); if (out.length === 2) break; }
+      }
+      return out || '?';
+    }
     function timeAgo(iso) {
       if (!iso) return '';
       const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -163,10 +175,9 @@
         .map(({ c, i, votes }) => {
           const pct = locked ? Math.round(100 / n) : (totalVotes ? Math.round((votes / totalVotes) * 100) : 0);
           const num = locked ? '•••' : (votes.toLocaleString() + ' <span class="text-slate-600 dark:text-slate-500">(' + pct + '%)</span>');
-          const initial = escapeHtml((c.name || '?').trim().charAt(0).toUpperCase() || '?');
-          const avatar = c.avatar
-            ? '<img src="' + escapeHtml(c.avatar) + '" alt="" class="h-8 w-8 rounded-full object-cover shrink-0 bg-slate-200 dark:bg-slate-800">'
-            : '<span class="h-8 w-8 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold text-white ' + COLORS[i % COLORS.length] + '">' + initial + '</span>';
+          // Initials-based avatar placeholder — no photo uploads. Colored to match
+          // this candidate's result bar and pie slice (COLORS[i]).
+          const avatar = '<span class="h-8 w-8 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold text-white ' + COLORS[i % COLORS.length] + '">' + escapeHtml(initials(c.name)) + '</span>';
           return '<div class="mb-3 flex items-center gap-3">'
             + avatar
             + '<div class="flex-1 min-w-0">'
@@ -366,9 +377,30 @@
 
       const votesLine = locked ? 'live count locked' : (totalVotes.toLocaleString() + ' votes counted');
 
+      // Reporting-progress summary (stations reported ÷ total). Lives in the
+      // headline area, OUTSIDE #results, so it stays crisp when the live count
+      // is locked/blurred — progress is "how much work is done", not "who's
+      // winning", so it is never withheld.
+      const total = d.reporting.total, reported = d.reporting.reported;
+      const pct = total ? Math.round(reported / total * 100) : 0;
+      let progressBlock;
+      if (!total) {
+        progressBlock = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-5">No polling stations yet</p>';
+      } else {
+        const suffix = pct === 100 ? ' · counting complete' : '';
+        progressBlock = '<div id="reporting-progress" class="mb-5">'
+          + '<div class="flex items-baseline justify-between mb-1.5">'
+          + '<span class="text-sm font-semibold">' + pct + '% reported' + suffix + '</span>'
+          + '<span class="text-xs text-slate-500 dark:text-slate-400">' + reported + ' of ' + total + ' stations · ' + votesLine + '</span>'
+          + '</div>'
+          + '<div class="h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">'
+          + '<div class="h-full rounded-full bg-indigo-500 transition-[width] duration-500" style="width:' + pct + '%"></div>'
+          + '</div></div>';
+      }
+
       document.getElementById('content').innerHTML =
         '<h2 class="text-lg font-semibold mb-1">' + escapeHtml(d.election.name) + '</h2>'
-        + '<p class="text-sm text-slate-500 dark:text-slate-400 mb-5">' + d.reporting.reported + ' of ' + d.reporting.total + ' stations reported · ' + votesLine + '</p>'
+        + progressBlock
         + '<div id="stage" class="relative">'
         + '  <div id="results">' + resultsHtml(d, locked) + '</div>'
         + '  <div id="lock-overlay" class="hidden absolute inset-0 flex items-start justify-center pt-10"></div>'
