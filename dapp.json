@@ -89,9 +89,9 @@
       "expectText": "Elections"
     },
     {
-      "name": "Local-first election queue pill renders (staging demo seed)",
+      "name": "Local-first election queue offline pill renders (staging demo seed)",
       "path": "/#/elections",
-      "expectText": "Saved locally"
+      "expectText": "Saved Locally (Offline)"
     },
     {
       "name": "Evidence gallery renders",
@@ -104,14 +104,14 @@
       "expectText": "Pollwatch Alliance"
     },
     {
-      "name": "Demo election shows reporting progress",
+      "name": "Public dashboard leads with the election title (official chart removed)",
       "path": "/dashboard.html?eid=demo-election",
-      "expectText": "% reported"
+      "expectText": "General Election"
     },
     {
-      "name": "Demo election renders the reporting-progress bar",
+      "name": "Public dashboard renders the working-tally panel",
       "path": "/dashboard.html?eid=demo-election",
-      "expectSelector": "#reporting-progress"
+      "expectSelector": "#work-tally"
     },
     {
       "name": "Elections list shows the Pilpres 2024 demo election",
@@ -119,19 +119,14 @@
       "expectText": "Pilpres 2024"
     },
     {
-      "name": "Pilpres 2024 demo dashboard shows a candidate pair",
+      "name": "Pilpres 2024 demo dashboard leads with the election title",
       "path": "/dashboard.html?eid=demo-pilpres-2024",
-      "expectText": "Prabowo"
+      "expectText": "Pilpres 2024"
     },
     {
-      "name": "Dashboard shows the locked pay-to-unlock overlay",
+      "name": "Public dashboard shows the organizer working-tally summary line",
       "path": "/dashboard.html?eid=demo-election",
-      "expectText": "Unlock live results"
-    },
-    {
-      "name": "Public dashboard shows the Working tally section",
-      "path": "/dashboard.html?eid=demo-election",
-      "expectText": "Working tally"
+      "expectText": "Live count entered by the organizer"
     },
     {
       "name": "Public dashboard renders working-tally bars",
