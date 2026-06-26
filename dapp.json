@@ -89,6 +89,11 @@
       "expectText": "Elections"
     },
     {
+      "name": "Local-first election queue pill renders (staging demo seed)",
+      "path": "/#/elections",
+      "expectText": "Saved locally"
+    },
+    {
       "name": "Evidence gallery renders",
       "path": "/#/evidence",
       "expectText": "Evidence"
