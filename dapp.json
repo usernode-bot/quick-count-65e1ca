@@ -79,9 +79,9 @@
       "expectText": "Staging demo"
     },
     {
-      "name": "Results screen shows the Export CSV button",
+      "name": "Dashboard shows the Open workspace link",
       "path": "/#/dashboard",
-      "expectSelector": "#exp-csv"
+      "expectText": "Open election workspace"
     },
     {
       "name": "Elections list renders",
