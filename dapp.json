@@ -119,6 +119,11 @@
       "expectText": "Unlock live results"
     },
     {
+      "name": "Public dashboard shows the working-tally card to locked viewers",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectSelector": "#work-tally"
+    },
+    {
       "name": "Public results are locked for anonymous viewers",
       "path": "/api/public/elections/demo-election",
       "expectText": "\"locked\":true"

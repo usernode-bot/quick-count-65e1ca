@@ -62,6 +62,10 @@
        hosted bridge tag above. -->
   <script src="/usernode-bridge-classify.js"></script>
   <script src="/usernode-resilience.js"></script>
+  <!-- Shared inline-entry helpers (window.QuickCountInline) — the same fixed
+       candidate set + aggregation used by the in-app dashboard's working-tally
+       section, so both dashboards render the off-chain working count identically. -->
+  <script src="/inline-entry.js"></script>
 </head>
 <body class="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen">
   <div class="max-w-3xl mx-auto p-4 sm:p-6">
@@ -206,6 +210,39 @@
         + '<tbody>' + stationRows + '</tbody></table></div>';
 
       return chartRow + table;
+    }
+
+    // ── Working tally (off-chain, always public) ─────────────────────
+    // Mirrors workTallySection() in public/index.html: builds a labelled
+    // "Working tally" card from the persisted detail.workTally (saved inline
+    // station entries) using the fixed QuickCountInline candidate set. Lives
+    // OUTSIDE #results so the pay-to-unlock blur never hides it. Returns '' when
+    // the helper is missing, nothing has been entered, or the grand total is 0.
+    function workTallyHtml(d) {
+      const QC = window.QuickCountInline;
+      if (!QC || !d) return '';
+      const saved = d.workTally || [];
+      if (!saved.length) return '';
+      const totals = QC.aggregateVotes(saved.map((r) => r.votes || {}));
+      const shares = QC.voteShares(totals);
+      const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
+      if (grand <= 0) return '';
+      const stationCount = (d.stations || []).length || saved.length;
+      const bars = QC.CANDIDATES
+        .map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
+        .sort((a, b) => b.votes - a.votes)
+        .map(({ c, i, votes, pct }) => '<div class="mb-3">'
+          + '<div class="flex justify-between text-sm mb-1"><span>' + escapeHtml(c.name) + '</span>'
+          + '<span class="font-mono text-slate-700 dark:text-slate-300">' + votes.toLocaleString()
+          + ' <span class="text-slate-600 dark:text-slate-500">(' + pct + '%)</span></span></div>'
+          + '<div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full '
+          + COLORS[i % COLORS.length] + '" style="width:' + pct + '%"></div></div>'
+          + '</div>').join('');
+      return '<div id="work-tally" class="mb-6 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">'
+        + '<h3 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-0.5">Working tally</h3>'
+        + '<p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Unofficial working count entered by the organizer · '
+        + saved.length + ' of ' + stationCount + ' stations entered · ' + grand.toLocaleString() + ' votes</p>'
+        + bars + '</div>';
     }
 
     // ── Lock overlay ─────────────────────────────────────────────────
@@ -364,11 +401,23 @@
       const locked = !!d.locked;
       const totalVotes = (!locked && d.tally) ? Object.values(d.tally).reduce((s, n) => s + Number(n || 0), 0) : null;
 
-      const votesLine = locked ? 'live count locked' : (totalVotes.toLocaleString() + ' votes counted');
+      let votesLine = locked ? 'live count locked' : (totalVotes.toLocaleString() + ' votes counted');
+
+      // When the official tally is locked or empty, surface the entered working
+      // count in the header so it never reads "0 … · live count locked" while
+      // real numbers sit in the working-tally card below.
+      const QC = window.QuickCountInline;
+      const savedWork = (d.workTally || []);
+      if (QC && savedWork.length && (locked || !totalVotes)) {
+        const wTotals = QC.aggregateVotes(savedWork.map((r) => r.votes || {}));
+        const wGrand = QC.CANDIDATES.reduce((s, c) => s + (wTotals[c.key] || 0), 0);
+        if (wGrand > 0) votesLine += ' · ' + wGrand.toLocaleString() + ' votes in working tally';
+      }
 
       document.getElementById('content').innerHTML =
         '<h2 class="text-lg font-semibold mb-1">' + escapeHtml(d.election.name) + '</h2>'
         + '<p class="text-sm text-slate-500 dark:text-slate-400 mb-5">' + d.reporting.reported + ' of ' + d.reporting.total + ' stations reported · ' + votesLine + '</p>'
+        + workTallyHtml(d)
         + '<div id="stage" class="relative">'
         + '  <div id="results">' + resultsHtml(d, locked) + '</div>'
         + '  <div id="lock-overlay" class="hidden absolute inset-0 flex items-start justify-center pt-10"></div>'
