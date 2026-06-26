@@ -1683,8 +1683,7 @@
     const reported = t('dashboard_working_tally_reported')
       .replace('{reported}', saved.length)
       .replace('{total}', (d.stations || []).length || saved.length);
-    return `<div class="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">
-      <h3 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-0.5">${t('dashboard_working_tally')}</h3>
+    return `<div class="mt-2 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">
       <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">${esc(t('dashboard_working_tally_desc'))} · ${esc(reported)} · ${grand.toLocaleString()} ${t('dashboard_votes')}</p>
       ${bars}</div>`;
   }
@@ -1710,25 +1709,15 @@
       body.innerHTML = ownerCard + `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_select_election')}</p>` + activeLine;
       return;
     }
-    const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0);
+    // The Dashboard is now a focused view of the off-chain working tally,
+    // headed by the active election's name. Official results, the lead-margin
+    // box, and the per-station table live on the election workspace instead.
+    const workTally = workTallySection(d);
     body.innerHTML =
-      `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
-        <h2 class="text-lg font-semibold">${esc(d.election.name)}</h2>
-        <div class="flex gap-2">
-          <button id="exp-csv" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_csv')}</button>
-          <button id="exp-json" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_json')}</button>
-        </div>
-      </div>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')} · ${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)} · ${totalVotes.toLocaleString()} ${t('dashboard_votes')} · method: ${t('method_' + d.method) || METHOD_LABELS[d.method]}</p>
-      ${marginBanner(d)}
-      <div class="mb-6">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
-      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('dashboard_by_station')}</h3>
-      ${stationTable(d)}
-      ${workTallySection(d)}
+      `<h2 class="text-lg font-semibold mb-1">${esc(d.election.name)}</h2>
+      ${workTally || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_submissions')}</p>`}
       <p class="mt-4 text-xs text-slate-700 dark:text-slate-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
       <a class="mt-3 inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>`;
-    document.getElementById('exp-csv').onclick = () => exportCsv(d);
-    document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
     wireEvidencePdf();
   }
   // One row per candidate (Rank, Candidate, Votes, Share %), sorted by votes
