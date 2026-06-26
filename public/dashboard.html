@@ -62,6 +62,9 @@
        hosted bridge tag above. -->
   <script src="/usernode-bridge-classify.js"></script>
   <script src="/usernode-resilience.js"></script>
+  <!-- Pure helpers for the off-chain working tally (CANDIDATES / aggregateVotes
+       / voteShares) — shared with the in-app dashboard's workTallySection. -->
+  <script src="/inline-entry.js"></script>
 </head>
 <body class="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen">
   <div class="max-w-3xl mx-auto p-4 sm:p-6">
@@ -206,6 +209,41 @@
         + '<tbody>' + stationRows + '</tbody></table></div>';
 
       return chartRow + table;
+    }
+
+    // ── Working tally (off-chain, organizer-entered) ─────────────────
+    // Mirrors workTallySection() in index.html. Built from d.workTally (the
+    // off-chain inline station entries the server returns to locked and unlocked
+    // viewers alike), using the fixed QuickCountInline candidate set — a separate
+    // dimension from the on-chain d.candidates, so it gets its own section.
+    // Returns '' when nothing has been entered yet, so an empty election shows
+    // no card. Rendered OUTSIDE the lock/blur overlay since it is never gated.
+    function workTallySection(d) {
+      const QC = window.QuickCountInline;
+      if (!QC || !d) return '';
+      const saved = (d.workTally || []);
+      if (!saved.length) return '';
+      const votesList = saved.map((r) => r.votes || {});
+      const totals = QC.aggregateVotes(votesList);
+      const shares = QC.voteShares(totals);
+      const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
+      if (grand <= 0) return '';
+      const bars = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
+        .sort((a, b) => b.votes - a.votes)
+        .map(({ c, i, votes, pct }) => '<div class="mb-3">'
+          + '<div class="flex justify-between text-sm mb-1"><span>' + escapeHtml(c.name) + '</span>'
+          + '<span class="font-mono text-slate-700 dark:text-slate-300">' + votes.toLocaleString()
+          + ' <span class="text-slate-600 dark:text-slate-500">(' + pct + '%)</span></span></div>'
+          + '<div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full '
+          + COLORS[i % COLORS.length] + '" style="width:' + pct + '%"></div></div>'
+          + '</div>').join('');
+      const total = (d.stations || []).length || saved.length;
+      const reported = 'Live count entered by the organizer · ' + saved.length + ' of ' + total
+        + ' stations entered · ' + grand.toLocaleString() + ' votes';
+      return '<div id="work-tally" class="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">'
+        + '<h3 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-0.5">Working tally</h3>'
+        + '<p class="text-xs text-slate-500 dark:text-slate-400 mb-3">' + escapeHtml(reported) + '</p>'
+        + bars + '</div>';
     }
 
     // ── Lock overlay ─────────────────────────────────────────────────
@@ -372,7 +410,10 @@
         + '<div id="stage" class="relative">'
         + '  <div id="results">' + resultsHtml(d, locked) + '</div>'
         + '  <div id="lock-overlay" class="hidden absolute inset-0 flex items-start justify-center pt-10"></div>'
-        + '</div>';
+        + '</div>'
+        // Working tally lives OUTSIDE #stage so it is never blurred/locked — it is
+        // off-chain, non-official data the server serves to every viewer.
+        + workTallySection(d);
 
       const results = document.getElementById('results');
       results.classList.toggle('blur-md', locked);
