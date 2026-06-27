@@ -131,10 +131,8 @@
     { id: 'elections', label: 'Elections', icon: '🗳️' },
     { id: 'orgs', label: 'Orgs', icon: '🏛️' },
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
-    { id: 'verify', label: 'Verify', icon: '🛡️' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
     { id: 'heatmap', label: 'Heatmap', icon: '🗺️' },
-    { id: 'profile', label: 'My Profile', icon: '👤', walletOnly: true },
     { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
@@ -1338,7 +1336,7 @@
       case 'elections': return renderElections(v);
       case 'orgs': return renderOrgs(v);
       case 'evidence': return renderEvidence(v);
-      case 'verify': return renderVerify(v);
+      case 'verify': return renderEvidence(v);
       case 'disputes': return renderDisputes(v);
       case 'heatmap': return renderHeatmap(v);
       case 'admin': return renderAdmin(v);
@@ -2003,50 +2001,7 @@
     });
   }
 
-  // ───────────────────────── Verify (upload verifier) ─────────────────────────
-  function renderVerify(v) {
-    const hash = location.hash || '';
-    const qi = hash.indexOf('?');
-    const params = {};
-    if (qi !== -1) new URLSearchParams(hash.slice(qi + 1)).forEach((val, key) => { params[key] = val; });
-    const isStagingLike = App.cfg && (App.cfg.demo || App.cfg.staging || App.cfg.localDev);
-    const pdfOk = window.QCEvidencePDF && window.QCEvidencePDF.available();
-
-    v.innerHTML = `
-      <h2 class="text-lg font-semibold mb-1">${t('verify_heading')}</h2>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('verify_intro')}</p>
-      <label id="vr-drop" class="block cursor-pointer p-8 text-center rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 text-slate-600 dark:text-slate-400">
-        <input id="vr-file" type="file" accept="application/pdf,.pdf" class="hidden">
-        <div class="text-3xl mb-2">🛡️</div>${t('verify_drop')}
-      </label>
-      ${isStagingLike && pdfOk ? `<div class="mt-3 flex items-center gap-2 flex-wrap"><button id="vr-sample" class="text-sm px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('verify_sample')}</button><span class="text-xs text-slate-500">${t('verify_sample_hint')}</span></div>` : ''}
-      <div id="vr-result" class="mt-5"></div>`;
-
-    const fileInput = document.getElementById('vr-file');
-    const drop = document.getElementById('vr-drop');
-    const out = document.getElementById('vr-result');
-
-    function run(promise) {
-      out.innerHTML = `<p class="text-sm text-slate-500">${t('verify_checking')}</p>`;
-      Promise.resolve(promise).then((res) => renderVerifyResult(out, res)).catch((e) => {
-        out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc(e && e.message || '')}</p>`;
-      });
-    }
-
-    fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg)); };
-    ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('border-indigo-500'); }));
-    ['dragleave'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('border-indigo-500'); }));
-    drop.addEventListener('drop', (e) => {
-      e.preventDefault(); drop.classList.remove('border-indigo-500');
-      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg));
-    });
-
-    if (params.fp && params.tx) run(window.QCEvidenceVerify.verifyFromQuery(params, App.cfg));
-
-    const sample = document.getElementById('vr-sample');
-    if (sample) sample.onclick = () => run(runSampleVerify());
-  }
-
+  // ───────────────────────── Verify result renderer (shared) ─────────────────────────
   function renderVerifyResult(out, res) {
     if (!res || res.error) {
       out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc((res && res.message) || '')}</p>`;
@@ -2098,52 +2053,107 @@
     return window.QCEvidenceVerify.verifyRecord(prep.record, prep.fingerprint, App.cfg);
   }
 
-  // ───────────────────────── Evidence gallery ─────────────────────────
+  // ───────────────────────── Evidence gallery + PDF verifier (combined) ─────────────────────────
   function renderEvidence(v) {
+    // Parse deep-link params from the hash (e.g. #/verify?fp=…&tx=… from QR codes on Evidence PDFs).
+    const hash = location.hash || '';
+    const qi = hash.indexOf('?');
+    const deepParams = {};
+    if (qi !== -1) new URLSearchParams(hash.slice(qi + 1)).forEach((val, key) => { deepParams[key] = val; });
+
     v.innerHTML = electionPicker() + '<div id="ev-body"></div>';
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('ev-body');
-    if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`; return; }
-    const stationName = (sid) => { const s = d.stations.find((x) => x.sid === sid); return s ? s.name : ('Station ' + sid); };
-    const gallery = d.evidence.length ? d.evidence.map((e) => `
-      <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
-        <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
-        ${e.invalid ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
-        <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
-        <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
-        <div class="flex gap-2 flex-wrap mt-2">
-          <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
-          <button data-sid="${e.sid}" class="ev-pdf text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">📄 ${t('evidence_pdf_download')}</button>
+
+    // ── Evidence gallery section ──
+    const galleryHtml = (() => {
+      if (!d) return `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`;
+      const stationName = (sid) => { const s = d.stations.find((x) => x.sid === sid); return s ? s.name : ('Station ' + sid); };
+      const cards = d.evidence.length ? d.evidence.map((e) => `
+        <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+          <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
+          ${e.invalid ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
+          <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
+          <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
+          <div class="flex gap-2 flex-wrap mt-2">
+            <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
+            <button data-sid="${e.sid}" class="ev-pdf text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">📄 ${t('evidence_pdf_download')}</button>
+          </div>
+        </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('evidence_no_evidence')}</p>`;
+      return `<h2 class="text-lg font-semibold mb-1">${t('evidence_heading')} — ${esc(d.election.name)}</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('evidence_sha256_desc')}</p>
+        <div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+          <p class="text-sm text-slate-600 dark:text-slate-500 mb-2" id="vf-target">${t('evidence_verifying_label')} <span class="text-slate-600 dark:text-slate-500">${t('evidence_verifying_default')}</span></p>
+          <input id="vf-file" type="file" class="text-xs text-slate-600 dark:text-slate-400 mb-2 block">
+          <p id="vf-result" class="text-sm"></p>
+          <p id="vf-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono"></p>
         </div>
-      </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('evidence_no_evidence')}</p>`;
+        <div class="grid sm:grid-cols-2 gap-3">${cards}</div>`;
+    })();
 
-    body.innerHTML = `<h2 class="text-lg font-semibold mb-1">${t('evidence_heading')} — ${esc(d.election.name)}</h2>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('evidence_sha256_desc')}</p>
-      <div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
-        <p class="text-sm text-slate-600 dark:text-slate-500 mb-2" id="vf-target">${t('evidence_verifying_label')} <span class="text-slate-600 dark:text-slate-500">${t('evidence_verifying_default')}</span></p>
-        <input id="vf-file" type="file" class="text-xs text-slate-600 dark:text-slate-400 mb-2 block">
-        <p id="vf-result" class="text-sm"></p>
-        <p id="vf-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono"></p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-3">${gallery}</div>`;
+    // ── PDF verifier section ──
+    const isStagingLike = App.cfg && (App.cfg.demo || App.cfg.staging || App.cfg.localDev);
+    const pdfOk = window.QCEvidencePDF && window.QCEvidencePDF.available();
+    const verifyHtml = `
+      <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+        <h2 class="text-lg font-semibold mb-1">${t('verify_heading')}</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('verify_intro')}</p>
+        <label id="vr-drop" class="block cursor-pointer p-8 text-center rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 text-slate-600 dark:text-slate-400">
+          <input id="vr-file" type="file" accept="application/pdf,.pdf" class="hidden">
+          <div class="text-3xl mb-2">🛡️</div>${t('verify_drop')}
+        </label>
+        ${isStagingLike && pdfOk ? `<div class="mt-3 flex items-center gap-2 flex-wrap"><button id="vr-sample" class="text-sm px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('verify_sample')}</button><span class="text-xs text-slate-500">${t('verify_sample_hint')}</span></div>` : ''}
+        <div id="vr-result" class="mt-5"></div>
+      </div>`;
 
-    let target = '';
-    body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
-      target = b.dataset.hash;
-      document.getElementById('vf-target').innerHTML = t('evidence_verifying_label') + ' <span class="text-slate-700 dark:text-slate-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-slate-600 dark:text-slate-500">' + esc(target.slice(0, 16)) + '…</span>';
-      document.getElementById('vf-result').textContent = '';
+    body.innerHTML = galleryHtml + verifyHtml;
+
+    // Wire up evidence gallery interactions (when an election is loaded).
+    if (d) {
+      let target = '';
+      body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
+        target = b.dataset.hash;
+        document.getElementById('vf-target').innerHTML = t('evidence_verifying_label') + ' <span class="text-slate-700 dark:text-slate-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-slate-600 dark:text-slate-500">' + esc(target.slice(0, 16)) + '…</span>';
+        document.getElementById('vf-result').textContent = '';
+      });
+      document.getElementById('vf-file').onchange = async (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        const h = await sha256File(f);
+        document.getElementById('vf-hash').textContent = 'sha256: ' + h;
+        const r = document.getElementById('vf-result');
+        if (!target) { r.innerHTML = `<span class="text-slate-500 dark:text-slate-400">${t('evidence_pick_target')}</span>`; return; }
+        if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = `<span class="text-emerald-400 font-semibold">${t('evidence_match_yes')}</span>`;
+        else r.innerHTML = `<span class="text-rose-400 font-semibold">${t('evidence_match_no')}</span>`;
+      };
+      wireEvidencePdf();
+    }
+
+    // Wire up PDF verifier interactions.
+    const fileInput = document.getElementById('vr-file');
+    const drop = document.getElementById('vr-drop');
+    const out = document.getElementById('vr-result');
+
+    function run(promise) {
+      out.innerHTML = `<p class="text-sm text-slate-500">${t('verify_checking')}</p>`;
+      Promise.resolve(promise).then((res) => renderVerifyResult(out, res)).catch((e) => {
+        out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc(e && e.message || '')}</p>`;
+      });
+    }
+
+    fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg)); };
+    ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('border-indigo-500'); }));
+    ['dragleave'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('border-indigo-500'); }));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault(); drop.classList.remove('border-indigo-500');
+      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg));
     });
-    document.getElementById('vf-file').onchange = async (e) => {
-      const f = e.target.files[0]; if (!f) return;
-      const h = await sha256File(f);
-      document.getElementById('vf-hash').textContent = 'sha256: ' + h;
-      const r = document.getElementById('vf-result');
-      if (!target) { r.innerHTML = `<span class="text-slate-500 dark:text-slate-400">${t('evidence_pick_target')}</span>`; return; }
-      if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = `<span class="text-emerald-400 font-semibold">${t('evidence_match_yes')}</span>`;
-      else r.innerHTML = `<span class="text-rose-400 font-semibold">${t('evidence_match_no')}</span>`;
-    };
-    wireEvidencePdf();
+
+    // Auto-verify when arriving via a deep link from an Evidence PDF QR code.
+    if (deepParams.fp && deepParams.tx) run(window.QCEvidenceVerify.verifyFromQuery(deepParams, App.cfg));
+
+    const sample = document.getElementById('vr-sample');
+    if (sample) sample.onclick = () => run(runSampleVerify());
   }
 
   // ───────────────────────── Disputes ─────────────────────────
