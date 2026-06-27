@@ -27,7 +27,7 @@ const memo = require('./lib/memo');
 const mock = require('./lib/mockledger');
 const { makeSource, getTransaction, resolveTxEndpoint, postTransactions } = require('./lib/txsource');
 const { verifyPayment } = require('./lib/unlock');
-const { isKind, validateImageUpload } = require('./lib/attach');
+const { isKind, validateImageUpload, validateBallotProof } = require('./lib/attach');
 const { isValidDisplayName, isValidBio, isSupportedLang } = require('./lib/profile');
 
 let Pool = null;
@@ -91,6 +91,60 @@ const seen = new Set();
 const watched = new Map(); // address -> cursor
 watched.set(TREASURY_ADDR, null);
 
+// ── Live publishing (Server-Sent Events) ─────────────────────────────────────
+// A tiny in-process pub/sub so an authorized change (a new station count, a
+// vote-resolved dispute, a saved working tally, a finalized ballot proof) pushes
+// to the public view instantly instead of waiting for the next poll. One-way
+// server→client; clients re-fetch through the existing pay-to-unlock-aware
+// endpoints, so the lock gate / visibility rules are unchanged — the event only
+// carries { eid, kind, lastUpdated }, never vote figures.
+const sseClients = new Map(); // eid -> Set<res>
+let sseCount = 0;
+const SSE_MAX = 500;
+function sseSubscribe(eid, res) {
+  if (!sseClients.has(eid)) sseClients.set(eid, new Set());
+  sseClients.get(eid).add(res);
+  sseCount++;
+  return () => {
+    const set = sseClients.get(eid);
+    if (set) { set.delete(res); if (!set.size) sseClients.delete(eid); }
+    sseCount = Math.max(0, sseCount - 1);
+  };
+}
+function ssePublish(eid, payload) {
+  const set = sseClients.get(eid);
+  if (!set || !set.size) return;
+  const frame = `event: update\ndata: ${JSON.stringify(payload || {})}\n\n`;
+  for (const res of set) { try { res.write(frame); } catch { /* dropped on next write */ } }
+}
+function electionLastUpdated(eid) {
+  try {
+    const results = indexer.results.get(eid) || [];
+    let last = null;
+    for (const r of results) if (r.createdAt && (!last || r.createdAt > last)) last = r.createdAt;
+    return last;
+  } catch { return null; }
+}
+// A cheap per-election signature so pollOnce can tell which elections actually
+// changed (new/updated result, vote-resolved dispute, structural change) and
+// push only those. Covers the vote-approved case: an upheld `dres` flips a
+// result's `invalid`/`disputed` flags, which the signature captures.
+function electionSignatures() {
+  const m = new Map();
+  for (const eid of indexer.elections.keys()) {
+    const results = indexer.results.get(eid) || [];
+    const disputes = indexer.disputes.get(eid) || [];
+    let sig = 'c' + (indexer.candidates.get(eid) || new Map()).size
+      + 's' + (indexer.stations.get(eid) || new Map()).size
+      + 'o' + (indexer.observers.get(eid) || new Map()).size + '|';
+    for (const r of results) sig += r.txId + (r.invalid ? 'x' : '') + (r.disputed ? 'd' : '') + ';';
+    sig += '|';
+    for (const d of disputes) sig += d.txId + d.status + ';';
+    m.set(eid, sig);
+  }
+  return m;
+}
+
 // ── Ingest / rebuild ─────────────────────────────────────────────────────────
 function ingestRaw(raw) {
   const n = normalizeTx(raw);
@@ -134,6 +188,9 @@ async function resyncFromChain({ truncateDb = false } = {}) {
 
 async function pollOnce() {
   let added = false;
+  // Snapshot per-election signatures BEFORE replay so we can push only the
+  // elections that actually changed once the new state is built.
+  const before = electionSignatures();
   if (LOCAL_DEV || MOCK_TX_FLOW) {
     // Self-contained ingest: replay the in-process mock ledger (fed by
     // /__mock/submit). No chain read-back, so NODE_RPC_URL / EXPLORER_API_URL
@@ -152,6 +209,12 @@ async function pollOnce() {
     }
   }
   rebuild(); // deterministic full replay — cheap at this scale
+  // Push live updates for any election whose signature changed (new result,
+  // vote-resolved dispute, structural change) or that is brand new.
+  const after = electionSignatures();
+  for (const [eid, sig] of after) {
+    if (before.get(eid) !== sig) ssePublish(eid, { kind: 'chain', lastUpdated: electionLastUpdated(eid) });
+  }
   return added;
 }
 
@@ -476,6 +539,13 @@ app.get('/__quickcount/state', async (req, res) => {
       // Fold in the off-chain working tally so the workspace can hydrate the
       // inline vote-entry rows + upper bars on load.
       if (detail) detail.workTally = await loadWorkTally(req.query.eid);
+      // Fold in per-station ballot-proof status (present/validated) so the
+      // workspace can badge stations that already have a proof attached.
+      if (detail) {
+        const pm = await loadBallotProofMeta(req.query.eid);
+        detail.proofs = {};
+        for (const [sid, v] of pm) detail.proofs[sid] = v;
+      }
     }
     res.json({ role, elections, detail, method, activeOrgs: indexer.activeOrgs() });
   } catch (err) {
@@ -591,6 +661,8 @@ app.put('/api/elections/:eid/worktally/:sid', async (req, res) => {
       [eid, sid, JSON.stringify(votes), authorPubkey, authorUsername]
     );
     const r = rows[0] || {};
+    // Live publish: the dashboard / open election screens update instantly.
+    ssePublish(eid, { kind: 'worktally', sid, lastUpdated: electionLastUpdated(eid) });
     res.json({
       ok: true, eid, sid,
       votes: r.votes || votes,
@@ -686,6 +758,169 @@ app.get('/api/public/elections/:eid/attachments/:kind/:refId', async (req, res) 
   }
 });
 
+// ── Ballot-proof upload flow (off-chain, PRIVATE) ────────────────────────────
+// A scanned ballot / count form attached to a polling station. Stored in the
+// PRIVATE `ballot_proofs` table (may carry PII) — bytes are served only to the
+// uploader, the org's operators, or a platform operator. The anonymous public
+// sees only a "validated proof present" badge (see the per-station `proof`
+// field below), never the raw document; the on-chain `ev` hash remains the
+// public, verifiable commitment.
+
+// Per-station proof status for an election: sid -> { present, validated }.
+// `present` means a submitted proof exists; `validated` means it passed
+// document validation. Draft proofs (mid-review) are intentionally excluded.
+async function loadBallotProofMeta(eid) {
+  const m = new Map();
+  if (!pool) return m;
+  try {
+    const { rows } = await pool.query(
+      'SELECT sid, valid, status FROM ballot_proofs WHERE eid = $1',
+      [eid]
+    );
+    for (const r of rows) {
+      const submitted = r.status === 'submitted';
+      m.set(Number(r.sid), { present: submitted, validated: submitted && !!r.valid });
+    }
+  } catch (e) {
+    console.error('loadBallotProofMeta failed:', e.message);
+  }
+  return m;
+}
+
+// May `pubkey` upload/replace a station's ballot proof? The station's assigned
+// observer (broader than the worktally guard — they hold the physical ballot),
+// the org's operators (Owner/Administrator/Moderator), or a platform operator.
+// When the election isn't indexed yet, allow (nothing to overwrite).
+function canUploadProof(eid, sid, pubkey) {
+  if (!pubkey) return false;
+  const el = indexer.elections.get(eid);
+  if (!el) return true;
+  if (indexer.isAdmin(pubkey)) return true;
+  if (indexer.canOperate(el.orgAddr, pubkey)) return true;
+  const obsMap = indexer.observers.get(eid);
+  const obs = obsMap && obsMap.get(pubkey);
+  if (obs && (obs.sid == null || obs.sid === sid)) return true;
+  return false;
+}
+
+// Authenticated: import (draft) or submit (final) a station ballot proof. The
+// server always re-runs validation and refuses to mark a proof `submitted`
+// unless it passes — never trusts the client's pass/fail.
+const ballotJson = express.json({ limit: '8mb' });
+app.put('/api/elections/:eid/ballot-proof/:sid', ballotJson, async (req, res) => {
+  try {
+    const { eid } = req.params;
+    const sid = Number(req.params.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return res.status(400).json({ error: 'bad station id' });
+    const pubkey = (req.user && req.user.usernode_pubkey) || null;
+    const username = (req.user && req.user.username) || null;
+    if (!canUploadProof(eid, sid, pubkey)) {
+      return res.status(403).json({ error: 'You are not authorized to upload a ballot proof for this station' });
+    }
+    if (!pool) return res.status(503).json({ error: 'Ballot proofs are unavailable in this environment' });
+
+    const { mime, data_base64, status } = req.body || {};
+    if (typeof data_base64 !== 'string' || !data_base64) {
+      return res.status(400).json({ error: 'data_base64 required' });
+    }
+    let buf;
+    try { buf = Buffer.from(data_base64, 'base64'); } catch { buf = null; }
+    const check = validateBallotProof(mime, buf);
+    const wantSubmit = status === 'submitted';
+    // A submit must pass validation; a draft is stored regardless so the
+    // reviewer's in-progress (even failing) state survives a reload.
+    if (wantSubmit && !check.ok) {
+      return res.status(check.status || 400).json({ error: check.error, validation: check });
+    }
+    const finalStatus = wantSubmit ? 'submitted' : 'draft';
+    const info = check.info || {};
+    const size = Buffer.isBuffer(buf) ? buf.length : 0;
+    await pool.query(
+      `INSERT INTO ballot_proofs
+         (eid, sid, mime, bytes, byte_size, page_count, width, height, valid, validation, status, uploader_pubkey, uploader_username, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13, NOW())
+       ON CONFLICT (eid, sid) DO UPDATE SET
+         mime = EXCLUDED.mime, bytes = EXCLUDED.bytes, byte_size = EXCLUDED.byte_size,
+         page_count = EXCLUDED.page_count, width = EXCLUDED.width, height = EXCLUDED.height,
+         valid = EXCLUDED.valid, validation = EXCLUDED.validation, status = EXCLUDED.status,
+         uploader_pubkey = EXCLUDED.uploader_pubkey, uploader_username = EXCLUDED.uploader_username,
+         updated_at = NOW()`,
+      [
+        eid, sid, mime || null, buf, size,
+        info.pages == null ? null : info.pages,
+        info.width == null ? null : info.width,
+        info.height == null ? null : info.height,
+        !!check.ok, JSON.stringify(check), finalStatus, pubkey, username,
+      ]
+    );
+    // A finalized (submitted + valid) proof flips the public badge → push live.
+    if (finalStatus === 'submitted') ssePublish(eid, { kind: 'proof', sid, lastUpdated: electionLastUpdated(eid) });
+    res.json({ ok: true, eid, sid, status: finalStatus, valid: !!check.ok, validation: check, byte_size: size });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Authenticated: read a station's ballot-proof bytes (or ?meta=1 for status
+// only). NOT public — restricted to the uploader, org operators, or a platform
+// operator. The anonymous public only ever gets the badge on the public detail.
+app.get('/api/elections/:eid/ballot-proof/:sid', async (req, res) => {
+  try {
+    const { eid } = req.params;
+    const sid = Number(req.params.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return res.status(404).json({ error: 'not found' });
+    if (!pool) return res.status(503).json({ error: 'Ballot proofs are unavailable in this environment' });
+    const pubkey = (req.user && req.user.usernode_pubkey) || null;
+    const { rows } = await pool.query(
+      'SELECT mime, bytes, byte_size, valid, status, uploader_pubkey, validation FROM ballot_proofs WHERE eid = $1 AND sid = $2',
+      [eid, sid]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    const row = rows[0];
+    const el = indexer.elections.get(eid);
+    const allowed = !!pubkey && (
+      indexer.isAdmin(pubkey)
+      || (el && indexer.canOperate(el.orgAddr, pubkey))
+      || pubkey === row.uploader_pubkey
+    );
+    if (!allowed) return res.status(403).json({ error: 'Not authorized to view this ballot proof' });
+    if (req.query.meta) {
+      return res.json({
+        eid, sid, status: row.status, valid: !!row.valid,
+        byte_size: row.byte_size, validation: row.validation || null,
+      });
+    }
+    res.set('Content-Type', row.mime || 'application/octet-stream');
+    res.set('Cache-Control', 'private, max-age=30');
+    res.send(row.bytes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: live event stream for one election (SSE). Under /api/public/ so it is
+// ungated. Carries only { eid, kind, lastUpdated } — clients re-fetch through
+// the pay-to-unlock-aware detail endpoint, so the lock gate is unchanged.
+app.get('/api/public/elections/:eid/stream', (req, res) => {
+  const eid = req.params.eid;
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  if (sseCount >= SSE_MAX) {
+    res.write('event: error\ndata: {"error":"too many live connections"}\n\n');
+    return res.end();
+  }
+  res.write('retry: 3000\n\n');
+  res.write(`event: ready\ndata: ${JSON.stringify({ eid, lastUpdated: electionLastUpdated(eid) })}\n\n`);
+  const unsubscribe = sseSubscribe(eid, res);
+  const heartbeat = setInterval(() => { try { res.write(': heartbeat\n\n'); } catch { /* closed */ } }, 25000);
+  req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
+});
+
 // Public: list elections with counts (backed by in-memory indexer).
 app.get('/api/public/elections', (_req, res) => {
   try {
@@ -726,6 +961,11 @@ app.get('/api/public/elections/:eid', async (req, res) => {
     const avatarUrl = (cid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/cand_avatar/${cid}`;
     const c1Url = (sid) => `/api/public/elections/${encodeURIComponent(eid)}/attachments/station_c1/${sid}`;
 
+    // Per-station ballot-proof badge (public sees presence/validated only — never
+    // the bytes, which require authorization on the separate /api endpoint).
+    const proofMeta = await loadBallotProofMeta(eid);
+    const proofOf = (sid) => proofMeta.get(Number(sid)) || { present: false, validated: false };
+
     const candidates = d.candidates.map((c) => ({
       cid: c.cid, name: c.name,
       avatar: hasAvatar.has(Number(c.cid)) ? avatarUrl(Number(c.cid)) : null,
@@ -754,6 +994,7 @@ app.get('/api/public/elections/:eid', async (req, res) => {
         sid: s.sid, name: s.name, reported: s.reported,
         votes: s.votes, tot: s.tot, inv: s.inv, at: s.at,
         c1: hasC1.has(s.sid) ? c1Url(s.sid) : null,
+        proof: proofOf(s.sid),
       }));
       return res.json(Object.assign(base, { stations, tally: d.tally }));
     }
@@ -763,6 +1004,7 @@ app.get('/api/public/elections/:eid', async (req, res) => {
     const lockedStations = d.stations.map((s) => ({
       sid: s.sid, name: s.name, reported: s.reported,
       votes: null, tot: null, inv: null, at: null,
+      proof: proofOf(s.sid),
     }));
     return res.json(Object.assign(base, { stations: lockedStations, tally: null }));
   } catch (err) {
@@ -1070,6 +1312,33 @@ async function migrate() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
   await pool.query(`COMMENT ON TABLE profiles IS 'staging:private'`);
+  // Ballot proofs — scanned ballot / count forms attached to a polling station.
+  // PRIVATE: an uploaded ballot may carry personal/sensitive info, so a stranger
+  // seeing every row would be a problem (joins `unlocks` + `profiles`). Staging
+  // gets schema only; seedStaging() inserts obviously-fake rows. Bytes are served
+  // only to the uploader / org operators / platform operator; the public sees a
+  // validated-badge only. No FK (rows may precede indexing, like attachments).
+  // `status` is 'draft' (mid-review) or 'submitted' (final). Latest-write-wins
+  // per (eid, sid).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ballot_proofs (
+      eid TEXT NOT NULL,
+      sid INTEGER NOT NULL,
+      mime TEXT,
+      bytes BYTEA,
+      byte_size INTEGER,
+      page_count INTEGER,
+      width INTEGER,
+      height INTEGER,
+      valid BOOLEAN DEFAULT FALSE,
+      validation JSONB,
+      status TEXT NOT NULL DEFAULT 'draft',
+      uploader_pubkey TEXT,
+      uploader_username TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (eid, sid)
+    )`);
+  await pool.query(`COMMENT ON TABLE ballot_proofs IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
   // v3 — username-as-identity: `profiles` is the authoritative username↔address
@@ -1194,6 +1463,31 @@ async function seedStaging() {
       [eid, sid, JSON.stringify(votes), root]
     );
   }
+
+  // Ballot proofs (off-chain, staging:private → schema-only in staging, so seed
+  // explicitly or the badge + review UI render empty). Obviously fake. Covers the
+  // three reviewable states: a SUBMITTED+VALID proof (public "validated" badge +
+  // authorized-viewer image), a DRAFT proof (in-app review/edit-before-submit),
+  // and a deliberately-INVALID draft (the "doesn't look like a usable scan" path
+  // with Submit disabled). Uploaders span the observer + operator auth paths.
+  // GRAY_PNG is a tiny placeholder — real uploads must pass validateBallotProof.
+  const TINY_BLOB = 'iVBORw0KGgo='; // ~8 bytes — stands in for a rejected scan.
+  const demoProofs = [
+    // [eid, sid, status, valid, b64, validation, uploaderPubkey, uploaderUsername]
+    [PILPRES_EID, 1, 'submitted', true, GRAY_PNG, { ok: true, info: { kind: 'image', note: 'Staging demo — synthetic ballot scan' } }, DEMO.obs1, 'observer_one'],
+    ['demo-election', 1, 'submitted', true, GRAY_PNG, { ok: true, info: { kind: 'image', note: 'Staging demo — synthetic ballot scan' } }, DEMO.orgID, 'pemilu_watch_id'],
+    ['demo-election', 2, 'draft', true, GRAY_PNG, { ok: true, info: { kind: 'image', note: 'Staging demo — draft awaiting review' } }, DEMO.obs1, 'observer_one'],
+    ['demo-election', 3, 'draft', false, TINY_BLOB, { ok: false, error: 'Scan resolution too low (needs a clearer photo)', info: { kind: 'image' } }, DEMO.obs1, 'observer_one'],
+  ];
+  for (const [eid, sid, status, valid, b64, validation, up, upName] of demoProofs) {
+    const buf = Buffer.from(b64, 'base64');
+    await pool.query(
+      `INSERT INTO ballot_proofs (eid, sid, mime, bytes, byte_size, valid, validation, status, uploader_pubkey, uploader_username, updated_at)
+       VALUES ($1, $2, 'image/png', $3, $4, $5, $6::jsonb, $7, $8, $9, NOW())
+       ON CONFLICT (eid, sid) DO NOTHING`,
+      [eid, sid, buf, buf.length, valid, JSON.stringify(validation), status, up, upName]
+    );
+  }
 }
 
 async function start() {
@@ -1237,4 +1531,9 @@ if (require.main === module) {
   start().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source, PILPRES_EID, sanitizeWorkVotes, loadWorkTally, migrate };
+module.exports = {
+  app, indexer, buildDemoTxs, resyncFromChain, source, PILPRES_EID,
+  sanitizeWorkVotes, loadWorkTally, migrate,
+  // Live-publishing broker (exposed for unit tests).
+  sse: { subscribe: sseSubscribe, publish: ssePublish, clients: sseClients, count: () => sseCount },
+};

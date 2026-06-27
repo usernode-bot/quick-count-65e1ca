@@ -145,7 +145,12 @@
       const total = (d.stations || []).length || saved.length;
       const reported = 'Live count entered by the organizer · ' + saved.length + ' of ' + total
         + ' stations entered · ' + grand.toLocaleString() + ' votes';
-      return wrap('<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-3">' + escapeHtml(reported) + '</p>' + bars);
+      const proofCount = (d.stations || []).filter((s) => s.proof && s.proof.validated).length;
+      const proofBadge = proofCount
+        ? '<p class="mt-3"><span class="text-xs inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">🛡️ '
+          + proofCount + ' ballot proof' + (proofCount === 1 ? '' : 's') + ' attached &amp; validated ✓</span></p>'
+        : '';
+      return wrap('<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-3">' + escapeHtml(reported) + '</p>' + bars + proofBadge);
     }
 
     // ── Data loading + render ────────────────────────────────────────
@@ -162,7 +167,7 @@
         sel.innerHTML = elections.map((e) => '<option value="' + e.eid + '">' + escapeHtml(e.name) + '</option>').join('');
         if (!currentEid || !elections.some((e) => e.eid === currentEid)) currentEid = elections[0].eid;
         sel.value = currentEid;
-        sel.onchange = () => { currentEid = sel.value; render(); };
+        sel.onchange = () => { currentEid = sel.value; subscribeLive(currentEid); render(); };
       } catch (e) {
         document.getElementById('content').innerHTML = '<p class="text-rose-400 text-sm">Failed to load elections.</p>';
       }
@@ -185,9 +190,26 @@
       // name — no official chart, no per-station table, no lock/unlock paywall.
       document.getElementById('content').innerHTML = workTallySection(d);
 
+      const liveSuffix = liveOn ? ' · live ●' : ' · auto-refreshing';
       document.getElementById('updated').textContent = d.lastUpdated
-        ? 'Last submission ' + timeAgo(d.lastUpdated) + ' · auto-refreshing'
-        : 'No submissions yet · auto-refreshing';
+        ? 'Last submission ' + timeAgo(d.lastUpdated) + liveSuffix
+        : 'No submissions yet' + liveSuffix;
+    }
+
+    // ── Live updates (SSE) ───────────────────────────────────────────
+    // Push-based: re-render instantly when the server signals a change. The
+    // timed fallback below stays as a safety net for browsers without
+    // EventSource or when the stream drops.
+    let es = null, liveOn = false;
+    function subscribeLive(eid) {
+      if (!eid || typeof EventSource === 'undefined') return;
+      if (es) { try { es.close(); } catch (_) {} es = null; }
+      try {
+        es = new EventSource('/api/public/elections/' + encodeURIComponent(eid) + '/stream');
+        es.addEventListener('ready', () => { liveOn = true; });
+        es.addEventListener('update', () => { liveOn = true; render(); });
+        es.onerror = () => { liveOn = false; /* browser auto-reconnects; fallback covers gaps */ };
+      } catch (_) { es = null; }
     }
 
     async function loadConfig() {
@@ -211,7 +233,10 @@
       await loadConfig();
       await loadElectionsList();
       await render();
-      setInterval(render, 5000);
+      subscribeLive(currentEid);
+      // Fallback poll — slow when the live stream is up, normal otherwise.
+      setInterval(() => { if (!liveOn) render(); }, 5000);
+      setInterval(render, 30000);
     })();
   </script>
 </body>

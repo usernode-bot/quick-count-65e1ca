@@ -7,13 +7,24 @@ deterministic indexer replays the transaction log to build all read state.
 
 ## Roles
 
+- **Owner** — the wallet that **creates** an organization is its Owner, with full
+  authority over that org's data (elections, candidates, stations, observers,
+  dispute resolutions, working tally, ballot proofs, member roster, visibility,
+  deletion). Owners can grant members the org-level **Administrator**, **Moderator**,
+  or **Member** roles; Owner outranks all of them.
+- **Platform operator** — the app-level role configured via `ADMIN_ADDRS`. Runs the
+  whole service (fee waivers, the oversight dashboard) and holds a narrow
+  **break-glass** override on a few org operations for support / abandoned-org
+  recovery. It is platform support, **not** org ownership — governance of an org's
+  data belongs to that org's Owner.
 - **Organizations** register (paying a one-time fee), create elections, define
   candidates, build a polling-station registry (incl. bulk CSV import),
   authorize observers, and resolve disputes.
 - **Observers** report and revise their station's count, attach evidence
-  (hashed locally — the file never leaves the device), and file disputes.
-- **The public** watches live results under five aggregation methods, verifies
-  evidence, and exports CSV/JSON. No wallet required.
+  (hashed locally — the file never leaves the device) and a reviewable ballot
+  proof (image/PDF, validated before submission), and file disputes.
+- **The public** watches live results (updated in real time via SSE) under five
+  aggregation methods, verifies evidence, and exports CSV/JSON. No wallet required.
 
 ## Aggregation methods
 

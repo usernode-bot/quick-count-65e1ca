@@ -177,7 +177,7 @@
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
-      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes', tab_admin: 'Admin',
+      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes', tab_admin: 'Operator',
       evidence_pdf_download: 'Evidence PDF', evidence_pdf_generating: 'Generating…', evidence_pdf_unavailable: 'PDF tools unavailable — open this page online to enable Evidence PDFs.', evidence_pdf_ready: 'Evidence PDF downloaded ✓', evidence_pdf_ready_prompt: 'Result submitted on-chain. Download your Evidence PDF?',
       verify_heading: 'Verify evidence', verify_intro: 'Drop an Evidence PDF below to check it on your device. Nothing is uploaded — the file is parsed locally, its fingerprint is recomputed, and (when a live chain is configured) it is cross-checked against the blockchain.',
       verify_drop: 'Drop an Evidence PDF here, or click to choose a file', verify_checking: 'Checking…', verify_sample: 'Run a sample', verify_sample_hint: 'Generate and verify an Evidence PDF for the demo election.',
@@ -201,7 +201,7 @@
       loading_adding_member: 'Adding member…', loading_changing_role: 'Updating role…', loading_removing_member: 'Removing member…', loading_changing_visibility: 'Updating visibility…', loading_deleting_org: 'Deleting organization…',
       evidence_heading: 'Evidence', evidence_upload_label: 'Evidence (tally sheet) — hashed locally, file never uploaded', evidence_submit: 'Verify a file against this', evidence_no_evidence: 'No evidence hashes recorded for this election.',
       disputes_heading: 'Disputes', disputes_no_disputes: 'No disputes filed for this election.', disputes_file: 'File a dispute', disputes_resolve: 'Resolve disputes', disputes_uphold: 'Uphold', disputes_reject: 'Reject',
-      admin_heading: 'Platform admin', admin_waive_fee: 'Waive fee',
+      admin_heading: 'Platform operator', admin_intro: 'Platform operators run the whole Quick Count service (fee waivers, oversight). This is a platform-support role — it does not make you the owner of any organization. Each organization is governed by its Owner.', admin_waive_fee: 'Waive fee',
       toast_election_published: 'Election published ✓', toast_submit_result: 'Result submitted ✓', toast_station_added: 'Station added ✓', toast_observer_authorized: 'Observer authorized ✓', toast_dispute_filed: 'Dispute filed ✓', toast_dispute_upheld: 'Dispute upheld ✓', toast_dispute_rejected: 'Dispute rejected ✓', toast_org_registered: 'Organization registered ✓', toast_fee_paid: 'Fee paid ✓', toast_fee_waived: 'Fee waived ✓', toast_failed: 'Failed:', toast_wallet_unavailable: 'Wallet bridge unavailable — open inside Usernode.', toast_no_wallet: 'No wallet address linked.', toast_add_candidate: 'Add a name and at least one candidate.', toast_nothing_to_import: 'Nothing to import', toast_enter_reason: 'Enter a reason', toast_enter_org_name: 'Enter an organization name', toast_enter_station_name: 'Enter a station name', toast_enter_observer_addr: 'Enter an observer address',
       notice_wallet_unreachable: "Couldn't reach the wallet service. Your entries were kept.", notice_action_failed: "That didn't go through. Your entries were kept.", notice_connecting: 'Connecting to your wallet…', action_try_again: 'Try again', partial_candidates: 'Election published; {done} of {total} candidates added.', partial_stations: '{done} of {total} stations imported.', partial_generic: '{done} of {total} steps completed.',
       loading_submitting: 'Submitting result…', loading_adding_station: 'Adding station…', loading_authorizing: 'Authorizing observer…', loading_filing: 'Filing dispute…', loading_resolving: 'Resolving…', loading_registering: 'Registering & paying fee…', loading_paying: 'Paying fee…', loading_waiving: 'Waiving fee…', loading_importing: 'Importing station',
@@ -216,6 +216,7 @@
       elections_form_name_label: 'Election name', elections_form_candidates_label: 'Candidates', elections_form_add_candidate: '+ Add', elections_form_candidate_ph: 'Candidate name', elections_form_create: 'Create & publish', elections_form_tx_note: 'Signs one transaction for the election and one per candidate.',
       election_detail_back: '← all elections', election_detail_by_org: 'by', election_detail_pending_fee: 'pending fee', election_detail_loading: 'Loading election…', election_detail_reporting: '{reported} of {total} stations reported', election_detail_connect_note: 'Connect an authorized observer or the organizing wallet to report results or manage this election.',
       election_observer_title: 'Report result', election_observer_your_station: '(your station)', election_observer_station_label: 'Polling station', election_observer_total_label: 'Total ballots', election_observer_invalid_label: 'Invalid / blank', election_observer_submit_btn: 'Submit / revise result',
+      ballot_proof_title: 'Ballot proof', ballot_proof_desc: 'Attach a photo or scan of the ballot / count form. It is imported, auto-checked, and reviewed before you submit. Shown only to your organization and platform operators — the public sees a “validated” badge, not the image.', ballot_proof_choose: 'Choose a file (JPG, PNG, or PDF)', ballot_proof_replace: 'Replace / re-scan', ballot_proof_submit: 'Submit ballot proof', ballot_proof_station: 'Polling station', ballot_proof_valid: 'Looks valid ✓', ballot_proof_invalid: 'This doesn’t look like a usable ballot scan:', ballot_proof_submitted: 'Ballot proof submitted ✓', ballot_proof_attached: 'Validated proof attached ✓', ballot_proof_draft_saved: 'Draft saved — not yet submitted', ballot_proof_unavailable: 'Ballot proofs are unavailable in this environment.', ballot_proof_fingerprint: 'Fingerprint', ballot_proof_pick_first: 'Choose a file to review first.',
       election_stations_title: 'Stations', election_station_name_ph: 'Station name', election_station_label_ph: 'Label / region', election_station_add_btn: 'Add', election_station_bulk_import: 'Bulk import from CSV', election_station_csv_desc: 'One station per line: name,label', election_station_import_btn: 'Import all', election_station_count: '{n} stations:', election_station_preview: '{n} station(s) ready to import.',
       election_observers_title: 'Observers', election_observer_addr_ph: 'Observer wallet (ut1…)', election_observer_all_stations: 'All stations', election_observer_authorize_btn: 'Authorize', election_observer_count: '{n} observer(s):',
       election_dispute_target_label: 'Target result', election_dispute_no_results: 'No reported results to dispute yet.', election_dispute_reason_ph: 'Reason for dispute',
@@ -223,7 +224,7 @@
       disputes_filed_by: 'filed by {who}', disputes_has_evidence: 'has evidence', disputes_no_open: 'No open disputes.', disputes_status_upheld: 'upheld', disputes_status_rejected: 'rejected', disputes_status_open: 'open', disputes_workspace_note: 'Authorized observers and the organizing wallet can file and resolve disputes from the election workspace.',
       orgs_no_active: 'No active organizations visible yet.',
       evidence_sha256_desc: 'Each result may carry a SHA-256 hash of its tally sheet. Drop the original file below to prove it matches what was reported on-chain — the file never leaves your device.', evidence_verifying_label: 'Verifying against:', evidence_verifying_default: 'select a result below, or any hash', evidence_pick_target: 'Pick a result to compare against.', evidence_match_yes: '✓ Match — this file is exactly what was reported.', evidence_match_no: '✗ No match — this file differs from the recorded evidence.',
-      admin_scope_required: 'Platform-admin scope required. Connect an admin wallet.', admin_stat_orgs: 'Organizations', admin_stat_active_orgs: 'Active orgs', admin_stat_elections: 'Elections', admin_stat_org_fee: 'Org fee', admin_all_orgs: 'All organizations', admin_badge_waived: 'waived', admin_paid: 'paid {amount}',
+      admin_scope_required: 'Platform-operator access required. Connect a platform-operator wallet.', admin_stat_orgs: 'Organizations', admin_stat_active_orgs: 'Active orgs', admin_stat_elections: 'Elections', admin_stat_org_fee: 'Org fee', admin_all_orgs: 'All organizations', admin_badge_waived: 'waived', admin_paid: 'paid {amount}',
       select_election_prompt: 'Select an election.',
       tab_profile: 'My Profile',
       label_bio: 'Bio',
@@ -1934,6 +1935,7 @@
     v.innerHTML = electionPicker() + '<div id="dash-body"></div>';
     wirePickers();
     const d = App.state && App.state.detail;
+    if (d && d.election) subscribeLive(d.election.eid); // live-update the dashboard
     const body = document.getElementById('dash-body');
     if (!d) {
       const myOrg = App.role && App.role.org;
@@ -2045,16 +2047,26 @@
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
+    // Surface the viewer's authority over this election's org in the header:
+    // Owner badge for the creator, the org role for Administrators/Moderators,
+    // or a Platform-operator badge when acting via the break-glass override.
+    const myOrgRole = isOrgOwner ? 'owner'
+      : (((App.role.orgsMember || []).find((o) => o.addr === d.election.orgAddr) || {}).role
+        || (App.role.isAdmin ? 'operator' : null));
+    const roleBadgeHtml = myOrgRole === 'operator'
+      ? `<span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${esc(t('admin_heading'))}</span>`
+      : (myOrgRole ? orgRoleBadge(myOrgRole) : '');
     // Hydrate the inline working tally from the persisted detail.workTally and
     // decide whether this viewer may edit it (owner/admin/mod or platform admin).
     workEditable = canEditWorkTally(d.election.orgAddr);
     hydrateInlineFromWorkTally(d);
+    subscribeLive(d.election.eid); // live-update this election's screen
     const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
 
     v.innerHTML = `
       <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
       <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
-        <div><h2 class="text-xl font-semibold">${esc(d.election.name)}</h2>
+        <div><h2 class="text-xl font-semibold flex items-center gap-2 flex-wrap">${esc(d.election.name)}${roleBadgeHtml}</h2>
         <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
         ${methodSel}
       </div>
@@ -2067,6 +2079,10 @@
 
     const ws = document.getElementById('ws');
     if (myObs) ws.appendChild(observerPanel(d, myObs));
+    // Ballot-proof upload — observers attach their own station's proof; operators
+    // (Owner/Administrator/Moderator) can attach for any station via the picker.
+    if (myObs) ws.appendChild(ballotProofPanel(d, myObs.sid != null ? myObs.sid : null));
+    else if (isOrgOwner && (d.stations || []).length) ws.appendChild(ballotProofPanel(d, null));
     if (myObs || isOrgOwner) ws.appendChild(disputeFilePanel(d));
     if (isOrgOwner) { ws.appendChild(stationsPanel(d)); ws.appendChild(observersPanel(d)); ws.appendChild(resolvePanel(d)); }
     if (!myObs && !isOrgOwner) {
@@ -2123,6 +2139,157 @@
         // repeats), so it is safe to auto-retry an ambiguous relay timeout.
         runTx({ to: d.election.orgAddr, amount: 0, memo: QC.res(d.election.eid, sid, votes, tot, inv, evHash), idempotent: true },
           { loading: t('loading_submitting'), success: (results) => { toast(t('toast_submit_result')); refreshSoon(); offerSubmitPdf(d, sid, votes, tot, inv, evHash, results && results[0]); } });
+      };
+    });
+    return p;
+  }
+
+  // ───────────────────────── Ballot proof (import → validate → review → submit) ──
+  // Client-side document-sanity mirror of lib/attach.validateBallotProof. The
+  // server re-validates on submit (authoritative), so this only drives the
+  // review UI + gates the Submit button. Honest about scope: this checks the
+  // file is a real, legible image/PDF — it does NOT confirm the contents are a
+  // genuine ballot.
+  const BALLOT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  function imageNaturalSize(file) {
+    return new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url); };
+        img.onerror = () => { resolve(null); URL.revokeObjectURL(url); };
+        img.src = url;
+      } catch (_) { resolve(null); }
+    });
+  }
+  async function validateBallotFile(file) {
+    const reasons = [];
+    const isPdf = file.type === 'application/pdf';
+    if (!BALLOT_TYPES.includes(file.type)) reasons.push('Unsupported file type — use JPG, PNG, WebP, or PDF');
+    if (file.size < 8 * 1024) reasons.push('File looks too small to be a real ballot scan');
+    if (isPdf && file.size > 8 * 1024 * 1024) reasons.push('PDF too large (max 8 MB)');
+    if (!isPdf && file.type.startsWith('image/') && file.size > 2 * 1024 * 1024) reasons.push('Image too large (max 2 MB)');
+    const info = { kind: isPdf ? 'pdf' : 'image', bytes: file.size };
+    if (!isPdf && file.type.startsWith('image/') && !reasons.length) {
+      const dim = await imageNaturalSize(file);
+      if (dim && dim.w && dim.h) {
+        info.width = dim.w; info.height = dim.h;
+        if (Math.max(dim.w, dim.h) < 600) reasons.push('Scan resolution too low (needs a clearer photo)');
+      }
+    }
+    if (isPdf && !reasons.length) {
+      try {
+        const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+        if (!(head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46)) {
+          reasons.push('File contents do not match the declared type — is this a renamed file?');
+        }
+      } catch (_) { /* let the server be the authority */ }
+    }
+    return { ok: !reasons.length, reasons, info };
+  }
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => { try { resolve(String(r.result).split(',')[1] || ''); } catch (e) { reject(e); } };
+      r.onerror = () => reject(new Error('read failed'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  // A self-contained ballot-proof sub-panel for one station. `fixedSid` pins the
+  // station (observer's own); otherwise a station picker is shown (operators).
+  function ballotProofPanel(d, fixedSid) {
+    const proofs = (App.state && App.state.detail && App.state.detail.proofs) || {};
+    const stations = d.stations || [];
+    const pick = fixedSid != null
+      ? `<input type="hidden" id="bp-station" value="${fixedSid}">`
+      : `<label class="block text-xs mb-1 text-slate-500 dark:text-slate-400">${t('ballot_proof_station')}</label>
+         <select id="bp-station" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">
+           ${stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
+         </select>`;
+    const inner = `
+      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">${t('ballot_proof_desc')}</p>
+      ${pick}
+      <input id="bp-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="w-full mb-2 text-xs text-slate-600 dark:text-slate-400" data-ballot-proof="1">
+      <div id="bp-preview" class="mb-2"></div>
+      <p id="bp-status" class="text-xs mb-2" role="status"></p>
+      <p id="bp-fp" class="text-[0.65rem] text-slate-500 dark:text-slate-600 break-all font-mono mb-3"></p>
+      <div class="flex gap-2">
+        <button id="bp-replace" type="button" class="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-medium hidden">${t('ballot_proof_replace')}</button>
+        <button id="bp-submit" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed" disabled>${t('ballot_proof_submit')}</button>
+      </div>`;
+    const p = panel(t('ballot_proof_title'), inner);
+    setTimeout(() => {
+      const fileEl = p.querySelector('#bp-file');
+      const previewEl = p.querySelector('#bp-preview');
+      const statusEl = p.querySelector('#bp-status');
+      const fpEl = p.querySelector('#bp-fp');
+      const submitBtn = p.querySelector('#bp-submit');
+      const replaceBtn = p.querySelector('#bp-replace');
+      let current = null; // { file, mime, valid }
+
+      function showExisting() {
+        const sid = Number(p.querySelector('#bp-station').value);
+        const meta = proofs[sid] || proofs[String(sid)];
+        if (meta && meta.validated) { statusEl.className = 'text-xs mb-2 text-emerald-600 dark:text-emerald-300'; statusEl.textContent = t('ballot_proof_attached'); }
+        else if (meta && meta.present) { statusEl.className = 'text-xs mb-2 text-amber-600 dark:text-amber-300'; statusEl.textContent = t('ballot_proof_draft_saved'); }
+        else { statusEl.className = 'text-xs mb-2'; statusEl.textContent = ''; }
+      }
+      showExisting();
+      const stationSel = p.querySelector('#bp-station');
+      if (stationSel && stationSel.tagName === 'SELECT') stationSel.onchange = () => { current = null; previewEl.innerHTML = ''; fpEl.textContent = ''; submitBtn.disabled = true; showExisting(); };
+
+      fileEl.onchange = async (e) => {
+        const f = e.target.files[0];
+        previewEl.innerHTML = ''; fpEl.textContent = ''; submitBtn.disabled = true; current = null;
+        if (!f) { statusEl.textContent = ''; replaceBtn.classList.add('hidden'); return; }
+        replaceBtn.classList.remove('hidden');
+        // Preview
+        try {
+          const url = URL.createObjectURL(f);
+          if (f.type === 'application/pdf') {
+            previewEl.innerHTML = `<embed src="${url}" type="application/pdf" class="w-full h-48 rounded border border-slate-200 dark:border-slate-800">`;
+          } else {
+            previewEl.innerHTML = `<img src="${url}" alt="ballot preview" class="max-h-48 rounded border border-slate-200 dark:border-slate-800">`;
+          }
+        } catch (_) {}
+        // Fingerprint (same local SHA-256 as the on-chain evidence hash)
+        try { fpEl.textContent = t('ballot_proof_fingerprint') + ': ' + (await sha256File(f)); } catch (_) {}
+        // Validate
+        const res = await validateBallotFile(f);
+        current = { file: f, mime: f.type, valid: res.ok };
+        if (res.ok) {
+          statusEl.className = 'text-xs mb-2 text-emerald-600 dark:text-emerald-300';
+          statusEl.textContent = t('ballot_proof_valid');
+          submitBtn.disabled = false;
+        } else {
+          statusEl.className = 'text-xs mb-2 text-rose-600 dark:text-rose-300';
+          statusEl.textContent = t('ballot_proof_invalid') + ' ' + res.reasons.join('; ');
+          submitBtn.disabled = true;
+        }
+      };
+
+      replaceBtn.onclick = () => { fileEl.value = ''; fileEl.click(); };
+
+      submitBtn.onclick = async () => {
+        if (!current || !current.valid) return toast(t('ballot_proof_pick_first'), 'warn');
+        const sid = Number(p.querySelector('#bp-station').value);
+        submitBtn.disabled = true;
+        try {
+          const data_base64 = await fileToBase64(current.file);
+          const r = await fetch('/api/elections/' + encodeURIComponent(d.election.eid) + '/ballot-proof/' + encodeURIComponent(sid), {
+            method: 'PUT',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ mime: current.mime, data_base64: data_base64, status: 'submitted' }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('ballot_proof_submitted'));
+          refreshSoon();
+        } catch (err) {
+          submitBtn.disabled = false;
+          handleTxFailure(err, { onRetry: () => submitBtn.onclick() });
+        }
       };
     });
     return p;
@@ -2787,7 +2954,8 @@
     try { data = await api('/__quickcount/admin?viewer=' + encodeURIComponent(App.wallet.address)); }
     catch (e) { v.innerHTML = '<p class="text-rose-400 text-sm">' + esc(e.message) + '</p>'; return; }
     const s = data.stats;
-    v.innerHTML = `<h2 class="text-lg font-semibold mb-3">${t('admin_heading')}</h2>
+    v.innerHTML = `<h2 class="text-lg font-semibold mb-1">${t('admin_heading')}</h2>
+      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">${t('admin_intro')}</p>
       ${chainSyncBanner()}
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         ${[[t('admin_stat_orgs'), s.orgs], [t('admin_stat_active_orgs'), s.activeOrgs], [t('admin_stat_elections'), s.elections], [t('admin_stat_org_fee'), s.orgFee]].map(([k, val]) =>
@@ -3079,6 +3247,26 @@
       const r = currentRoute();
       if (tabs.includes(r.tab)) refresh();
     }, 6000);
+  }
+
+  // ───────────────────────── Live updates (SSE) ─────────────────────────
+  // Push-based companion to the timed refresh above: subscribe to the active
+  // election's public stream and refresh() the instant the server signals a
+  // change (a new count, a vote-resolved dispute, a saved tally, a finalized
+  // ballot proof). The 6s timer stays as the fallback for no-EventSource /
+  // dropped-stream cases; isEditingField() still guards against focus theft.
+  let liveEs = null, liveEid = null;
+  function subscribeLive(eid) {
+    if (typeof EventSource === 'undefined') return;
+    if (eid === liveEid && liveEs) return;
+    if (liveEs) { try { liveEs.close(); } catch (_) {} liveEs = null; }
+    liveEid = eid || null;
+    if (!eid) return;
+    try {
+      liveEs = new EventSource('/api/public/elections/' + encodeURIComponent(eid) + '/stream');
+      liveEs.addEventListener('update', () => { if (!isEditingField()) refresh(); });
+      liveEs.onerror = () => { /* browser auto-reconnects; the timer covers gaps */ };
+    } catch (_) { liveEs = null; }
   }
 
   // ───────────────────────── Theme toggle ─────────────────────────

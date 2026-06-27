@@ -281,6 +281,21 @@
       "name": "Mock submit surface is enabled so submissions ingest locally",
       "path": "/__mock/enabled",
       "expectText": "\"enabled\":true"
+    },
+    {
+      "name": "Public election detail exposes the validated ballot-proof badge",
+      "path": "/api/public/elections/demo-election",
+      "expectText": "\"validated\":true"
+    },
+    {
+      "name": "Public dashboard shows the ballot-proof validated badge",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectText": "ballot proof"
+    },
+    {
+      "name": "Election workspace renders the ballot-proof upload panel for an organizer",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
+      "expectSelector": "[data-ballot-proof]"
     }
   ]
 }
