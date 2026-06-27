@@ -60,16 +60,34 @@
     },
     {
       "key": "APP_PUBKEY",
-      "description": "Application public key",
-      "required": true,
-      "private": false
+      "description": "The application's own on-chain wallet PUBLIC address (ut1…). Public identifier — safe to expose. Defaults to an obviously-fake placeholder so the deploy never blocks; set the real address yourself in Settings → Secrets before relying on app-signed operations.",
+      "required": false,
+      "private": false,
+      "default": "ut1appquickcount000000000000000000000000000",
+      "staging_default": "ut1appquickcount000000000000000000000000000"
     },
     {
       "key": "APP_SECRET_KEY",
-      "description": "Application secret key",
-      "required": true,
+      "description": "The application's on-chain wallet SIGNING key (secret). Private: encrypted at rest and never propagated into staging. No server-side signing path uses it yet — it is declared so you can store the real key in Settings → Secrets now and reserve it for future app-signed operations. Staging gets an obviously-fake dummy; never commit a real key here.",
+      "required": false,
       "private": true,
-      "staging_default": ""
+      "default": "",
+      "staging_default": "staging-dummy-not-a-real-key"
+    },
+    {
+      "key": "MOCK_TX_FLOW",
+      "description": "Self-contained local-ingest ('mock ledger') switch. 'false' (production default) routes every submission through the REAL chain — the hosted bridge signs/broadcasts and the indexer reads transactions back. Staging keeps 'true' so the preview runs the seeded demo without a real chain or wallet. Non-private feature flag.",
+      "required": false,
+      "private": false,
+      "default": "false",
+      "staging_default": "true"
+    },
+    {
+      "key": "TIMER_DURATION_MS",
+      "description": "Cadence (milliseconds) for the background chain poll and the client auto-refresh. Non-private tuning value. Defaults to 6000; values below 1000 are floored to 1000.",
+      "required": false,
+      "private": false,
+      "default": "6000"
     }
   ],
   "tests": [
