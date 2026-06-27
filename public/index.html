@@ -3074,11 +3074,14 @@
     // admin, user) the re-render re-runs those fetches, so a still-syncing
     // registration appears without a manual reload.
     const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
+    // Cadence comes from server config (TIMER_DURATION_MS), floored at 1000ms so
+    // a stray small value can't spin the refresh loop; falls back to 6000ms.
+    const cadence = Math.max(1000, Number(App.cfg && App.cfg.timerDurationMs) || 6000);
     App.refreshTimer = setInterval(() => {
       if (isEditingField()) return; // don't yank focus out of a field mid-type
       const r = currentRoute();
       if (tabs.includes(r.tab)) refresh();
-    }, 6000);
+    }, cadence);
   }
 
   // ───────────────────────── Theme toggle ─────────────────────────

@@ -58,6 +58,17 @@ const CHAIN_ID = process.env.CHAIN_ID || 'usernode';
 const EXPLORER_API_BASE = '/explorer-api';
 const TREASURY_ADDR = process.env.TREASURY_ADDR || 'ut1treasuryquickcount00000000000000000000';
 const ORG_FEE = Number(process.env.ORG_FEE) || 100;
+// The application's own on-chain identity. APP_PUBKEY is a public ut1… address
+// (safe to surface); APP_SECRET_KEY is signing material — read defensively and
+// NEVER logged or returned by any endpoint. No server-side signing path uses
+// the secret yet; it is declared so operators can populate it in Settings →
+// Secrets now and it is reserved for future app-signed operations.
+const APP_PUBKEY = process.env.APP_PUBKEY || '';
+const APP_SECRET_KEY = process.env.APP_SECRET_KEY || '';
+// Poll / auto-refresh cadence (ms). Floored at 1000 so a stray small value
+// can't hammer the chain read source or the client. Surfaced to the SPA via
+// /__quickcount/config so the browser auto-refresh uses the same interval.
+const TIMER_DURATION_MS = Math.max(1000, Number(process.env.TIMER_DURATION_MS) || 6000);
 
 // Demo personas (local-dev persona switcher + admin).
 const DEMO = {
@@ -403,6 +414,11 @@ app.get('/__quickcount/config', (_req, res) => {
     // confirm optimistically rather than dead-end on a 20s timeout. In mock mode
     // there is nothing to poll, so report configured (the banner is mockMode-driven).
     chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: MOCK_TX_FLOW ? true : source.configured,
+    // App's own on-chain identity (public address only — the secret is never
+    // surfaced). null when unset so the client can tell it apart from a value.
+    appPubkey: APP_PUBKEY || null,
+    // Cadence the SPA auto-refresh should use (ms); already floored at 1000.
+    timerDurationMs: TIMER_DURATION_MS,
   });
 });
 
@@ -1223,7 +1239,9 @@ async function start() {
       'now shows a persistent "on-chain sync not configured" banner via chainConfigured=false.'
     );
   }
-  const interval = LOCAL_DEV ? 2000 : 4000;
+  // Local-dev keeps a snappy 2s loop; every other environment uses the
+  // configurable TIMER_DURATION_MS cadence (default 6s, floored at 1000ms).
+  const interval = LOCAL_DEV ? 2000 : TIMER_DURATION_MS;
   setInterval(() => pollOnce().catch((e) => console.error('pollOnce failed:', e.message)), interval);
   app.listen(PORT, () => console.log(
     `Quick Count listening on :${PORT}` + (LOCAL_DEV ? ' (local-dev)' : '') + (IS_STAGING ? ' (staging)' : '') +

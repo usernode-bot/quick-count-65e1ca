@@ -52,6 +52,23 @@ See `.env.example`. Key vars: `DATABASE_URL` (optional — in-memory log if
 unset), `NODE_RPC_URL` (real chain; empty in local-dev), `TREASURY_ADDR`,
 `ORG_FEE`, `ADMIN_ADDRS`, and `APP_MODE=local-dev` / `--local-dev`.
 
+On-chain mode and app identity:
+
+- `MOCK_TX_FLOW` — self-contained local-ingest switch. `false` (production
+  default) is **real on-chain mode**: the hosted bridge signs/broadcasts and
+  the indexer reads transactions back. `true` records submissions straight
+  into the event log with no chain — local-dev and the staging preview run
+  with it on (`dapp.json` sets `staging_default: "true"`).
+- `APP_PUBKEY` — the application's own on-chain wallet **public** address
+  (`ut1…`). Public identifier; ships with an obviously-fake placeholder so the
+  deploy never blocks. Set the real address in Settings → Secrets.
+- `APP_SECRET_KEY` — the app's on-chain **signing key** (private in
+  `dapp.json`: encrypted at rest, isolated from staging). Read defensively and
+  never logged; no server-side signing path uses it yet. Set the real key
+  yourself in Settings → Secrets.
+- `TIMER_DURATION_MS` — cadence (ms) for the background chain poll and the
+  client auto-refresh. Defaults to `6000`; values below `1000` are floored.
+
 ## Layout
 
 - `server.js` — Express server, indexer poller, `/__quickcount/*` read API,
