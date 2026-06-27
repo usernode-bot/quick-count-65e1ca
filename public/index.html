@@ -65,6 +65,7 @@
   <script src="/usernode-usernames.js"></script>
   <script src="/usernode-bridge.js"></script>
   <script src="/csv-export.js"></script>
+  <script src="/inline-entry.js"></script>
   <!-- Evidence PDF: jsPDF + a QR encoder (CDN). Optional — the generator
        degrades gracefully when these are unreachable (offline). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -77,6 +78,8 @@
        Must load AFTER the hosted bridge tag above. -->
   <script src="/usernode-bridge-classify.js"></script>
   <script src="/usernode-resilience.js"></script>
+  <!-- Local-first election-creation queue (pure helpers; DOM/timer wiring below). -->
+  <script src="/election-queue.js"></script>
   <style>
     .tab-on { background:#4f46e5; color:#fff; }
     .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
@@ -91,6 +94,13 @@
       <span id="staging-badge" class="hidden badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
+        <!-- Inline offline badge: shown only when the local-first election queue
+             is parked offline. Lives in the status cluster (next to the
+             identity/wallet controls) instead of floating over the nav tabs. -->
+        <span id="qc-offline-badge" class="hidden items-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500"></span>
+          <span id="qc-offline-badge-msg"></span>
+        </span>
         <button id="refresh-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Refresh">↻</button>
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
         <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none"></select>
@@ -174,6 +184,7 @@
       verify_fingerprint_label: 'Fingerprint', verify_status_pass: 'PASS', verify_status_fail: 'FAIL', verify_status_skip: 'SKIPPED', verify_error: 'Could not verify this file',
       method_latest: 'Latest submission', method_first: 'First submission', method_consensus: 'Consensus', method_median: 'Median', method_verified: 'Verified only',
       dashboard_heading: 'Dashboard', dashboard_select_election: 'Select an election to view live results.', dashboard_export_csv: 'Export CSV', dashboard_export_json: 'Export JSON', dashboard_by_station: 'By station', dashboard_no_stations: 'No candidates.', dashboard_last_submission: 'Last submission', dashboard_auto_refreshing: 'auto-refreshing', dashboard_no_submissions: 'No submissions yet', dashboard_stations_reported: 'stations reported', dashboard_votes: 'votes',
+      dashboard_working_tally: 'Working tally', dashboard_working_tally_desc: 'Entered by organizers in the workspace — separate from official results.', dashboard_working_tally_reported: '{reported} of {total} stations entered',
       elections_heading: 'Elections', elections_new: '+ New election', elections_no_elections: 'No elections yet.', elections_open_workspace: 'Open election workspace →',
       orgs_heading: 'Organizations', orgs_active_orgs: 'Active organizations', orgs_register_heading: 'Register your organization', orgs_register_desc: 'Registration pays a one-time fee of {fee} to the platform treasury. Until it confirms, your elections stay hidden.', orgs_register_button: 'Register & pay fee', orgs_pay_fee: 'Pay registration fee', orgs_name_placeholder: 'Organization name', orgs_jur_placeholder: 'Jurisdiction (optional)', orgs_active_badge: 'Active', orgs_pending_badge: 'Pending — fee not paid', orgs_connect_first: 'Connect your wallet first.', orgs_manage_elections: 'Your elections are live. Manage them under Elections.',
       orgs_owned_heading: 'Owned', orgs_member_heading: 'Member of', orgs_none_member: 'You are not a member of any other organization yet.', orgs_no_active: 'No active organizations yet.',
@@ -193,9 +204,10 @@
       notice_wallet_unreachable: "Couldn't reach the wallet service. Your entries were kept.", notice_action_failed: "That didn't go through. Your entries were kept.", notice_connecting: 'Connecting to your wallet…', action_try_again: 'Try again', partial_candidates: 'Election published; {done} of {total} candidates added.', partial_stations: '{done} of {total} stations imported.', partial_generic: '{done} of {total} steps completed.',
       loading_submitting: 'Submitting result…', loading_adding_station: 'Adding station…', loading_authorizing: 'Authorizing observer…', loading_filing: 'Filing dispute…', loading_resolving: 'Resolving…', loading_registering: 'Registering & paying fee…', loading_paying: 'Paying fee…', loading_waiving: 'Waiving fee…', loading_importing: 'Importing station',
       loading_creating_election: 'Creating election…', loading_adding_candidate: 'Adding candidate {i}/{n}…', loading_importing_station: 'Importing station {i}/{n}…',
+      queue_saved_locally: 'Saved locally — retrying…', queue_saved_locally_n: 'Saved locally — retrying… ({n})', queue_saved_offline: 'Saved Locally (Offline)', queue_demo_label: 'Staging demo — pending election',
       loading_confirming: 'Confirming on-chain…', confirming_onchain: 'Confirming on-chain…', confirming_generic: 'Confirming submission', pending_demo_label: 'Staging demo — pending submission', notice_confirm_timeout: 'Submitted — still confirming on the network. It will appear once the chain includes it.',
       timeago_s: '{n}s ago', timeago_m: '{n}m ago', timeago_h: '{n}h ago', timeago_d: '{n}d ago',
-      station_awaiting: 'Awaiting result', station_col_name: 'Station', station_col_updated: 'Updated', station_badge_invalidated: 'invalidated', station_badge_disputed: 'disputed', station_badge_review: 'review', station_badge_reports: '{n} reports',
+      station_awaiting: 'Awaiting result', station_col_name: 'Station', station_col_updated: 'Updated', station_badge_invalidated: 'invalidated', station_badge_disputed: 'disputed', station_badge_review: 'review', station_badge_reports: '{n} reports', inline_save_btn: 'Save result', inline_done_badge: 'Counted', inline_vote_label: 'Votes for {name}', inline_vote_suffix: 'votes',
       margin_needs_review: '⚠ Needs review', margin_stable_lead: '✓ Stable lead', margin_lead_pct: 'lead margin {lead}%', margin_uncertainty: 'uncertainty ±{pct}%', margin_disagreement_note: 'disagreements or disputes could affect the outcome.',
       elections_connect_org: 'Connect an organization wallet to create elections. Register one under the {orgs_link} tab.', elections_pending_org: 'Your organization is pending — pay the registration fee under {orgs_link} to publish elections.',
       elections_card_stations: 'stations', elections_card_candidates: 'candidates', elections_card_disputes: 'disputes', elections_none_published: 'No elections published yet.', elections_pending_suffix: '(pending)',
@@ -252,6 +264,7 @@
       tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa', tab_admin: 'Admin',
       method_latest: 'Laporan terbaru', method_first: 'Laporan pertama', method_consensus: 'Konsensus', method_median: 'Median', method_verified: 'Terverifikasi saja',
       dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
+      dashboard_working_tally: 'Hitungan kerja', dashboard_working_tally_desc: 'Dimasukkan oleh penyelenggara di ruang kerja — terpisah dari hasil resmi.', dashboard_working_tally_reported: '{reported} dari {total} TPS dimasukkan',
       elections_heading: 'Pemilihan', elections_new: '+ Pemilihan baru', elections_no_elections: 'Belum ada pemilihan.', elections_open_workspace: 'Buka ruang kerja pemilihan →',
       orgs_heading: 'Organisasi', orgs_active_orgs: 'Organisasi aktif', orgs_register_heading: 'Daftarkan organisasi Anda', orgs_register_desc: 'Pendaftaran membayar biaya satu kali sebesar {fee} ke perbendaharaan platform. Hingga dikonfirmasi, pemilihan Anda disembunyikan.', orgs_register_button: 'Daftar & bayar biaya', orgs_pay_fee: 'Bayar biaya pendaftaran', orgs_name_placeholder: 'Nama organisasi', orgs_jur_placeholder: 'Yurisdiksi (opsional)', orgs_active_badge: 'Aktif', orgs_pending_badge: 'Menunggu — biaya belum dibayar', orgs_connect_first: 'Hubungkan dompet Anda terlebih dahulu.', orgs_manage_elections: 'Pemilihan Anda aktif. Kelola di tab Pemilihan.',
       evidence_heading: 'Bukti', evidence_upload_label: 'Bukti (lembar penghitungan) — di-hash secara lokal, file tidak diunggah', evidence_submit: 'Verifikasi file terhadap ini', evidence_no_evidence: 'Tidak ada hash bukti yang tercatat untuk pemilihan ini.',
@@ -260,8 +273,9 @@
       toast_election_published: 'Pemilihan diterbitkan ✓', toast_submit_result: 'Hasil dikirim ✓', toast_station_added: 'TPS ditambahkan ✓', toast_observer_authorized: 'Pengamat diotorisasi ✓', toast_dispute_filed: 'Sengketa diajukan ✓', toast_dispute_upheld: 'Sengketa diterima ✓', toast_dispute_rejected: 'Sengketa ditolak ✓', toast_org_registered: 'Organisasi terdaftar ✓', toast_fee_paid: 'Biaya dibayar ✓', toast_fee_waived: 'Biaya dibebaskan ✓', toast_failed: 'Gagal:', toast_wallet_unavailable: 'Jembatan dompet tidak tersedia — buka di dalam Usernode.', toast_no_wallet: 'Tidak ada alamat dompet yang tertaut.', toast_add_candidate: 'Tambahkan nama dan setidaknya satu kandidat.', toast_nothing_to_import: 'Tidak ada yang diimpor', toast_enter_reason: 'Masukkan alasan', toast_enter_org_name: 'Masukkan nama organisasi', toast_enter_station_name: 'Masukkan nama TPS', toast_enter_observer_addr: 'Masukkan alamat pengamat',
       loading_submitting: 'Mengirim hasil…', loading_adding_station: 'Menambahkan TPS…', loading_authorizing: 'Mengotorisasi pengamat…', loading_filing: 'Mengajukan sengketa…', loading_resolving: 'Menyelesaikan…', loading_registering: 'Mendaftar & membayar biaya…', loading_paying: 'Membayar biaya…', loading_waiving: 'Membebaskan biaya…', loading_importing: 'Mengimpor TPS',
       loading_creating_election: 'Membuat pemilihan…', loading_adding_candidate: 'Menambahkan kandidat {i}/{n}…', loading_importing_station: 'Mengimpor TPS {i}/{n}…',
+      queue_saved_locally: 'Disimpan lokal — mencoba lagi…', queue_saved_locally_n: 'Disimpan lokal — mencoba lagi… ({n})', queue_saved_offline: 'Disimpan Lokal (Luring)', queue_demo_label: 'Demo staging — pemilihan tertunda',
       timeago_s: '{n}dtk lalu', timeago_m: '{n}mnt lalu', timeago_h: '{n}j lalu', timeago_d: '{n}h lalu',
-      station_awaiting: 'Menunggu hasil', station_col_name: 'TPS', station_col_updated: 'Diperbarui', station_badge_invalidated: 'dibatalkan', station_badge_disputed: 'disengketakan', station_badge_review: 'ditinjau', station_badge_reports: '{n} laporan',
+      station_awaiting: 'Menunggu hasil', station_col_name: 'TPS', station_col_updated: 'Diperbarui', station_badge_invalidated: 'dibatalkan', station_badge_disputed: 'disengketakan', station_badge_review: 'ditinjau', station_badge_reports: '{n} laporan', inline_save_btn: 'Simpan Hasil', inline_done_badge: 'Selesai Dihitung', inline_vote_label: 'Jumlah Suara {name}', inline_vote_suffix: 'Suara',
       margin_needs_review: '⚠ Perlu tinjauan', margin_stable_lead: '✓ Unggul stabil', margin_lead_pct: 'unggul {lead}%', margin_uncertainty: 'ketidakpastian ±{pct}%', margin_disagreement_note: 'ketidaksepakatan atau sengketa dapat mempengaruhi hasilnya.',
       elections_connect_org: 'Hubungkan dompet organisasi untuk membuat pemilihan. Daftarkan di tab {orgs_link}.', elections_pending_org: 'Organisasi Anda menunggu — bayar biaya pendaftaran di {orgs_link} untuk menerbitkan pemilihan.',
       elections_card_stations: 'TPS', elections_card_candidates: 'kandidat', elections_card_disputes: 'sengketa', elections_none_published: 'Belum ada pemilihan yang diterbitkan.', elections_pending_suffix: '(menunggu)',
@@ -326,8 +340,9 @@
       toast_election_published: '选举已发布 ✓', toast_submit_result: '结果已提交 ✓', toast_station_added: '投票站已添加 ✓', toast_observer_authorized: '观察员已授权 ✓', toast_dispute_filed: '争议已提交 ✓', toast_dispute_upheld: '争议已支持 ✓', toast_dispute_rejected: '争议已驳回 ✓', toast_org_registered: '机构已注册 ✓', toast_fee_paid: '费用已缴纳 ✓', toast_fee_waived: '费用已免除 ✓', toast_failed: '失败：', toast_wallet_unavailable: '钱包桥接不可用 — 请在 Usernode 内打开。', toast_no_wallet: '未关联钱包地址。', toast_add_candidate: '请添加名称和至少一位候选人。', toast_nothing_to_import: '无可导入内容', toast_enter_reason: '请输入原因', toast_enter_org_name: '请输入机构名称', toast_enter_station_name: '请输入投票站名称', toast_enter_observer_addr: '请输入观察员地址',
       loading_submitting: '正在提交结果…', loading_adding_station: '正在添加投票站…', loading_authorizing: '正在授权观察员…', loading_filing: '正在提交争议…', loading_resolving: '正在处理…', loading_registering: '正在注册并缴费…', loading_paying: '正在缴费…', loading_waiving: '正在免除费用…', loading_importing: '正在导入投票站',
       loading_creating_election: '正在创建选举…', loading_adding_candidate: '正在添加候选人 {i}/{n}…', loading_importing_station: '正在导入投票站 {i}/{n}…',
+      queue_saved_locally: '已本地保存 — 正在重试…', queue_saved_locally_n: '已本地保存 — 正在重试…（{n}）', queue_saved_offline: '已本地保存（离线）', queue_demo_label: '预发布演示 — 待处理选举',
       timeago_s: '{n}秒前', timeago_m: '{n}分钟前', timeago_h: '{n}小时前', timeago_d: '{n}天前',
-      station_awaiting: '等待结果', station_col_name: '投票站', station_col_updated: '更新时间', station_badge_invalidated: '已作废', station_badge_disputed: '有争议', station_badge_review: '待审核', station_badge_reports: '{n} 份报告',
+      station_awaiting: '等待结果', station_col_name: '投票站', station_col_updated: '更新时间', station_badge_invalidated: '已作废', station_badge_disputed: '有争议', station_badge_review: '待审核', station_badge_reports: '{n} 份报告', inline_save_btn: '保存结果', inline_done_badge: '已统计', inline_vote_label: '{name} 得票数', inline_vote_suffix: '票',
       margin_needs_review: '⚠ 需要审核', margin_stable_lead: '✓ 领先稳定', margin_lead_pct: '领先 {lead}%', margin_uncertainty: '不确定性 ±{pct}%', margin_disagreement_note: '分歧或争议可能影响结果。',
       elections_connect_org: '连接组织钱包以创建选举。请在{orgs_link}标签页下注册。', elections_pending_org: '您的组织正在审核中 — 请在{orgs_link}下支付注册费以发布选举。',
       elections_card_stations: '个投票站', elections_card_candidates: '名候选人', elections_card_disputes: '项争议', elections_none_published: '暂无已发布的选举。', elections_pending_suffix: '（待审）',
@@ -392,9 +407,10 @@
       toast_election_published: 'Elección publicada ✓', toast_submit_result: 'Resultado enviado ✓', toast_station_added: 'Mesa añadida ✓', toast_observer_authorized: 'Observador autorizado ✓', toast_dispute_filed: 'Disputa presentada ✓', toast_dispute_upheld: 'Disputa aceptada ✓', toast_dispute_rejected: 'Disputa rechazada ✓', toast_org_registered: 'Organización registrada ✓', toast_fee_paid: 'Cuota pagada ✓', toast_fee_waived: 'Cuota eximida ✓', toast_failed: 'Error:', toast_wallet_unavailable: 'Puente de billetera no disponible — ábrelo dentro de Usernode.', toast_no_wallet: 'No hay dirección de billetera vinculada.', toast_add_candidate: 'Añade un nombre y al menos un candidato.', toast_nothing_to_import: 'Nada para importar', toast_enter_reason: 'Introduce un motivo', toast_enter_org_name: 'Introduce el nombre de la organización', toast_enter_station_name: 'Introduce el nombre de la mesa', toast_enter_observer_addr: 'Introduce la dirección del observador',
       loading_submitting: 'Enviando resultado…', loading_adding_station: 'Añadiendo mesa…', loading_authorizing: 'Autorizando observador…', loading_filing: 'Presentando disputa…', loading_resolving: 'Resolviendo…', loading_registering: 'Registrando y pagando cuota…', loading_paying: 'Pagando cuota…', loading_waiving: 'Eximiendo cuota…', loading_importing: 'Importando mesa',
       loading_creating_election: 'Creando elección…', loading_adding_candidate: 'Añadiendo candidato {i}/{n}…', loading_importing_station: 'Importando mesa {i}/{n}…',
+      queue_saved_locally: 'Guardado localmente — reintentando…', queue_saved_locally_n: 'Guardado localmente — reintentando… ({n})', queue_saved_offline: 'Guardado localmente (sin conexión)', queue_demo_label: 'Demo de staging — elección pendiente',
       loading_confirming: 'Confirmando en la cadena…', confirming_onchain: 'Confirmando en la cadena…', confirming_generic: 'Confirmando envío', pending_demo_label: 'Demo de staging — envío pendiente', notice_confirm_timeout: 'Enviado — aún confirmando en la red. Aparecerá cuando la cadena lo incluya.',
       timeago_s: 'hace {n}s', timeago_m: 'hace {n}min', timeago_h: 'hace {n}h', timeago_d: 'hace {n}d',
-      station_awaiting: 'Esperando resultado', station_col_name: 'Mesa', station_col_updated: 'Actualizado', station_badge_invalidated: 'invalidada', station_badge_disputed: 'disputada', station_badge_review: 'revisión', station_badge_reports: '{n} informes',
+      station_awaiting: 'Esperando resultado', station_col_name: 'Mesa', station_col_updated: 'Actualizado', station_badge_invalidated: 'invalidada', station_badge_disputed: 'disputada', station_badge_review: 'revisión', station_badge_reports: '{n} informes', inline_save_btn: 'Guardar resultado', inline_done_badge: 'Conteo completo', inline_vote_label: 'Votos de {name}', inline_vote_suffix: 'votos',
       margin_needs_review: '⚠ Requiere revisión', margin_stable_lead: '✓ Ventaja estable', margin_lead_pct: 'ventaja {lead}%', margin_uncertainty: 'incertidumbre ±{pct}%', margin_disagreement_note: 'los desacuerdos o disputas podrían afectar el resultado.',
       elections_connect_org: 'Conecta un monedero de organización para crear elecciones. Regístralo bajo la pestaña {orgs_link}.', elections_pending_org: 'Tu organización está pendiente — paga la cuota de registro en {orgs_link} para publicar elecciones.',
       elections_card_stations: 'mesas', elections_card_candidates: 'candidatos', elections_card_disputes: 'disputas', elections_none_published: 'No hay elecciones publicadas aún.', elections_pending_suffix: '(pendiente)',
@@ -459,8 +475,9 @@
       toast_election_published: 'चुनाव प्रकाशित ✓', toast_submit_result: 'परिणाम सबमिट हुआ ✓', toast_station_added: 'बूथ जोड़ा गया ✓', toast_observer_authorized: 'पर्यवेक्षक अधिकृत ✓', toast_dispute_filed: 'विवाद दायर ✓', toast_dispute_upheld: 'विवाद स्वीकृत ✓', toast_dispute_rejected: 'विवाद अस्वीकृत ✓', toast_org_registered: 'संगठन पंजीकृत ✓', toast_fee_paid: 'शुल्क दिया गया ✓', toast_fee_waived: 'शुल्क माफ़ ✓', toast_failed: 'विफल:', toast_wallet_unavailable: 'वॉलेट ब्रिज उपलब्ध नहीं — Usernode के अंदर खोलें।', toast_no_wallet: 'कोई वॉलेट पता लिंक नहीं है।', toast_add_candidate: 'कम से कम एक उम्मीदवार के साथ नाम जोड़ें।', toast_nothing_to_import: 'आयात करने के लिए कुछ नहीं', toast_enter_reason: 'कारण दर्ज करें', toast_enter_org_name: 'संगठन का नाम दर्ज करें', toast_enter_station_name: 'बूथ का नाम दर्ज करें', toast_enter_observer_addr: 'पर्यवेक्षक का पता दर्ज करें',
       loading_submitting: 'परिणाम सबमिट हो रहा है…', loading_adding_station: 'बूथ जोड़ा जा रहा है…', loading_authorizing: 'पर्यवेक्षक अधिकृत हो रहा है…', loading_filing: 'विवाद दायर हो रहा है…', loading_resolving: 'हल किया जा रहा है…', loading_registering: 'पंजीकरण और शुल्क भुगतान हो रहा है…', loading_paying: 'शुल्क दिया जा रहा है…', loading_waiving: 'शुल्क माफ़ हो रहा है…', loading_importing: 'बूथ आयात हो रहा है',
       loading_creating_election: 'चुनाव बनाया जा रहा है…', loading_adding_candidate: 'उम्मीदवार {i}/{n} जोड़ा जा रहा है…', loading_importing_station: 'बूथ {i}/{n} आयात हो रहा है…',
+      queue_saved_locally: 'स्थानीय रूप से सहेजा गया — पुनः प्रयास…', queue_saved_locally_n: 'स्थानीय रूप से सहेजा गया — पुनः प्रयास… ({n})', queue_saved_offline: 'स्थानीय रूप से सहेजा गया (ऑफ़लाइन)', queue_demo_label: 'स्टेजिंग डेमो — लंबित चुनाव',
       timeago_s: '{n}से. पहले', timeago_m: '{n}मि. पहले', timeago_h: '{n}घ. पहले', timeago_d: '{n}दि. पहले',
-      station_awaiting: 'परिणाम की प्रतीक्षा', station_col_name: 'बूथ', station_col_updated: 'अपडेट', station_badge_invalidated: 'अमान्य', station_badge_disputed: 'विवादित', station_badge_review: 'समीक्षा', station_badge_reports: '{n} रिपोर्ट',
+      station_awaiting: 'परिणाम की प्रतीक्षा', station_col_name: 'बूथ', station_col_updated: 'अपडेट', station_badge_invalidated: 'अमान्य', station_badge_disputed: 'विवादित', station_badge_review: 'समीक्षा', station_badge_reports: '{n} रिपोर्ट', inline_save_btn: 'परिणाम सहेजें', inline_done_badge: 'गणना पूर्ण', inline_vote_label: '{name} के वोट', inline_vote_suffix: 'वोट',
       margin_needs_review: '⚠ समीक्षा आवश्यक', margin_stable_lead: '✓ स्थिर बढ़त', margin_lead_pct: 'बढ़त {lead}%', margin_uncertainty: 'अनिश्चितता ±{pct}%', margin_disagreement_note: 'असहमति या विवाद परिणाम को प्रभावित कर सकते हैं।',
       elections_connect_org: 'चुनाव बनाने के लिए संगठन वॉलेट जोड़ें। {orgs_link} टैब में पंजीकरण करें।', elections_pending_org: 'आपका संगठन लंबित है — चुनाव प्रकाशित करने के लिए {orgs_link} में पंजीकरण शुल्क दें।',
       elections_card_stations: 'बूथ', elections_card_candidates: 'उम्मीदवार', elections_card_disputes: 'विवाद', elections_none_published: 'अभी तक कोई चुनाव प्रकाशित नहीं हुआ।', elections_pending_suffix: '(लंबित)',
@@ -525,8 +542,9 @@
       toast_election_published: 'تم نشر الانتخابات ✓', toast_submit_result: 'تم تقديم النتيجة ✓', toast_station_added: 'تمت إضافة مركز الاقتراع ✓', toast_observer_authorized: 'تم توثيق المراقب ✓', toast_dispute_filed: 'تم تقديم النزاع ✓', toast_dispute_upheld: 'تم قبول النزاع ✓', toast_dispute_rejected: 'تم رفض النزاع ✓', toast_org_registered: 'تم تسجيل المنظمة ✓', toast_fee_paid: 'تم دفع الرسوم ✓', toast_fee_waived: 'تم الإعفاء من الرسوم ✓', toast_failed: 'فشل:', toast_wallet_unavailable: 'جسر المحفظة غير متاح — افتحه داخل Usernode.', toast_no_wallet: 'لا يوجد عنوان محفظة مرتبط.', toast_add_candidate: 'أضف اسماً ومرشحاً واحداً على الأقل.', toast_nothing_to_import: 'لا شيء للاستيراد', toast_enter_reason: 'أدخل سبباً', toast_enter_org_name: 'أدخل اسم المنظمة', toast_enter_station_name: 'أدخل اسم مركز الاقتراع', toast_enter_observer_addr: 'أدخل عنوان المراقب',
       loading_submitting: 'جارٍ تقديم النتيجة…', loading_adding_station: 'جارٍ إضافة مركز الاقتراع…', loading_authorizing: 'جارٍ توثيق المراقب…', loading_filing: 'جارٍ تقديم النزاع…', loading_resolving: 'جارٍ الحل…', loading_registering: 'جارٍ التسجيل ودفع الرسوم…', loading_paying: 'جارٍ دفع الرسوم…', loading_waiving: 'جارٍ الإعفاء من الرسوم…', loading_importing: 'جارٍ استيراد مركز الاقتراع',
       loading_creating_election: 'جارٍ إنشاء الانتخابات…', loading_adding_candidate: 'جارٍ إضافة المرشح {i}/{n}…', loading_importing_station: 'جارٍ استيراد المركز {i}/{n}…',
+      queue_saved_locally: 'تم الحفظ محليًا — إعادة المحاولة…', queue_saved_locally_n: 'تم الحفظ محليًا — إعادة المحاولة… ({n})', queue_saved_offline: 'تم الحفظ محليًا (غير متصل)', queue_demo_label: 'عرض تجريبي — انتخابات معلّقة',
       timeago_s: 'منذ {n} ث', timeago_m: 'منذ {n} د', timeago_h: 'منذ {n} س', timeago_d: 'منذ {n} ي',
-      station_awaiting: 'في انتظار النتيجة', station_col_name: 'المركز', station_col_updated: 'تم التحديث', station_badge_invalidated: 'ملغى', station_badge_disputed: 'متنازع عليه', station_badge_review: 'قيد المراجعة', station_badge_reports: '{n} تقارير',
+      station_awaiting: 'في انتظار النتيجة', station_col_name: 'المركز', station_col_updated: 'تم التحديث', station_badge_invalidated: 'ملغى', station_badge_disputed: 'متنازع عليه', station_badge_review: 'قيد المراجعة', station_badge_reports: '{n} تقارير', inline_save_btn: 'حفظ النتيجة', inline_done_badge: 'تم العد', inline_vote_label: 'أصوات {name}', inline_vote_suffix: 'صوت',
       margin_needs_review: '⚠ يحتاج مراجعة', margin_stable_lead: '✓ تقدم مستقر', margin_lead_pct: 'هامش التقدم {lead}%', margin_uncertainty: 'حالة عدم اليقين ±{pct}%', margin_disagreement_note: 'الخلافات أو النزاعات قد تؤثر على النتيجة.',
       elections_connect_org: 'وصّل محفظة منظمة لإنشاء انتخابات. سجّل واحدة في تبويب {orgs_link}.', elections_pending_org: 'منظمتك معلقة — ادفع رسوم التسجيل في {orgs_link} لنشر الانتخابات.',
       elections_card_stations: 'مراكز', elections_card_candidates: 'مرشحون', elections_card_disputes: 'نزاعات', elections_none_published: 'لم تُنشر انتخابات بعد.', elections_pending_suffix: '(معلق)',
@@ -591,9 +609,10 @@
       toast_election_published: 'Élection publiée ✓', toast_submit_result: 'Résultat soumis ✓', toast_station_added: 'Bureau ajouté ✓', toast_observer_authorized: 'Observateur autorisé ✓', toast_dispute_filed: 'Contestation déposée ✓', toast_dispute_upheld: 'Contestation acceptée ✓', toast_dispute_rejected: 'Contestation rejetée ✓', toast_org_registered: 'Organisation enregistrée ✓', toast_fee_paid: 'Cotisation payée ✓', toast_fee_waived: 'Cotisation dispensée ✓', toast_failed: 'Échec :', toast_wallet_unavailable: 'Pont de portefeuille indisponible — ouvrez dans Usernode.', toast_no_wallet: 'Aucune adresse de portefeuille liée.', toast_add_candidate: 'Ajoutez un nom et au moins un candidat.', toast_nothing_to_import: 'Rien à importer', toast_enter_reason: 'Saisissez une raison', toast_enter_org_name: "Saisissez le nom de l'organisation", toast_enter_station_name: 'Saisissez le nom du bureau', toast_enter_observer_addr: "Saisissez l'adresse de l'observateur",
       loading_submitting: 'Envoi du résultat…', loading_adding_station: 'Ajout du bureau…', loading_authorizing: "Autorisation de l'observateur…", loading_filing: 'Dépôt de la contestation…', loading_resolving: 'Résolution en cours…', loading_registering: "Inscription et paiement de la cotisation…", loading_paying: 'Paiement de la cotisation…', loading_waiving: 'Dispense de cotisation…', loading_importing: 'Importation du bureau',
       loading_creating_election: "Création de l'élection…", loading_adding_candidate: 'Ajout du candidat {i}/{n}…', loading_importing_station: 'Importation du bureau {i}/{n}…',
+      queue_saved_locally: 'Enregistré localement — nouvelle tentative…', queue_saved_locally_n: 'Enregistré localement — nouvelle tentative… ({n})', queue_saved_offline: 'Enregistré localement (hors ligne)', queue_demo_label: 'Démo de préproduction — élection en attente',
       loading_confirming: 'Confirmation sur la chaîne…', confirming_onchain: 'Confirmation sur la chaîne…', confirming_generic: "Confirmation de l'envoi", pending_demo_label: 'Démo de préproduction — envoi en attente', notice_confirm_timeout: "Envoyé — confirmation en cours sur le réseau. Apparaîtra une fois inclus dans la chaîne.",
       timeago_s: 'il y a {n}s', timeago_m: 'il y a {n}min', timeago_h: 'il y a {n}h', timeago_d: 'il y a {n}j',
-      station_awaiting: 'En attente du résultat', station_col_name: 'Bureau', station_col_updated: 'Mis à jour', station_badge_invalidated: 'invalidé', station_badge_disputed: 'contesté', station_badge_review: 'révision', station_badge_reports: '{n} rapports',
+      station_awaiting: 'En attente du résultat', station_col_name: 'Bureau', station_col_updated: 'Mis à jour', station_badge_invalidated: 'invalidé', station_badge_disputed: 'contesté', station_badge_review: 'révision', station_badge_reports: '{n} rapports', inline_save_btn: 'Enregistrer le résultat', inline_done_badge: 'Décompté', inline_vote_label: 'Voix pour {name}', inline_vote_suffix: 'voix',
       margin_needs_review: '⚠ À revoir', margin_stable_lead: '✓ Avance stable', margin_lead_pct: 'marge {lead}%', margin_uncertainty: 'incertitude ±{pct}%', margin_disagreement_note: 'des désaccords ou contestations pourraient affecter le résultat.',
       elections_connect_org: "Connectez un portefeuille d'organisation pour créer des élections. Enregistrez-en une dans l'onglet {orgs_link}.", elections_pending_org: 'Votre organisation est en attente — payez la cotisation sous {orgs_link} pour publier des élections.',
       elections_card_stations: 'bureaux', elections_card_candidates: 'candidats', elections_card_disputes: 'contestations', elections_none_published: "Aucune élection publiée pour l'instant.", elections_pending_suffix: '(en attente)',
@@ -1049,6 +1068,232 @@
     el.style.display = 'flex';
   }
 
+  // ── Local-first election-creation queue ─────────────────────────────────────
+  // A failed-or-unconfirmed "+ New election" creation is held in localStorage
+  // and retried automatically while the backend is reachable. It is reported as
+  // a real success ONLY when the server confirms the election exists (its eid in
+  // /__quickcount/state). Pure helpers (entry shape, isConfirmed, backoff,
+  // (de)serialization) live in window.QCElectionQueue (public/election-queue.js);
+  // the DOM / timer / fetch wiring is here.
+  const ELQ = window.QCElectionQueue;
+  App.elq = App.elq || [];
+  let _elqRunning = false;
+
+  function elqKey() {
+    const id = (App.user && App.user.username) || App.wallet.address || 'anon';
+    return 'qc_elections_queue::' + id;
+  }
+  function persistElq() {
+    try { localStorage.setItem(elqKey(), ELQ.serialize(App.elq || [])); } catch (_) {}
+  }
+  function renderElq() {
+    let el = document.getElementById('qc-localq');
+    const badge = document.getElementById('qc-offline-badge');
+    const hideBadge = () => { if (badge) { badge.classList.remove('flex'); badge.classList.add('hidden'); } };
+    if (!App.elq || !App.elq.length) { if (el) el.style.display = 'none'; hideBadge(); return; }
+    // Offline (every queued entry has exhausted its retries) is a persistent
+    // state, so it renders as a small inline badge in the header status cluster
+    // rather than a floating pill that overlaps the navigation tabs. The active
+    // "Saved locally — retrying…" state keeps the transient floating pill.
+    if (ELQ.allExhausted(App.elq)) {
+      if (el) el.style.display = 'none';
+      if (badge) {
+        const m = badge.querySelector('#qc-offline-badge-msg');
+        if (m) m.textContent = ELQ.summaryLabel(App.elq, t);
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+      }
+      return;
+    }
+    hideBadge();
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'qc-localq';
+      // Sits just below the muted "Confirming on-chain…" pill, with a distinct
+      // indigo accent so "Saved locally — retrying…" reads differently.
+      el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:3rem;z-index:54;display:flex;'
+        + 'align-items:center;gap:.5rem;padding:.45rem .8rem;border-radius:999px;font-family:system-ui;'
+        + 'font-size:.8rem;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.18)';
+      const dot = document.createElement('span');
+      dot.id = 'qc-localq-dot';
+      dot.style.cssText = 'width:.6rem;height:.6rem;border-radius:50%;background:#6366f1;animation:qcspin 1s linear infinite';
+      const msg = document.createElement('span'); msg.id = 'qc-localq-msg';
+      el.appendChild(dot); el.appendChild(msg);
+      document.body.appendChild(el);
+    }
+    // This floating pill now renders ONLY the active "Saved locally — retrying…"
+    // state (the offline/exhausted state returned early above as an inline header
+    // badge), so the dot always spins.
+    const dot = el.querySelector('#qc-localq-dot');
+    if (dot) {
+      dot.style.background = '#6366f1';
+      dot.style.animation = 'qcspin 1s linear infinite';
+    }
+    const dark = document.documentElement.classList.contains('dark');
+    el.style.background = dark ? '#1e293b' : '#eef2ff';
+    el.style.color = dark ? '#c7d2fe' : '#3730a3';
+    el.style.border = '1px solid ' + (dark ? '#334155' : '#c7d2fe');
+    el.querySelector('#qc-localq-msg').textContent = ELQ.summaryLabel(App.elq, t);
+    el.style.display = 'flex';
+  }
+  function enqueueElection(entry) {
+    App.elq.push(entry);
+    persistElq();
+    renderElq();
+    kickElq();
+  }
+  function removeElq(id) {
+    App.elq = App.elq.filter((e) => e.id !== id);
+    persistElq();
+    renderElq();
+  }
+  function elqClassify(e) {
+    return (window.QCBridgeClassify && window.QCBridgeClassify.classifyBridgeError)
+      ? (e && e.qcKind ? e.qcKind : window.QCBridgeClassify.classifyBridgeError(e)) : 'unknown';
+  }
+  // The tx-step list for an entry — mirrors createElection's old steps. Step 0
+  // publishes the election; each later step adds one candidate keyed off the
+  // election id (entry.eid === the create tx id once broadcast).
+  function elqSteps(entry) {
+    const me = App.wallet.address;
+    const steps = [{ loading: t('loading_creating_election'), build: () => ({ to: me, amount: 0, memo: QC.el(entry.name), require: 'No election tx id' }) }];
+    (entry.candidates || []).forEach((c, idx) => steps.push({
+      loading: () => t('loading_adding_candidate').replace('{i}', idx + 1).replace('{n}', entry.candidates.length),
+      build: (results) => ({ to: me, amount: 0, memo: QC.cand(results[0] || entry.eid, idx + 1, c) }),
+    }));
+    return steps;
+  }
+  // Run an entry's steps, RESUMING from entry.sent so a step that already landed
+  // is never re-sent (the create step is non-idempotent — this is the
+  // no-double-publish guarantee). Records the eid the moment step 0 broadcasts.
+  // Throws on a send/confirm failure so attemptElq can classify and re-schedule.
+  async function runQueuedSteps(entry) {
+    const steps = elqSteps(entry);
+    const results = Array.isArray(entry.sent) ? entry.sent.slice() : [];
+    for (let i = results.length; i < steps.length; i++) {
+      const spec = steps[i].build(results);
+      const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+      if (spec.require && !r) throw new Error(spec.require);
+      results[i] = r;
+      entry.sent = results.slice();
+      if (i === 0 && r) { ELQ.markBroadcast(entry, r); }
+      persistElq();
+      if (r) {
+        const pid = addPending(typeof steps[i].loading === 'string' ? steps[i].loading : null, { txId: r, to: spec.to });
+        try { await confirmTx(r, { to: spec.to }); } finally { removePending(pid); }
+      }
+    }
+    return results;
+  }
+  // One persistence attempt for a single entry. Returns the verdict that drives
+  // the queue: 'confirmed' (server has the election), 'terminal' (unrecoverable —
+  // drop it), or 'pending' (recoverable — keep and retry). The authoritative
+  // gate is ALWAYS the post-refresh isConfirmed check, never confirmTx's return.
+  async function attemptElq(entry) {
+    entry.attempts = (entry.attempts || 0) + 1;
+    persistElq();
+    let terminal = false;
+    try {
+      await runQueuedSteps(entry);
+    } catch (e) {
+      entry.lastError = (e && e.message) || String(e);
+      persistElq();
+      terminal = (elqClassify(e) === 'terminal');
+    }
+    // A 5xx from refresh/state is NOT success — treat it as "not confirmed yet".
+    try { await triggerRefresh(); } catch (_) { return terminal ? 'terminal' : 'pending'; }
+    if (ELQ.isConfirmed(entry, (App.state && App.state.elections) || [])) return 'confirmed';
+    return terminal ? 'terminal' : 'pending';
+  }
+  // Single recursive driver: process the head drivable entry to a verdict, then
+  // either remove it (confirmed/terminal) or back off and retry. Self-stops when
+  // the drivable queue empties or the device goes offline (an 'online' listener
+  // re-kicks). Demo entries are display-only and never driven; entries that have
+  // exhausted MAX_ATTEMPTS failures are parked offline and skipped too.
+  async function driveElq() {
+    if (_elqRunning) return;
+    _elqRunning = true;
+    try {
+      while (true) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) break;
+        const entry = (App.elq || []).find((e) => !e.demo && !e.offline);
+        if (!entry) break;
+        const verdict = await attemptElq(entry);
+        if (verdict === 'confirmed') {
+          removeElq(entry.id);
+          toast(t('toast_election_published'));
+          App.eid = entry.eid;
+          // Jump to the now-loadable workspace only when the organizer is still
+          // in the elections context (the just-created case). A background /
+          // reload-resumed confirmation must not yank them off another screen —
+          // just refresh in place so the new election shows up where relevant.
+          const route = currentRoute();
+          if (route.tab === 'elections') {
+            location.hash = '#/election/' + entry.eid;
+          } else {
+            await refresh();
+          }
+        } else if (verdict === 'terminal') {
+          removeElq(entry.id);
+          toast(t('toast_failed') + ' ' + (entry.lastError || ''), 'error');
+        } else if (ELQ.isExhausted(entry)) {
+          // Hit the retry cap (3 failed attempts) — park it offline and stop
+          // driving it. The pill settles to a static "Saved Locally (Offline)"
+          // badge with a non-spinning dot; the entry is kept (still saved
+          // locally) and re-armed on the next `online` event or reload.
+          entry.offline = true;
+          persistElq();
+          renderElq();
+          continue; // the find() above now skips this entry → next drivable / break
+        } else {
+          renderElq();
+          await new Promise((res) => setTimeout(res, ELQ.nextBackoff(entry.attempts)));
+        }
+      }
+    } finally {
+      _elqRunning = false;
+    }
+  }
+  function kickElq() {
+    if (!App.elq || !App.elq.some((e) => !e.demo && !e.offline)) return;
+    if (_elqRunning) return;
+    driveElq();
+  }
+  // Resume the queue on boot/connect: rehydrate from localStorage, render the
+  // pill, and (in staging) seed one obviously-fake display-only entry so the
+  // pill is reviewable on load without broadcasting anything. The seeded entry
+  // is parked offline (attempts at the cap) so reviewers see the static
+  // "Saved Locally (Offline)" badge — the state this change introduces. Demo
+  // entries are never driven, so it broadcasts nothing.
+  async function restoreElectionQueue() {
+    let saved = [];
+    try { saved = ELQ.deserialize(localStorage.getItem(elqKey()) || '[]'); } catch (_) { saved = []; }
+    App.elq = Array.isArray(saved) ? saved : [];
+    if (App.cfg && App.cfg.staging && !App.elq.some((e) => e.id === 'staging-demo-offline')) {
+      App.elq.push(ELQ.makeEntry(
+        { name: t('queue_demo_label'), candidates: ['Staging demo A', 'Staging demo B'] },
+        { id: 'staging-demo-offline', status: 'queued', demo: true, offline: true, attempts: ELQ.MAX_ATTEMPTS }
+      ));
+      persistElq();
+    }
+    renderElq();
+    kickElq();
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    // Regaining connectivity is the natural reset point: clear the offline cap
+    // and attempt counter on real (non-demo) parked entries so the queue retries
+    // a clean run, then re-kick. (A pure server 5xx while navigator stays online
+    // does NOT trip this — that's intended, so the spinner can't run forever.)
+    window.addEventListener('online', function () {
+      let changed = false;
+      (App.elq || []).forEach(function (e) {
+        if (!e.demo && (e.offline || e.attempts)) { e.offline = false; e.attempts = 0; changed = true; }
+      });
+      if (changed) { persistElq(); renderElq(); }
+      kickElq();
+    });
+  }
+
   // Poll the public explorer proxy until `txId` appears on the ledger, or a
   // timeout elapses. The hosted bridge resolves sendTransaction once the relay
   // ACCEPTS the broadcast; confirmTx is the app-level "visible on-chain" gate
@@ -1058,11 +1303,12 @@
   async function confirmTx(txId, opts) {
     opts = opts || {};
     if (!txId) return true;
-    // No live chain to poll: staging / local-dev (auto-confirm so the
-    // pending→confirmed flow stays reviewable), or a deploy with no chain read
-    // source configured (chainConfigured===false) — confirm optimistically and
-    // let the background poll reconcile, rather than dead-ending on a timeout.
-    if (App.cfg && (App.cfg.staging || App.cfg.localDev || App.cfg.chainConfigured === false)) return true;
+    // No live chain to poll: mock mode (self-contained local ingest), staging /
+    // local-dev (auto-confirm so the pending→confirmed flow stays reviewable), or
+    // a deploy with no chain read source configured (chainConfigured===false) —
+    // confirm optimistically and let the ingest reconcile, rather than dead-ending
+    // on a timeout. In mock mode the submission is already ingested server-side.
+    if (App.cfg && (App.cfg.mockMode || App.cfg.staging || App.cfg.localDev || App.cfg.chainConfigured === false)) return true;
     const base = ((App.cfg && App.cfg.explorerApiBase) || '/explorer-api').replace(/\/+$/, '');
     const chain = (App.cfg && App.cfg.chainId) || 'usernode';
     const url = base + '/' + encodeURIComponent(chain) + '/transactions';
@@ -1234,6 +1480,7 @@
     if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
     restorePrefs();
     await restorePending();
+    await restoreElectionQueue();
     await refresh();
     renderChrome();
   }
@@ -1256,7 +1503,30 @@
         sender: (a, b, c) => window.QCMock.send(a, b, c),
       });
     }
+    // Platform mock mode: ingest locally instead of broadcasting to a chain.
+    // Route through QCBridge.send (keeping its resilience/retry wrapper) but back
+    // it with an app-owned sender that POSTs to /__mock/submit with the connected
+    // wallet as `from` and the iframe token attached — so org ownership is the
+    // real user and the server can prefer req.user over the body. The server still
+    // resolves `from` from req.user when authenticated, so this is spoof-resistant.
+    if (App.cfg.mockMode) {
+      return window.QCBridge.send(to, amount || 0, memoStr, {
+        idempotent: opts.idempotent,
+        sender: (a, b, c) => mockSubmit(a, b, c),
+      });
+    }
     return window.QCBridge.send(to, amount || 0, memoStr, { idempotent: opts.idempotent });
+  }
+  // App-owned local-ingest submit used in platform mock mode. Returns the txId.
+  async function mockSubmit(to, amount, memoStr) {
+    const r = await fetch('/__mock/submit', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ from: App.wallet.address || '', to: to, amount: amount || 0, memo: memoStr }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    return j.txId;
   }
 
   // ───────────────────────── Data ─────────────────────────
@@ -1380,23 +1650,246 @@
         </div>`;
       }).join('');
   }
-  function stationTable(d) {
+  // ── Inline TPS vote-entry (off-chain working tally) ──
+  // Working tally entered straight on a station row in the election workspace.
+  // Keyed by `${App.eid}:${sid}` so switching elections never bleeds. It is
+  // persisted to Postgres (the `work_tallies` table) — separate from the
+  // official observer/QC.res reporting flow — so it survives reload and shows on
+  // the dashboard. The map is hydrated from detail.workTally on load. The fixed
+  // Evan/Salah/Circle candidates come from QuickCountInline.CANDIDATES.
+  const inlineEntry = {};
+  function inlineKey(sid) { return App.eid + ':' + sid; }
+  // Whether the current viewer may enter/edit the working tally for an election
+  // owned by `orgAddr`: the org's owner, administrator, or moderator, or a
+  // platform admin. Mirrors the server-side canOperate/isAdmin guard.
+  let workEditable = false;
+  function canEditWorkTally(orgAddr) {
+    if (!orgAddr || !App.role) return false;
+    if (App.role.isAdmin) return true;
+    if (App.role.org && App.role.org.addr === orgAddr) return true; // owner
+    return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod'));
+  }
+  // Hydrate the inlineEntry map from the persisted working tally returned in the
+  // election detail. Each saved station becomes a saved (collapsed) entry. Never
+  // clobbers a row the viewer is mid-edit (open or unsaved-draft locally).
+  function hydrateInlineFromWorkTally(d) {
+    if (!d || !window.QuickCountInline) return;
+    const saved = (d.workTally || []);
+    saved.forEach((row) => {
+      const k = inlineKey(row.sid);
+      const cur = inlineEntry[k];
+      if (cur && (cur.open || (cur.saved === false))) return; // mid-edit — leave alone
+      inlineEntry[k] = { open: false, draft: Object.assign({}, row.votes || {}), votes: row.votes || {}, saved: true };
+    });
+  }
+  function inlineFormRow(d, sid, entry) {
+    const cands = (window.QuickCountInline && QuickCountInline.CANDIDATES) || [];
+    // Vertically stacked blocks: each candidate gets a bold full-line label
+    // ("Jumlah Suara Evan") above a full-width dark number input, with mb-4
+    // between blocks. This replaces the old horizontal grid, whose fixed-width
+    // name span + trailing "Suara" unit ran together on narrow widths.
+    const fields = cands.map((c) => {
+      const draft = entry.draft && entry.draft[c.key] != null ? entry.draft[c.key] : '';
+      return `<div class="mb-4">
+        <label class="block font-semibold text-sm text-slate-700 dark:text-slate-200 mb-1">${esc(t('inline_vote_label').replace('{name}', c.name))}</label>
+        <input type="number" min="0" step="1" inputmode="numeric" data-inl-cand="${c.key}" value="${esc(draft)}"
+          class="inl-input w-full px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+      </div>`;
+    }).join('');
+    return `<tr class="inl-row" data-inl-sid="${sid}"><td colspan="${d.candidates.length + 3}" class="pb-4 pt-0">
+      <div class="p-4 rounded-xl border-l-4 border-purple-500 bg-slate-100 border-y border-r border-slate-200 dark:bg-slate-900 dark:border-y-slate-800 dark:border-r-slate-800">
+        ${fields}
+        <button data-inl-save="${sid}" class="inl-save w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm text-white">${t('inline_save_btn')}</button>
+      </div></td></tr>`;
+  }
+  function stationTable(d, opts) {
+    opts = opts || {};
+    const inline = !!opts.inlineEntry && !!window.QuickCountInline;
+    // `editable` gates the interactive form (clickable rows + Save). When false,
+    // any saved working tally still shows read-only (badges + summary).
+    const editable = inline && !!opts.editable;
     const head = d.candidates.map((c) => `<th class="py-3 px-2 text-right font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(c.name)}</th>`).join('');
     const rows = d.stations.map((s) => {
+      const entry = inline ? inlineEntry[inlineKey(s.sid)] : null;
+      const saved = !!(entry && entry.saved);
       const badges = [];
       if (s.invalid) badges.push(`<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>`);
       else if (s.disputed) badges.push(`<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('station_badge_disputed')}</span>`);
       if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">${t('station_badge_review')}</span>`);
       if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
-      const label = `<td class="py-3 pr-2 sticky left-0 z-10 bg-white dark:bg-slate-950"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex gap-1 mt-0.5">${badges.join('')}</div></td>`;
-      if (!s.reported) return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td></tr>`;
-      const cells = d.candidates.map((c) => `<td class="py-3 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
-      const pdfBtn = s.resultTx ? `<button data-sid="${s.sid}" class="ev-pdf ml-2 text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white" title="${t('evidence_pdf_download')}">📄</button>` : '';
-      return `<tr class="border-t border-slate-200 dark:border-slate-800">${label}${cells}<td class="py-3 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap hidden sm:table-cell">${timeAgo(s.at)}${pdfBtn}</td></tr>`;
+      if (saved) badges.push(`<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('inline_done_badge')} · ${QuickCountInline.totalVotes(entry.votes).toLocaleString()}</span>`);
+      const open = !!(editable && entry && entry.open);
+      // Active-row highlight: lighter sticky-cell tone + a left accent bar that
+      // lines up with the form panel below. A transparent border in the closed
+      // state keeps the row width stable so toggling doesn't shift content.
+      const labelTone = open ? 'bg-slate-50 dark:bg-slate-900' : 'bg-white dark:bg-slate-950';
+      const labelEdge = editable ? (open ? ' border-l-4 border-purple-500' : ' border-l-4 border-transparent') : '';
+      const label = `<td class="py-3 pr-2 pl-2 sticky left-0 z-10 ${labelTone}${labelEdge}"><div>${esc(s.name)}</div>${s.label ? `<div class="text-xs text-slate-600 dark:text-slate-500">${esc(s.label)}</div>` : ''} <div class="flex flex-wrap gap-1 mt-0.5">${badges.join('')}</div></td>`;
+      const rowAttrs = editable
+        ? ` data-strow="${s.sid}" role="button" tabindex="0" aria-expanded="${open ? 'true' : 'false'}" class="border-t border-slate-200 dark:border-slate-800 cursor-pointer transition-colors hover:bg-slate-100 dark:hover:bg-slate-800/60${open ? ' bg-slate-50 dark:bg-slate-900/40' : ''}"`
+        : ` class="border-t border-slate-200 dark:border-slate-800"`;
+      // Chevron sits in its own trailing column (added only in editable mode) so
+      // it is at the far right of both reported and unreported rows, and stays
+      // visible on mobile (unlike the sm-only "Updated" cell). It rotates 180°
+      // when the row's form is open; the full re-render re-emits the class.
+      const chev = `<svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 inline-block shrink-0 text-slate-400 dark:text-slate-500 transition-transform duration-200${open ? ' rotate-180' : ''}"><path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      const chevCell = editable ? `<td class="py-3 pl-1 pr-2 text-right align-middle w-6">${chev}</td>` : '';
+      const formRow = open ? inlineFormRow(d, s.sid, entry) : '';
+      let main;
+      if (!s.reported) {
+        const cell = saved
+          ? `<td class="py-3 font-mono text-slate-700 dark:text-slate-300" colspan="${d.candidates.length + 1}">${esc(QuickCountInline.formatVoteSummary(entry.votes))}</td>`
+          : `<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td>`;
+        main = `<tr${rowAttrs}>${label}${cell}${chevCell}</tr>`;
+      } else {
+        const cells = d.candidates.map((c) => `<td class="py-3 px-2 text-right font-mono">${(Number((s.votes || {})[c.cid] || 0)).toLocaleString()}</td>`).join('');
+        const pdfBtn = s.resultTx ? `<button data-sid="${s.sid}" class="ev-pdf ml-2 text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white" title="${t('evidence_pdf_download')}">📄</button>` : '';
+        main = `<tr${rowAttrs}>${label}${cells}<td class="py-3 pl-2 text-right text-xs text-slate-600 dark:text-slate-500 whitespace-nowrap hidden sm:table-cell">${timeAgo(s.at)}${pdfBtn}</td>${chevCell}</tr>`;
+      }
+      return main + formRow;
     }).join('');
     return `<div class="relative"><div class="overflow-x-auto"><table class="w-full text-sm">
-      <thead><tr class="text-left"><th class="py-3 pr-2 font-medium text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-950">${t('station_col_name')}</th>${head}<th class="py-3 pl-2 text-right font-medium text-slate-500 dark:text-slate-400 hidden sm:table-cell">${t('station_col_updated')}</th></tr></thead>
+      <thead><tr class="text-left"><th class="py-3 pr-2 font-medium text-slate-500 dark:text-slate-400 sticky left-0 z-10 bg-white dark:bg-slate-950">${t('station_col_name')}</th>${head}<th class="py-3 pl-2 text-right font-medium text-slate-500 dark:text-slate-400 hidden sm:table-cell">${t('station_col_updated')}</th>${editable ? '<th class="w-6" aria-hidden="true"></th>' : ''}</tr></thead>
       <tbody>${rows}</tbody></table></div><div class="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white dark:from-slate-950 pointer-events-none sm:hidden"></div></div>`;
+  }
+  // Re-render just the workspace station table after a toggle/save so other
+  // open forms and unsaved drafts (held in `inlineEntry`) are preserved without
+  // a full refetch. Only the authorized roles get the interactive form.
+  function rerenderStations() {
+    const wrap = document.getElementById('station-table-wrap');
+    const d = App.state && App.state.detail;
+    if (!wrap || !d) return;
+    wrap.innerHTML = stationTable(d, { inlineEntry: true, editable: workEditable });
+    if (workEditable) wireStationRows(wrap);
+  }
+  // Saved inline-entry `votes` objects for the currently-open election, in
+  // station order. Drives the workspace's upper bars + reporting tracker, which
+  // — unlike the on-chain Dashboard — reflect this client-side working tally.
+  function inlineSavedVotes() {
+    const d = App.state && App.state.detail;
+    if (!d) return [];
+    return (d.stations || [])
+      .map((s) => inlineEntry[inlineKey(s.sid)])
+      .filter((e) => e && e.saved)
+      .map((e) => e.votes);
+  }
+  // Recompute the workspace's vote-share bars and "X dari N TPS dilaporkan"
+  // tracker from the saved inline entries. Bars animate: when their nodes
+  // already exist we mutate width/label in place so the CSS width transition
+  // runs from the previous value; we only rebuild markup on first paint or an
+  // election switch (keyed by candidate count, which is fixed at 3 here).
+  function rerenderInlineSummary() {
+    const d = App.state && App.state.detail;
+    const QC = window.QuickCountInline;
+    if (!d || !QC) return;
+    const bars = document.getElementById('ws-tally-bars');
+    const reportLine = document.getElementById('ws-reporting');
+    if (!bars && !reportLine) return;
+
+    // Entries for this election only (keyed `${App.eid}:${sid}`), so counts and
+    // bars never bleed across elections.
+    const entries = Object.keys(inlineEntry)
+      .filter((k) => k.indexOf(App.eid + ':') === 0)
+      .map((k) => inlineEntry[k]);
+    const saved = inlineSavedVotes();
+    const totals = QC.aggregateVotes(saved);
+    const shares = QC.voteShares(totals);
+    const cands = QC.CANDIDATES;
+
+    if (reportLine) {
+      reportLine.textContent = t('election_detail_reporting')
+        .replace('{reported}', QC.reportedCount(entries))
+        .replace('{total}', (d.stations || []).length);
+    }
+
+    if (bars) {
+      const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length;
+      if (needBuild) {
+        bars.innerHTML = cands.map((c, i) => `<div class="mb-3" data-inl-bar="${c.key}">
+          <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+          <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
+          <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${COLORS[i % COLORS.length]} transition-all duration-500 ease-out" style="width:0%"></div></div>
+        </div>`).join('');
+      }
+      cands.forEach((c) => {
+        const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
+        if (!block) return;
+        const pct = shares[c.key] || 0;
+        block.querySelector('[data-inl-bar-total]').textContent = (totals[c.key] || 0).toLocaleString();
+        block.querySelector('[data-inl-bar-pct]').textContent = pct;
+        block.querySelector('[data-inl-bar-fill]').style.width = pct + '%';
+      });
+    }
+  }
+  function wireStationRows(scope) {
+    const root = scope || document;
+    root.querySelectorAll('[data-strow]').forEach((row) => {
+      const sid = row.getAttribute('data-strow');
+      const toggle = () => {
+        const k = inlineKey(sid);
+        const cur = inlineEntry[k] || (inlineEntry[k] = { open: false, draft: {}, votes: {}, saved: false });
+        cur.open = !cur.open;
+        rerenderStations();
+      };
+      row.addEventListener('click', (e) => {
+        // A click on an interactive child (PDF button, links, the inline form
+        // inputs/button) must not toggle the row.
+        if (e.target.closest('button, a, input, label, select, .inl-row')) return;
+        toggle();
+      });
+      row.addEventListener('keydown', (e) => {
+        if (e.target !== row) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    });
+    // Persist typed drafts as they change so an auto-refresh re-render restores
+    // entered-but-unsaved numbers.
+    root.querySelectorAll('.inl-input').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const formRow = inp.closest('[data-inl-sid]'); if (!formRow) return;
+        const k = inlineKey(formRow.getAttribute('data-inl-sid'));
+        const cur = inlineEntry[k] || (inlineEntry[k] = { open: true, draft: {}, votes: {}, saved: false });
+        if (!cur.draft) cur.draft = {};
+        cur.draft[inp.getAttribute('data-inl-cand')] = inp.value;
+      });
+    });
+    root.querySelectorAll('.inl-save').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const sid = btn.getAttribute('data-inl-save');
+        const k = inlineKey(sid);
+        const formRow = btn.closest('[data-inl-sid]');
+        const draft = {}, votes = {};
+        formRow.querySelectorAll('[data-inl-cand]').forEach((inp) => {
+          const key = inp.getAttribute('data-inl-cand');
+          draft[key] = inp.value;
+          votes[key] = QuickCountInline.sanitizeCount(inp.value);
+        });
+        // Optimistic local update + re-render, then persist to Postgres so the
+        // entry survives reload and reaches the dashboard.
+        inlineEntry[k] = { open: true, draft: draft, votes: votes, saved: true };
+        toast(t('inline_done_badge') + ' · ' + QuickCountInline.totalVotes(votes).toLocaleString());
+        rerenderStations();
+        rerenderInlineSummary();
+        saveWorkTally(sid, votes);
+      });
+    });
+  }
+  // Persist one station's working tally. Token-forwarded like putProfile; the
+  // server enforces the owner/admin/mod guard. A failure surfaces the shared
+  // recoverable-error notice (the optimistic local state is kept).
+  async function saveWorkTally(sid, votes) {
+    try {
+      const r = await fetch('/api/elections/' + encodeURIComponent(App.eid) + '/worktally/' + encodeURIComponent(sid), {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ votes: votes }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    } catch (err) {
+      handleTxFailure(err, { onRetry: () => saveWorkTally(sid, votes) });
+    }
   }
   function marginBanner(d) {
     const m = d.margin;
@@ -1406,6 +1899,34 @@
       · ${t('margin_lead_pct').replace('{lead}', m.leadMarginPct)} · ${t('margin_uncertainty').replace('{pct}', m.uncertaintyPct)}
       ${m.needsReview ? ' — ' + t('margin_disagreement_note') : ''}
     </div>`;
+  }
+  // Labelled "Working tally" section for the dashboard, built from the persisted
+  // off-chain detail.workTally (saved inline station entries). Uses the fixed
+  // QuickCountInline candidate set and the same bar markup as the workspace.
+  // Returns '' when nothing has been entered yet.
+  function workTallySection(d) {
+    const QC = window.QuickCountInline;
+    if (!QC || !d) return '';
+    const saved = (d.workTally || []);
+    if (!saved.length) return '';
+    const votesList = saved.map((r) => r.votes || {});
+    const totals = QC.aggregateVotes(votesList);
+    const shares = QC.voteShares(totals);
+    const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
+    if (grand <= 0) return '';
+    const bars = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
+      .sort((a, b) => b.votes - a.votes)
+      .map(({ c, i, votes, pct }) => `<div class="mb-3">
+        <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
+      </div>`).join('');
+    const reported = t('dashboard_working_tally_reported')
+      .replace('{reported}', saved.length)
+      .replace('{total}', (d.stations || []).length || saved.length);
+    return `<div class="mt-2 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">${esc(t('dashboard_working_tally_desc'))} · ${esc(reported)} · ${grand.toLocaleString()} ${t('dashboard_votes')}</p>
+      ${bars}</div>`;
   }
   function renderDashboard(v) {
     v.innerHTML = electionPicker() + '<div id="dash-body"></div>';
@@ -1429,24 +1950,15 @@
       body.innerHTML = ownerCard + `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_select_election')}</p>` + activeLine;
       return;
     }
-    const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0);
+    // The Dashboard is now a focused view of the off-chain working tally,
+    // headed by the active election's name. Official results, the lead-margin
+    // box, and the per-station table live on the election workspace instead.
+    const workTally = workTallySection(d);
     body.innerHTML =
-      `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
-        <h2 class="text-lg font-semibold">${esc(d.election.name)}</h2>
-        <div class="flex gap-2">
-          <button id="exp-csv" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_csv')}</button>
-          <button id="exp-json" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_json')}</button>
-        </div>
-      </div>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')} · ${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)} · ${totalVotes.toLocaleString()} ${t('dashboard_votes')} · method: ${t('method_' + d.method) || METHOD_LABELS[d.method]}</p>
-      ${marginBanner(d)}
-      <div class="mb-6">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
-      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('dashboard_by_station')}</h3>
-      ${stationTable(d)}
+      `<h2 class="text-lg font-semibold mb-1">${esc(d.election.name)}</h2>
+      ${workTally || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_submissions')}</p>`}
       <p class="mt-4 text-xs text-slate-700 dark:text-slate-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
       <a class="mt-3 inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>`;
-    document.getElementById('exp-csv').onclick = () => exportCsv(d);
-    document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
     wireEvidencePdf();
   }
   // One row per candidate (Rank, Candidate, Votes, Share %), sorted by votes
@@ -1507,24 +2019,22 @@
     document.getElementById('nel-add').onclick = () => add('');
     document.getElementById('nel-create').onclick = createElection;
   }
-  async function createElection() {
-    // Capture the typed values up front so Try-again can resume without
-    // re-reading inputs (which may have been cleared by a re-render).
+  function createElection() {
+    // Capture the typed values, then hand the whole creation to the local-first
+    // queue. The optimistic "published" toast is GONE: success is now driven
+    // solely by the queue's server-confirmed `isConfirmed` gate (the election's
+    // eid appearing in /__quickcount/state), never by the bridge accepting the
+    // broadcast or confirmTx's mode-faked return value.
     const name = document.getElementById('nel-name').value.trim();
     const cands = Array.from(document.querySelectorAll('.nel-c')).map((i) => i.value.trim()).filter(Boolean);
     if (!name || !cands.length) return toast(t('toast_add_candidate'), 'warn');
-    const me = App.wallet.address;
-    // Step 0 publishes the election (NOT idempotent — never auto-resend); each
-    // later step adds one candidate, keyed off the election id from step 0.
-    const steps = [{ loading: t('loading_creating_election'), build: () => ({ to: me, amount: 0, memo: QC.el(name), require: 'No election tx id' }) }];
-    cands.forEach((c, idx) => steps.push({
-      loading: () => t('loading_adding_candidate').replace('{i}', idx + 1).replace('{n}', cands.length),
-      build: (results) => ({ to: me, amount: 0, memo: QC.cand(results[0], idx + 1, c) }),
-    }));
-    await runTxSteps(steps, {
-      partial: (done) => done >= 1 ? t('partial_candidates').replace('{done}', done - 1).replace('{total}', cands.length) : null,
-      success: (results) => { toast(t('toast_election_published')); App.eid = results[0]; location.hash = '#/election/' + results[0]; refresh(); },
-    });
+    const entry = window.QCElectionQueue.makeEntry({ name: name, candidates: cands });
+    enqueueElection(entry);
+    // Collapse the form so the organizer can keep working; the "Saved locally —
+    // retrying…" pill now tracks this creation until the server confirms it.
+    const f = document.getElementById('new-el-form');
+    if (f) f.innerHTML = '';
+    toast(t('queue_saved_locally'));
   }
 
   // ───────────────────────── Election detail / workspace ─────────────────────────
@@ -1533,6 +2043,10 @@
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
+    // Hydrate the inline working tally from the persisted detail.workTally and
+    // decide whether this viewer may edit it (owner/admin/mod or platform admin).
+    workEditable = canEditWorkTally(d.election.orgAddr);
+    hydrateInlineFromWorkTally(d);
     const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
 
     v.innerHTML = `
@@ -1543,9 +2057,9 @@
         ${methodSel}
       </div>
       ${marginBanner(d)}
-      <div class="mb-5">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)}</p>
-      ${stationTable(d)}
+      <div id="ws-tally-bars" class="mb-5"></div>
+      <p id="ws-reporting" class="text-sm text-slate-500 dark:text-slate-400 mb-2"></p>
+      <div id="station-table-wrap">${stationTable(d, { inlineEntry: true, editable: workEditable })}</div>
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
 
@@ -1558,6 +2072,11 @@
       p.textContent = t('election_detail_connect_note');
       ws.appendChild(p);
     }
+    // rerenderStations rebuilds the table from inlineEntry (picking up any
+    // hydrated/saved rows) and wires the row handlers, so no separate
+    // wireStationRows call is needed here.
+    rerenderStations();
+    rerenderInlineSummary();
     wireEvidencePdf();
   }
 
@@ -1747,7 +2266,9 @@
   // (the mock ledger is a source) and in staging demo (seeded data renders
   // regardless). Driven by /__quickcount/config chainConfigured (= source.configured).
   function chainSyncBanner() {
-    if (!App.cfg || App.cfg.chainConfigured !== false || App.cfg.localDev || App.cfg.demo) return '';
+    // Mock mode ingests submissions locally (no read-back gap), so the banner is
+    // never applicable; also hidden in local-dev and staging demo.
+    if (!App.cfg || App.cfg.mockMode || App.cfg.chainConfigured !== false || App.cfg.localDev || App.cfg.demo) return '';
     return `<div class="p-3 mb-4 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-200 text-sm">${esc(t('chain_unconfigured_banner'))}</div>`;
   }
   // Success toast for a state-changing tx. When the chain read source is absent
@@ -1755,7 +2276,9 @@
   // so show a neutral "submitted — awaiting on-chain sync" notice instead of a
   // green ✓ that would falsely claim the change landed.
   function txSuccessToast(okKey) {
-    if (App.cfg && App.cfg.chainConfigured === false) toast(t('toast_submitted_awaiting_sync'), 'warn');
+    // Mock mode persists the submission immediately, so show the green ✓; the
+    // awaiting-sync notice is only for a real-chain deploy with no read source.
+    if (App.cfg && !App.cfg.mockMode && App.cfg.chainConfigured === false) toast(t('toast_submitted_awaiting_sync'), 'warn');
     else toast(t(okKey));
   }
 
@@ -2539,6 +3062,21 @@
 
   // ───────────────────────── Boot ─────────────────────────
   function refreshSoon() { setTimeout(() => refresh(), App.cfg.localDev ? 400 : 2500); }
+  // True while the user is actively editing a form field inside #view. Each
+  // render() rewrites #view via innerHTML, which destroys and recreates the
+  // focused <input>/<textarea> and drops the cursor — so the auto-refresh
+  // timer skips its tick while a field is focused and resumes on the next tick
+  // once the field is blurred. Only the timer consults this; explicit refreshes
+  // (manual ↻, post-tx refreshSoon, picker changes, navigation) are unaffected.
+  function isEditingField() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    const editable = tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+    if (!editable) return false;
+    const view = document.getElementById('view');
+    return !!(view && view.contains(el));
+  }
   function startAutoRefresh() {
     if (App.refreshTimer) clearInterval(App.refreshTimer);
     // refresh() updates global state (role + activeOrgs) AND re-renders the
@@ -2546,7 +3084,11 @@
     // admin, user) the re-render re-runs those fetches, so a still-syncing
     // registration appears without a manual reload.
     const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
-    App.refreshTimer = setInterval(() => { const r = currentRoute(); if (tabs.includes(r.tab)) refresh(); }, 6000);
+    App.refreshTimer = setInterval(() => {
+      if (isEditingField()) return; // don't yank focus out of a field mid-type
+      const r = currentRoute();
+      if (tabs.includes(r.tab)) refresh();
+    }, 6000);
   }
 
   // ───────────────────────── Theme toggle ─────────────────────────
@@ -2601,8 +3143,9 @@
       App.method = (App.cfg.methods && App.cfg.methods[0]) || 'latest';
       // Point the hosted bridge's transaction reads/polls at our auth-exempt
       // /explorer-api proxy (see PUBLIC_PREFIXES + the /explorer-api proxy in
-      // server.js). Set BEFORE any connect/send. Skipped in local-dev (mock path).
-      if (!App.cfg.localDev) {
+      // server.js). Set BEFORE any connect/send. Skipped in local-dev and in
+      // mock mode (both ingest locally — there is nothing to poll).
+      if (!App.cfg.localDev && !App.cfg.mockMode) {
         window.usernode = window.usernode || {};
         const exBase = (App.cfg.explorerApiBase || '/explorer-api').replace(/\/+$/, '');
         const chain = App.cfg.chainId || 'usernode';
@@ -2644,6 +3187,7 @@
       QCLoading.show(t('loading_restoring'));
       restorePrefs();
       await restorePending();
+      await restoreElectionQueue();
 
       // Staging-only reviewable "pending" pill (no DB; strict no-op elsewhere).
       if (App.cfg.staging && new URLSearchParams(location.search).get('demo') === '1') {

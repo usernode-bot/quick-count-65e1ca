@@ -37,6 +37,14 @@ try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode *
 const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const IS_DEMO = LOCAL_DEV || IS_STAGING; // seed obviously-fake data so every screen renders
+// Always-on local-ingest ("mock") transaction flow. When true (the default in
+// EVERY environment), submissions are ingested directly into the event log via
+// /__mock/submit → ingestRaw → rebuild, with NO dependence on NODE_RPC_URL /
+// EXPLORER_API_URL / chain polling / chain read-back. Kept deliberately separate
+// from LOCAL_DEV and IS_DEMO so the developer-only affordances (persona switcher,
+// `viewer` identity override, demo seeding) stay gated on those and are NOT
+// enabled in staging/production. Set MOCK_TX_FLOW=false to restore real-chain reads.
+const MOCK_TX_FLOW = process.env.MOCK_TX_FLOW !== 'false';
 const PORT = process.env.PORT || 3000;
 const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
 // Canonical chain read path: the public block explorer, addressed per-chain as
@@ -58,6 +66,7 @@ const DEMO = {
   orgB: 'ut1demounpaidorg000000000000000000000000000',
   orgC: 'ut1demoprivateorg00000000000000000000000000', // private org
   orgD: 'ut1demodeletedorg00000000000000000000000000', // tombstoned org
+  orgID: 'ut1demopemiluwatchid00000000000000000000000', // Pilpres 2024 (Indonesia) demo org
   pollwatch: 'ut1demopollwatchalliance00000000000000000000',
   obs1: 'ut1demoobserverone000000000000000000000000',
   obs2: 'ut1demoobservertwo000000000000000000000000',
@@ -125,7 +134,10 @@ async function resyncFromChain({ truncateDb = false } = {}) {
 
 async function pollOnce() {
   let added = false;
-  if (LOCAL_DEV) {
+  if (LOCAL_DEV || MOCK_TX_FLOW) {
+    // Self-contained ingest: replay the in-process mock ledger (fed by
+    // /__mock/submit). No chain read-back, so NODE_RPC_URL / EXPLORER_API_URL
+    // are never consulted for the transaction path.
     for (const raw of mock.all()) if (ingestRaw(raw)) added = true;
   } else {
     for (const [addr, cursor] of watched) {
@@ -144,6 +156,8 @@ async function pollOnce() {
 }
 
 // ── Demo seed (obviously fake; only in local-dev / staging) ──────────────────
+// Election id for the 2024 Indonesian presidential presentation dataset.
+const PILPRES_EID = 'demo-pilpres-2024';
 function evHash(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
 
 function buildDemoTxs() {
@@ -214,6 +228,47 @@ function buildDemoTxs() {
     mk('demo_org_d', DEMO.orgD, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Retired Org', 'Demo Republic')),
     mk('demo_org_d_mem', DEMO.orgD, DEMO.orgD, 0, memo.memberMemo(DEMO.orgD, DEMO.orgMember, 'member')),
     mk('demo_org_d_del', DEMO.orgD, DEMO.orgD, 0, memo.deleteOrgMemo(DEMO.orgD)),
+
+    // ── Presentation dataset: 2024 Indonesian presidential election ─────────
+    // A recognizable, realistic sample election that sits ALONGSIDE the generic
+    // demo-election above (which is left untouched). Tallies are fictional
+    // samples TUNED so the aggregated national shares track the published 2024
+    // result — ~24.95% Anies–Muhaimin, ~58.59% Prabowo–Gibran, ~16.47%
+    // Ganjar–Mahfud — for display only; these are NOT certified results. The
+    // "Staging demo —" prefix keeps it obviously fake; the organizing org is a
+    // fictional watchdog, NOT Indonesia's real election commission.
+    mk('demo_pilpres_org', DEMO.orgID, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Pemilu Watch (Indonesia)', 'Indonesia')),
+    mk(PILPRES_EID, DEMO.orgID, DEMO.orgID, 0, memo.electionMemo('Staging demo — Pilpres 2024 (Indonesia)')),
+    // Candidate pairs, by official ballot number (president & vice-president).
+    mk('demo_pilpres_c1', DEMO.orgID, DEMO.orgID, 0, memo.candidateMemo(PILPRES_EID, 1, 'Anies Baswedan & Muhaimin Iskandar')),
+    mk('demo_pilpres_c2', DEMO.orgID, DEMO.orgID, 0, memo.candidateMemo(PILPRES_EID, 2, 'Prabowo Subianto & Gibran Rakabuming')),
+    mk('demo_pilpres_c3', DEMO.orgID, DEMO.orgID, 0, memo.candidateMemo(PILPRES_EID, 3, 'Ganjar Pranowo & Mahfud MD')),
+    // Polling stations, each tagged with its province (feeds the Turnout heatmap).
+    mk('demo_pilpres_s1', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 1, 'TPS DKI Jakarta — Sample', 'DKI Jakarta')),
+    mk('demo_pilpres_s2', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 2, 'TPS Jawa Barat — Sample', 'Jawa Barat')),
+    mk('demo_pilpres_s3', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 3, 'TPS Jawa Tengah — Sample', 'Jawa Tengah')),
+    mk('demo_pilpres_s4', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 4, 'TPS Jawa Timur — Sample', 'Jawa Timur')),
+    mk('demo_pilpres_s5', DEMO.orgID, DEMO.orgID, 0, memo.stationMemo(PILPRES_EID, 5, 'TPS Sumatera Utara — Sample', 'Sumatera Utara')),
+    // Observers (reuse the existing demo observer wallets — an observer may be
+    // authorized on multiple elections).
+    mk('demo_pilpres_o1', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs1)),
+    mk('demo_pilpres_o2', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs2)),
+    mk('demo_pilpres_o3', DEMO.orgID, DEMO.orgID, 0, memo.observerMemo(PILPRES_EID, DEMO.obs3)),
+    // Reported-station tallies are tuned so the 'latest'-per-station national
+    // aggregate lands on the real 2024 shares: Anies 522 / Prabowo 1226 /
+    // Ganjar 345 (n=2093) → 24.94% / 58.58% / 16.48%.
+    // Station 1 (Jakarta): Anies strongest.
+    mk('demo_pilpres_r1', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 1, { 1: 195, 2: 165, 3: 55 }, 430, 9)),
+    // Station 2 (West Java): Prabowo dominant.
+    mk('demo_pilpres_r2', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 2, { 1: 125, 2: 365, 3: 50 }, 560, 12)),
+    // Station 3 (Central Java): Prabowo leads, Ganjar elevated — two observers
+    // disagree slightly, exercising the consensus / median view. The later
+    // submission (r3b) is the 'latest' row that feeds the headline aggregate.
+    mk('demo_pilpres_r3a', DEMO.obs1, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 90, 2: 298, 3: 151 }, 558, 10)),
+    mk('demo_pilpres_r3b', DEMO.obs3, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 3, { 1: 92, 2: 296, 3: 150 }, 558, 10)),
+    // Station 4 (East Java): Prabowo dominant.
+    mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 110, 2: 400, 3: 90 }, 622, 14)),
+    // Station 5 (North Sumatra): no submission → "4 of 5 stations reported".
   ];
   return txs;
 }
@@ -239,30 +294,58 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // may POST only { to, amount, memo }; the app's own QCMock always sends `from`.
 const MOCK_FALLBACK_ADDR = 'ut1mockwallet000000000000000000000000000000';
 
-// Local-dev mock chain endpoints — mounted BEFORE the auth gate, 404 otherwise.
-if (LOCAL_DEV) {
+// Populate req.user from the iframe token BEFORE the mock routes below (which are
+// registered ahead of the gating middleware and would otherwise never see it).
+// This only IDENTIFIES the caller — it never gates — so /__mock/submit can derive
+// the real wallet from req.user and resist a spoofed `from`. The gating middleware
+// further down still enforces auth for everything else.
+app.use((req, _res, next) => {
+  if (!req.user) {
+    const token = req.query.token || req.headers['x-usernode-token'];
+    if (token && JWT_SECRET) { try { req.user = jwt.verify(token, JWT_SECRET); } catch { /* ignore */ } }
+  }
+  next();
+});
+
+// Mock / local-ingest chain endpoints — mounted BEFORE the auth gate so the
+// /__mock/ prefix (in PUBLIC_PREFIXES) is reachable from the iframe. With
+// MOCK_TX_FLOW on (the default everywhere) this is the canonical, self-contained
+// transaction surface: the hosted bridge enters mock mode (the GET /__mock/enabled
+// probe returns 200) and the app routes every submission here, where it is
+// ingested directly into the event log. No chain broadcast / read-back occurs.
+if (MOCK_TX_FLOW || LOCAL_DEV) {
   // Probed by the hosted bridge to decide whether to enter mock mode. A 200
   // here makes the bridge route transactions through /__mock/* instead of
-  // failing with "Mock API not enabled". Only mounted in local-dev, so it 404s
-  // (mock mode off) under staging/production, exactly as intended.
+  // failing with "Mock API not enabled".
   app.get('/__mock/enabled', (_req, res) => res.json({ enabled: true }));
   app.post('/__mock/submit', async (req, res) => {
     const { from, to, amount, memo: m } = req.body || {};
-    // `from` defaults to a stable mock address so the hosted bridge's mock
-    // submit (which omits it) works end-to-end; QCMock still sends its own.
-    const sender = from || MOCK_FALLBACK_ADDR;
+    // Reject undecodable memos up front so a bad payload can never poison the
+    // event log (rebuild() replays every row in txLog).
+    if (memo.decode(m) == null) return res.status(400).json({ error: 'invalid memo' });
+    // Sender precedence: the authenticated wallet (req.user, populated from the
+    // JWT before the public-prefix gate) wins so org ownership is the real user
+    // and a client cannot spoof `from`. Falls back to the client-supplied sender
+    // (local-dev personas / QCMock) and finally a stable mock address.
+    const sender = (req.user && req.user.usernode_pubkey) || from || MOCK_FALLBACK_ADDR;
     const tx = mock.append({ from: sender, to: to || sender, amount: amount || 0, memo: m });
     await pollOnce();
     res.json({ txId: tx.txId, ok: true });
   });
   app.get('/__mock/transactions', (_req, res) => res.json({ transactions: mock.all() }));
-  app.post('/__mock/reset', async (_req, res) => { mock.reset(); txLog.length = 0; seen.clear(); rebuild(); res.json({ ok: true }); });
-  app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
+  // Destructive / test-only surface stays gated to developer + demo environments
+  // so it can never be hit by a real user in production.
+  if (LOCAL_DEV || IS_DEMO) {
+    app.post('/__mock/reset', async (_req, res) => { mock.reset(); txLog.length = 0; seen.clear(); rebuild(); res.json({ ok: true }); });
+    app.post('/__mock/seed', async (_req, res) => { seedDemo(); await pollOnce(); res.json({ ok: true, txs: mock.size() }); });
+  } else {
+    app.all(['/__mock/reset', '/__mock/seed'], (_req, res) => res.status(404).json({ error: 'mock admin disabled' }));
+  }
 } else {
-  // Outside local-dev the mock surface must be genuinely absent: explicitly
-  // 404 every /__mock/* path so the SPA catch-all (app.get('*')) can't answer
-  // the bridge's GET /__mock/enabled probe with a 200 index.html — which would
-  // wrongly switch the bridge into mock mode in staging/production.
+  // MOCK_TX_FLOW explicitly disabled (real-chain reads): the mock surface must
+  // be genuinely absent so the SPA catch-all (app.get('*')) can't answer the
+  // bridge's GET /__mock/enabled probe with a 200 index.html — which would
+  // wrongly switch the bridge into mock mode.
   app.all('/__mock/*', (_req, res) => res.status(404).json({ error: 'mock disabled' }));
 }
 
@@ -301,6 +384,7 @@ app.get('/__quickcount/config', (_req, res) => {
     { label: 'Org Moderator', addr: DEMO.orgMod, username: null },
     { label: 'Org Member', addr: DEMO.orgMember, username: null },
     { label: 'Org Owner — Private Watchers', addr: DEMO.orgC, username: null },
+    { label: 'Org Owner — Pemilu Watch (Indonesia)', addr: DEMO.orgID, username: 'pemilu_watch_id' },
     { label: 'Observer One', addr: DEMO.obs1, username: 'observer_one' },
     { label: 'Observer Three (Station B)', addr: DEMO.obs3, username: 'observer_three' },
     { label: 'Platform Admin', addr: DEMO.admin, username: 'platform_admin' },
@@ -308,13 +392,17 @@ app.get('/__quickcount/config', (_req, res) => {
   ] : null;
   res.json({
     localDev: LOCAL_DEV, staging: IS_STAGING, demo: IS_DEMO,
+    // Self-contained local-ingest mode: the client confirms optimistically and
+    // suppresses the "on-chain sync not configured" banner / awaiting-sync notice.
+    mockMode: MOCK_TX_FLOW,
     treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
     methods: require('./lib/aggregate').METHODS, personas,
     // Chain read config for the client confirmation poll. The browser builds
     // <explorerApiBase>/<chainId>/transactions; both are auth-exempt.
     // chainConfigured=false (no explorer/node upstream) tells the client to
-    // confirm optimistically rather than dead-end on a 20s timeout.
-    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: source.configured,
+    // confirm optimistically rather than dead-end on a 20s timeout. In mock mode
+    // there is nothing to poll, so report configured (the banner is mockMode-driven).
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: MOCK_TX_FLOW ? true : source.configured,
   });
 });
 
@@ -358,6 +446,7 @@ async function walletUnlocked(pubkey) {
 app.get('/api/public/config', (_req, res) => {
   res.json({
     staging: IS_STAGING,
+    mockMode: MOCK_TX_FLOW,
     unlock: {
       enabled: UNLOCK_ENABLED,
       recipient: UNLOCK_RECIPIENT || null,
@@ -365,13 +454,14 @@ app.get('/api/public/config', (_req, res) => {
     },
     // Chain read config so the public dashboard can confirm the unlock payment
     // against the same explorer proxy the main app uses. chainConfigured=false
-    // makes the dashboard confirm optimistically instead of timing out.
-    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: source.configured,
+    // makes the dashboard confirm optimistically instead of timing out. In mock
+    // mode there is nothing to poll, so report configured.
+    chainId: CHAIN_ID, explorerApiBase: EXPLORER_API_BASE, chainConfigured: MOCK_TX_FLOW ? true : source.configured,
   });
 });
 
 // Visibility-aware app state. `viewer` is the connected wallet (or empty).
-app.get('/__quickcount/state', (req, res) => {
+app.get('/__quickcount/state', async (req, res) => {
   try {
     const viewer = (req.query.viewer || '').toString() || null;
     const method = require('./lib/aggregate').METHODS.includes(req.query.method) ? req.query.method : 'latest';
@@ -383,6 +473,9 @@ app.get('/__quickcount/state', (req, res) => {
     if (req.query.eid) {
       const can = visible.some((el) => el.eid === req.query.eid);
       detail = can ? indexer.electionDetail(req.query.eid, method) : null;
+      // Fold in the off-chain working tally so the workspace can hydrate the
+      // inline vote-entry rows + upper bars on load.
+      if (detail) detail.workTally = await loadWorkTally(req.query.eid);
     }
     res.json({ role, elections, detail, method, activeOrgs: indexer.activeOrgs() });
   } catch (err) {
@@ -417,6 +510,105 @@ app.get('/__quickcount/admin', (req, res) => {
       orgFee: ORG_FEE,
     },
   });
+});
+
+// ── Off-chain working tallies (per-station inline vote entry) ────────────────
+// The election workspace lets an organizer key a quick "working tally" straight
+// onto each polling-station row. This is NON-CONSENSUS off-chain data — not
+// signed, not on-chain, never rebuilt by the indexer — kept separate from the
+// official observer/QC.res reporting flow. It is persisted here (Postgres) so it
+// survives reload and is reflected on the dashboard. Keyed by (eid, sid),
+// latest-write-wins, like attachments.
+//
+// The inline form uses a fixed candidate set (mirrors QuickCountInline.CANDIDATES
+// in public/inline-entry.js). We sanitize to these slugs so a bad body can never
+// poison the stored votes.
+const WORK_TALLY_SLUGS = ['evan', 'salah', 'circle'];
+function sanitizeWorkVotes(raw) {
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const out = {};
+  for (const slug of WORK_TALLY_SLUGS) {
+    const n = Number(src[slug]);
+    out[slug] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  return out;
+}
+// Read every saved station tally for an election. Returns [] without a pool so
+// the feature degrades cleanly in pure-memory mode (the platform always sets
+// DATABASE_URL, so this is the dev-only path).
+async function loadWorkTally(eid) {
+  if (!pool) return [];
+  try {
+    const { rows } = await pool.query(
+      'SELECT sid, votes, updated_at FROM work_tallies WHERE eid = $1 ORDER BY sid',
+      [eid]
+    );
+    return rows.map((r) => ({
+      sid: Number(r.sid),
+      votes: r.votes || {},
+      updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : (r.updated_at || null),
+    }));
+  } catch (e) {
+    console.error('loadWorkTally failed:', e.message);
+    return [];
+  }
+}
+
+// Authenticated: save (or replace) a station's working tally. Org-ownership
+// guard mirrors the attachments PUT: only the election's organizing wallet —
+// Owner, Administrator, or Moderator (canOperate) — or a platform admin may
+// write. When the election isn't indexed yet, allow (nothing to overwrite).
+app.put('/api/elections/:eid/worktally/:sid', async (req, res) => {
+  try {
+    const { eid } = req.params;
+    const sid = Number(req.params.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return res.status(400).json({ error: 'bad station id' });
+
+    // Authorization first (so "not allowed" wins over "unavailable"): only the
+    // election's organizing wallet — Owner, Administrator, or Moderator — or a
+    // platform admin may write. When the election isn't indexed yet (organizer
+    // saving before the chain tx lands) we can't resolve the owner — allow it,
+    // since there is nothing to overwrite.
+    const authorPubkey = (req.user && req.user.usernode_pubkey) || null;
+    const authorUsername = (req.user && req.user.username) || null;
+    const el = indexer.elections.get(eid);
+    if (el && !indexer.canOperate(el.orgAddr, authorPubkey) && !indexer.isAdmin(authorPubkey)) {
+      return res.status(403).json({ error: 'Only the organizing wallet can save this election\'s working tally' });
+    }
+
+    // Off-chain working tallies live in the DB; without one the feature is
+    // unavailable in this environment (degrade like attachments/profiles).
+    if (!pool) return res.status(503).json({ error: 'Working tallies are unavailable in this environment' });
+
+    const votes = sanitizeWorkVotes((req.body && req.body.votes) || req.body);
+    const { rows } = await pool.query(
+      `INSERT INTO work_tallies (eid, sid, votes, author_pubkey, author_username, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, $5, NOW())
+       ON CONFLICT (eid, sid)
+       DO UPDATE SET votes = EXCLUDED.votes, author_pubkey = EXCLUDED.author_pubkey,
+                     author_username = EXCLUDED.author_username, updated_at = NOW()
+       RETURNING sid, votes, updated_at`,
+      [eid, sid, JSON.stringify(votes), authorPubkey, authorUsername]
+    );
+    const r = rows[0] || {};
+    res.json({
+      ok: true, eid, sid,
+      votes: r.votes || votes,
+      updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : (r.updated_at || null),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: every saved working tally for an election (for the standalone
+// dashboard). Public — aggregate vote counts only, no PII.
+app.get('/api/public/elections/:eid/worktally', async (req, res) => {
+  try {
+    res.json({ workTally: await loadWorkTally(req.params.eid) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Off-chain image attachments ──────────────────────────────────────────────
@@ -544,12 +736,17 @@ app.get('/api/public/elections/:eid', async (req, res) => {
     // locked (anonymous / unpaid) and unlocked (paid wallet) viewers.
     const unlocked = await walletUnlocked(req.user && req.user.usernode_pubkey);
 
+    // Off-chain working tally — separate from the pay-to-unlock official
+    // results, so it is served to locked and unlocked viewers alike.
+    const workTally = await loadWorkTally(eid);
+
     const base = {
       election: { eid: d.election.eid, name: d.election.name, root_pubkey: d.election.orgAddr },
       candidates,
       reporting: d.reporting,
       lastUpdated: d.lastUpdated,
       locked: !unlocked,
+      workTally,
     };
 
     if (unlocked) {
@@ -844,6 +1041,21 @@ async function migrate() {
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (eid, kind, ref_id)
     )`);
+  // Off-chain per-station working tallies (inline vote entry in the workspace).
+  // PUBLIC table: only aggregate vote counts shown on the dashboard, so a
+  // stranger seeing every row is by design. No FK to candidates/stations on
+  // purpose — rows may be written before the indexer has caught up, same as
+  // attachments. Latest-write-wins per (eid, sid).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS work_tallies (
+      eid TEXT NOT NULL,
+      sid INTEGER NOT NULL,
+      votes JSONB NOT NULL,
+      author_pubkey TEXT,
+      author_username TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (eid, sid)
+    )`);
   // App-local user profiles: editable display name + preferred UI language,
   // keyed by the Usernode wallet. PRIVATE — it ties a wallet to a chosen
   // personal name and language (PII), like `unlocks`. Schema-only in staging;
@@ -897,18 +1109,24 @@ async function seedStaging() {
   const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6aGFTEMLQkAF/tKAS/fz4YAAAAASUVORK5CYII=';
   const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQTX6NFTEMLQkADGRcwcht3uAAAAAASUVORK5CYII=';
   const GRAY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGMoLKzCihiGlgQA/HdXAZV6UO0AAAAASUVORK5CYII=';
+  const GREEN_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQWhCHFTEMLQkAE2xIAZF2mmQAAAAASUVORK5CYII=';
   const demoAtt = [
-    ['cand_avatar', 1, RED_PNG],
-    ['cand_avatar', 2, BLUE_PNG],
-    ['station_c1', 1, GRAY_PNG],
+    // Generic demo-election avatars / C1 scan.
+    ['demo-election', 'cand_avatar', 1, RED_PNG],
+    ['demo-election', 'cand_avatar', 2, BLUE_PNG],
+    ['demo-election', 'station_c1', 1, GRAY_PNG],
+    // Pilpres 2024 (Indonesia) candidate-pair avatars (placeholders, not real photos).
+    [PILPRES_EID, 'cand_avatar', 1, RED_PNG],
+    [PILPRES_EID, 'cand_avatar', 2, BLUE_PNG],
+    [PILPRES_EID, 'cand_avatar', 3, GREEN_PNG],
   ];
-  for (const [kind, refId, b64] of demoAtt) {
+  for (const [eid, kind, refId, b64] of demoAtt) {
     const buf = Buffer.from(b64, 'base64');
     await pool.query(
       `INSERT INTO attachments (eid, kind, ref_id, mime, bytes, byte_size, uploader_pubkey, updated_at)
-       VALUES ('demo-election', $1, $2, 'image/png', $3, $4, $5, NOW())
+       VALUES ($1, $2, $3, 'image/png', $4, $5, $6, NOW())
        ON CONFLICT (eid, kind, ref_id) DO NOTHING`,
-      [kind, refId, buf, buf.length, root]
+      [eid, kind, refId, buf, buf.length, root]
     );
   }
 
@@ -939,6 +1157,15 @@ async function seedStaging() {
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [DEMO.pollwatch]
   );
+  // Fourth demo profile — keyed to the Pemilu Watch (Indonesia) org owner, so the
+  // 2024 Pilpres presentation election has a populated organizer profile. Clearly
+  // fictional; NOT Indonesia's real election commission.
+  await pool.query(
+    `INSERT INTO profiles (usernode_pubkey, username, display_name, preferred_lang, bio, created_at, updated_at)
+     VALUES ($1, 'pemilu_watch_id', 'Pemilu_Watch_ID', 'en', 'Staging demo — independent election-watch organizer (fictional)', '2026-06-01T00:00:00.000Z', NOW())
+     ON CONFLICT (usernode_pubkey) DO NOTHING`,
+    [DEMO.orgID]
+  );
   // Demo unlock row keyed to the staging demo user's username, so the unlock
   // entitlement restore (live results stay unlocked on return) is reviewable.
   await pool.query(
@@ -947,6 +1174,26 @@ async function seedStaging() {
      ON CONFLICT (usernode_pubkey) DO NOTHING`,
     [root, UNLOCK_PRICE, UNLOCK_RECIPIENT || root]
   );
+  // Working-tally rows (off-chain) so the workspace upper bars + the dashboard
+  // "Working tally" section render non-empty in PR previews / proposal checks
+  // without a tester typing first. Obviously-fake counts, authored by the
+  // staging demo root address. Seeds two stations each for the Pilpres demo
+  // and the generic demo-election. Idempotent — replaces the old client-only
+  // maybeSeedDemoInline() seeding.
+  const demoWork = [
+    [PILPRES_EID, 1, { evan: 412, salah: 286, circle: 173 }],
+    [PILPRES_EID, 2, { evan: 168, salah: 503, circle: 241 }],
+    ['demo-election', 1, { evan: 412, salah: 286, circle: 173 }],
+    ['demo-election', 2, { evan: 168, salah: 503, circle: 241 }],
+  ];
+  for (const [eid, sid, votes] of demoWork) {
+    await pool.query(
+      `INSERT INTO work_tallies (eid, sid, votes, author_pubkey, author_username, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, 'staging_demo_user', NOW())
+       ON CONFLICT (eid, sid) DO NOTHING`,
+      [eid, sid, JSON.stringify(votes), root]
+    );
+  }
 }
 
 async function start() {
@@ -961,7 +1208,14 @@ async function start() {
   // which the SPA surfaces as a persistent banner on the Orgs/Admin screens and
   // a neutral "submitted — awaiting on-chain sync" notice instead of a false
   // success toast. We still log here so operators see it in container logs.
-  if (source.backend === 'none' && !LOCAL_DEV) {
+  if (MOCK_TX_FLOW && !LOCAL_DEV) {
+    console.log(
+      '[QuickCount] running in self-contained local-ingest mode (MOCK_TX_FLOW) — ' +
+      'submissions are recorded directly into the event log via /__mock/submit and ' +
+      'persisted to chain_txs when DATABASE_URL is set; no chain broadcast/read-back. ' +
+      'Set MOCK_TX_FLOW=false to restore real-chain reads.'
+    );
+  } else if (source.backend === 'none' && !LOCAL_DEV) {
     console.warn(
       '[QuickCount] WARNING: no chain read source configured — set EXPLORER_API_URL ' +
       'or NODE_RPC_URL. On-chain transactions will broadcast but the indexer will not ' +
@@ -983,4 +1237,4 @@ if (require.main === module) {
   start().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source };
+module.exports = { app, indexer, buildDemoTxs, resyncFromChain, source, PILPRES_EID, sanitizeWorkVotes, loadWorkTally, migrate };

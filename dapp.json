@@ -79,14 +79,19 @@
       "expectText": "Staging demo"
     },
     {
-      "name": "Results screen shows the Export CSV button",
+      "name": "Dashboard shows the Open workspace link",
       "path": "/#/dashboard",
-      "expectSelector": "#exp-csv"
+      "expectText": "Open election workspace"
     },
     {
       "name": "Elections list renders",
       "path": "/#/elections",
       "expectText": "Elections"
+    },
+    {
+      "name": "Local-first election queue offline pill renders (staging demo seed)",
+      "path": "/#/elections",
+      "expectText": "Saved Locally (Offline)"
     },
     {
       "name": "Evidence gallery renders",
@@ -99,14 +104,34 @@
       "expectText": "Pollwatch Alliance"
     },
     {
-      "name": "Demo election shows reporting progress",
+      "name": "Public dashboard leads with the election title (official chart removed)",
       "path": "/dashboard.html?eid=demo-election",
-      "expectText": "stations reported"
+      "expectText": "General Election"
     },
     {
-      "name": "Dashboard shows the locked pay-to-unlock overlay",
+      "name": "Public dashboard renders the working-tally panel",
       "path": "/dashboard.html?eid=demo-election",
-      "expectText": "Unlock live results"
+      "expectSelector": "#work-tally"
+    },
+    {
+      "name": "Elections list shows the Pilpres 2024 demo election",
+      "path": "/#/elections",
+      "expectText": "Pilpres 2024"
+    },
+    {
+      "name": "Pilpres 2024 demo dashboard leads with the election title",
+      "path": "/dashboard.html?eid=demo-pilpres-2024",
+      "expectText": "Pilpres 2024"
+    },
+    {
+      "name": "Public dashboard shows the organizer working-tally summary line",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectText": "Live count entered by the organizer"
+    },
+    {
+      "name": "Public dashboard renders working-tally bars",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectSelector": "#work-tally"
     },
     {
       "name": "Public results are locked for anonymous viewers",
@@ -116,6 +141,31 @@
     {
       "name": "Seeded candidate avatar serves an image",
       "path": "/api/public/elections/demo-election/attachments/cand_avatar/1"
+    },
+    {
+      "name": "Election workspace renders click-to-expand TPS vote-entry rows for an organizer",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
+      "expectSelector": "[data-strow]"
+    },
+    {
+      "name": "TPS rows render a rotating expand chevron for an organizer",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
+      "expectSelector": "svg.transition-transform"
+    },
+    {
+      "name": "Workspace renders the inline working-tally vote-share bars",
+      "path": "/#/election/demo-election",
+      "expectSelector": "#ws-tally-bars [data-inl-bar]"
+    },
+    {
+      "name": "Dashboard shows the persisted Working tally section",
+      "path": "/#/dashboard",
+      "expectText": "Working tally"
+    },
+    {
+      "name": "Working-tally reader returns the seeded station rows",
+      "path": "/api/public/elections/demo-election/worktally",
+      "expectText": "\"sid\""
     },
     {
       "name": "Theme toggle button present on main app",
@@ -221,6 +271,16 @@
       "name": "Verify page shows the Evidence PDF drop zone",
       "path": "/#/verify",
       "expectSelector": "#vr-drop"
+    },
+    {
+      "name": "Config advertises self-contained mock-ingest mode",
+      "path": "/__quickcount/config",
+      "expectText": "\"mockMode\":true"
+    },
+    {
+      "name": "Mock submit surface is enabled so submissions ingest locally",
+      "path": "/__mock/enabled",
+      "expectText": "\"enabled\":true"
     }
   ]
 }
