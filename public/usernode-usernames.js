@@ -10,7 +10,6 @@
     'ut1demoobserverone000000000000000000000000': 'Observer One',
     'ut1demoobservertwo000000000000000000000000': 'Observer Two',
     'ut1demoobserverthree00000000000000000000000': 'Observer Three',
-    'ut1demoadmin000000000000000000000000000000': 'Platform Admin',
   };
   function shortAddr(addr) {
     if (!addr) return '—';

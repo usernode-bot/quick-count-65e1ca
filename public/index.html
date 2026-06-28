@@ -123,7 +123,7 @@
   // ───────────────────────── App state ─────────────────────────
   const App = {
     cfg: null,
-    role: { addr: null, isAdmin: false, org: null, observerOf: [] },
+    role: { addr: null, org: null, observerOf: [] },
     state: null,        // last /__quickcount/state response
     eid: '',            // selected election
     method: 'latest',
@@ -143,7 +143,6 @@
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
     { id: 'heatmap', label: 'Heatmap', icon: '🗺️' },
-    { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
@@ -175,7 +174,7 @@
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
-      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes', tab_admin: 'Operator',
+      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes',
       evidence_pdf_download: 'Evidence PDF', evidence_pdf_generating: 'Generating…', evidence_pdf_unavailable: 'PDF tools unavailable — open this page online to enable Evidence PDFs.', evidence_pdf_ready: 'Evidence PDF downloaded ✓', evidence_pdf_ready_prompt: 'Result submitted on-chain. Download your Evidence PDF?',
       verify_heading: 'Verify evidence', verify_intro: 'Drop an Evidence PDF below to check it on your device. Nothing is uploaded — the file is parsed locally, its fingerprint is recomputed, and (when a live chain is configured) it is cross-checked against the blockchain.',
       verify_drop: 'Drop an Evidence PDF here, or click to choose a file', verify_checking: 'Checking…', verify_sample: 'Run a sample', verify_sample_hint: 'Generate and verify an Evidence PDF for the demo election.',
@@ -199,7 +198,6 @@
       loading_adding_member: 'Adding member…', loading_changing_role: 'Updating role…', loading_removing_member: 'Removing member…', loading_changing_visibility: 'Updating visibility…', loading_deleting_org: 'Deleting organization…',
       evidence_heading: 'Evidence', evidence_upload_label: 'Evidence (tally sheet) — hashed locally, file never uploaded', evidence_submit: 'Verify a file against this', evidence_no_evidence: 'No evidence hashes recorded for this election.',
       disputes_heading: 'Disputes', disputes_no_disputes: 'No disputes filed for this election.', disputes_file: 'File a dispute', disputes_resolve: 'Resolve disputes', disputes_uphold: 'Uphold', disputes_reject: 'Reject',
-      admin_heading: 'Platform operator', admin_intro: 'Platform operators run the whole Quick Count service (fee waivers, oversight). This is a platform-support role — it does not make you the owner of any organization. Each organization is governed by its Owner.', admin_waive_fee: 'Waive fee',
       toast_election_published: 'Election published ✓', toast_submit_result: 'Result submitted ✓', toast_station_added: 'Station added ✓', toast_observer_authorized: 'Observer authorized ✓', toast_dispute_filed: 'Dispute filed ✓', toast_dispute_upheld: 'Dispute upheld ✓', toast_dispute_rejected: 'Dispute rejected ✓', toast_org_registered: 'Organization registered ✓', toast_fee_paid: 'Fee paid ✓', toast_fee_waived: 'Fee waived ✓', toast_failed: 'Failed:', toast_wallet_unavailable: 'Wallet bridge unavailable — open inside Usernode.', toast_no_wallet: 'No wallet address linked.', toast_add_candidate: 'Add a name and at least one candidate.', toast_nothing_to_import: 'Nothing to import', toast_enter_reason: 'Enter a reason', toast_enter_org_name: 'Enter an organization name', toast_enter_station_name: 'Enter a station name', toast_enter_observer_addr: 'Enter an observer address',
       notice_wallet_unreachable: "Couldn't reach the wallet service. Your entries were kept.", notice_action_failed: "That didn't go through. Your entries were kept.", notice_connecting: 'Connecting to your wallet…', action_try_again: 'Try again', partial_candidates: 'Election published; {done} of {total} candidates added.', partial_stations: '{done} of {total} stations imported.', partial_generic: '{done} of {total} steps completed.',
       loading_submitting: 'Submitting result…', loading_adding_station: 'Adding station…', loading_authorizing: 'Authorizing observer…', loading_filing: 'Filing dispute…', loading_resolving: 'Resolving…', loading_registering: 'Registering & paying fee…', loading_paying: 'Paying fee…', loading_waiving: 'Waiving fee…', loading_importing: 'Importing station',
@@ -214,7 +212,7 @@
       elections_form_name_label: 'Election name', elections_form_candidates_label: 'Candidates', elections_form_add_candidate: '+ Add', elections_form_candidate_ph: 'Candidate name', elections_form_create: 'Create & publish', elections_form_tx_note: 'Signs one transaction for the election and one per candidate.',
       election_detail_back: '← all elections', election_detail_by_org: 'by', election_detail_pending_fee: 'pending fee', election_detail_loading: 'Loading election…', election_detail_reporting: '{reported} of {total} stations reported', election_detail_connect_note: 'Connect an authorized observer or the organizing wallet to report results or manage this election.',
       election_observer_title: 'Report result', election_observer_your_station: '(your station)', election_observer_station_label: 'Polling station', election_observer_total_label: 'Total ballots', election_observer_invalid_label: 'Invalid / blank', election_observer_submit_btn: 'Submit / revise result',
-      ballot_proof_title: 'Ballot proof', ballot_proof_desc: 'Attach a photo or scan of the ballot / count form. It is imported, auto-checked, and reviewed before you submit. Shown only to your organization and platform operators — the public sees a “validated” badge, not the image.', ballot_proof_choose: 'Choose a file (JPG, PNG, or PDF)', ballot_proof_replace: 'Replace / re-scan', ballot_proof_submit: 'Submit ballot proof', ballot_proof_station: 'Polling station', ballot_proof_valid: 'Looks valid ✓', ballot_proof_invalid: 'This doesn’t look like a usable ballot scan:', ballot_proof_submitted: 'Ballot proof submitted ✓', ballot_proof_attached: 'Validated proof attached ✓', ballot_proof_draft_saved: 'Draft saved — not yet submitted', ballot_proof_unavailable: 'Ballot proofs are unavailable in this environment.', ballot_proof_fingerprint: 'Fingerprint', ballot_proof_pick_first: 'Choose a file to review first.',
+      ballot_proof_title: 'Ballot proof', ballot_proof_desc: 'Attach a photo or scan of the ballot / count form. It is imported, auto-checked, and reviewed before you submit. Shown only to your organization — the public sees a “validated” badge, not the image.', ballot_proof_choose: 'Choose a file (JPG, PNG, or PDF)', ballot_proof_replace: 'Replace / re-scan', ballot_proof_submit: 'Submit ballot proof', ballot_proof_station: 'Polling station', ballot_proof_valid: 'Looks valid ✓', ballot_proof_invalid: 'This doesn’t look like a usable ballot scan:', ballot_proof_submitted: 'Ballot proof submitted ✓', ballot_proof_attached: 'Validated proof attached ✓', ballot_proof_draft_saved: 'Draft saved — not yet submitted', ballot_proof_unavailable: 'Ballot proofs are unavailable in this environment.', ballot_proof_fingerprint: 'Fingerprint', ballot_proof_pick_first: 'Choose a file to review first.',
       election_stations_title: 'Stations', election_station_name_ph: 'Station name', election_station_label_ph: 'Label / region', election_station_add_btn: 'Add', election_station_bulk_import: 'Bulk import from CSV', election_station_csv_desc: 'One station per line: name,label', election_station_import_btn: 'Import all', election_station_count: '{n} stations:', election_station_preview: '{n} station(s) ready to import.',
       election_observers_title: 'Observers', election_observer_addr_ph: 'Observer wallet (ut1…)', election_observer_all_stations: 'All stations', election_observer_authorize_btn: 'Authorize', election_observer_count: '{n} observer(s):',
       election_dispute_target_label: 'Target result', election_dispute_no_results: 'No reported results to dispute yet.', election_dispute_reason_ph: 'Reason for dispute',
@@ -222,7 +220,6 @@
       disputes_filed_by: 'filed by {who}', disputes_has_evidence: 'has evidence', disputes_no_open: 'No open disputes.', disputes_status_upheld: 'upheld', disputes_status_rejected: 'rejected', disputes_status_open: 'open', disputes_workspace_note: 'Authorized observers and the organizing wallet can file and resolve disputes from the election workspace.',
       orgs_no_active: 'No active organizations visible yet.',
       evidence_sha256_desc: 'Each result may carry a SHA-256 hash of its tally sheet. Drop the original file below to prove it matches what was reported on-chain — the file never leaves your device.', evidence_verifying_label: 'Verifying against:', evidence_verifying_default: 'select a result below, or any hash', evidence_pick_target: 'Pick a result to compare against.', evidence_match_yes: '✓ Match — this file is exactly what was reported.', evidence_match_no: '✗ No match — this file differs from the recorded evidence.',
-      admin_scope_required: 'Platform-operator access required. Connect a platform-operator wallet.', admin_stat_orgs: 'Organizations', admin_stat_active_orgs: 'Active orgs', admin_stat_elections: 'Elections', admin_stat_org_fee: 'Org fee', admin_all_orgs: 'All organizations', admin_badge_waived: 'waived', admin_paid: 'paid {amount}',
       select_election_prompt: 'Select an election.',
       tab_profile: 'My Profile',
       label_bio: 'Bio',
@@ -262,7 +259,7 @@
       readonly_note: 'Nama pengguna dan dompet Anda dikelola oleh Usernode dan hanya bisa dibaca. Hanya nama tampilan yang dapat diubah.',
       no_wallet_note: 'Tautkan dompet Usernode untuk mengatur nama tampilan. Pilihan bahasa Anda tetap disimpan di perangkat ini.',
       not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
-      tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa', tab_admin: 'Admin',
+      tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa',
       method_latest: 'Laporan terbaru', method_first: 'Laporan pertama', method_consensus: 'Konsensus', method_median: 'Median', method_verified: 'Terverifikasi saja',
       dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
       dashboard_working_tally: 'Hitungan kerja', dashboard_working_tally_desc: 'Dimasukkan oleh penyelenggara di ruang kerja — terpisah dari hasil resmi.', dashboard_working_tally_reported: '{reported} dari {total} TPS dimasukkan',
@@ -270,7 +267,6 @@
       orgs_heading: 'Organisasi', orgs_active_orgs: 'Organisasi aktif', orgs_register_heading: 'Daftarkan organisasi Anda', orgs_register_desc: 'Pendaftaran membayar biaya satu kali sebesar {fee} ke perbendaharaan platform. Hingga dikonfirmasi, pemilihan Anda disembunyikan.', orgs_register_button: 'Daftar & bayar biaya', orgs_pay_fee: 'Bayar biaya pendaftaran', orgs_name_placeholder: 'Nama organisasi', orgs_jur_placeholder: 'Yurisdiksi (opsional)', orgs_active_badge: 'Aktif', orgs_pending_badge: 'Menunggu — biaya belum dibayar', orgs_connect_first: 'Hubungkan dompet Anda terlebih dahulu.', orgs_manage_elections: 'Pemilihan Anda aktif. Kelola di tab Pemilihan.',
       evidence_heading: 'Bukti', evidence_upload_label: 'Bukti (lembar penghitungan) — di-hash secara lokal, file tidak diunggah', evidence_submit: 'Verifikasi file terhadap ini', evidence_no_evidence: 'Tidak ada hash bukti yang tercatat untuk pemilihan ini.',
       disputes_heading: 'Sengketa', disputes_no_disputes: 'Tidak ada sengketa yang diajukan untuk pemilihan ini.', disputes_file: 'Ajukan sengketa', disputes_resolve: 'Selesaikan sengketa', disputes_uphold: 'Diterima', disputes_reject: 'Ditolak',
-      admin_heading: 'Admin platform', admin_waive_fee: 'Bebaskan biaya',
       toast_election_published: 'Pemilihan diterbitkan ✓', toast_submit_result: 'Hasil dikirim ✓', toast_station_added: 'TPS ditambahkan ✓', toast_observer_authorized: 'Pengamat diotorisasi ✓', toast_dispute_filed: 'Sengketa diajukan ✓', toast_dispute_upheld: 'Sengketa diterima ✓', toast_dispute_rejected: 'Sengketa ditolak ✓', toast_org_registered: 'Organisasi terdaftar ✓', toast_fee_paid: 'Biaya dibayar ✓', toast_fee_waived: 'Biaya dibebaskan ✓', toast_failed: 'Gagal:', toast_wallet_unavailable: 'Jembatan dompet tidak tersedia — buka di dalam Usernode.', toast_no_wallet: 'Tidak ada alamat dompet yang tertaut.', toast_add_candidate: 'Tambahkan nama dan setidaknya satu kandidat.', toast_nothing_to_import: 'Tidak ada yang diimpor', toast_enter_reason: 'Masukkan alasan', toast_enter_org_name: 'Masukkan nama organisasi', toast_enter_station_name: 'Masukkan nama TPS', toast_enter_observer_addr: 'Masukkan alamat pengamat',
       loading_submitting: 'Mengirim hasil…', loading_adding_station: 'Menambahkan TPS…', loading_authorizing: 'Mengotorisasi pengamat…', loading_filing: 'Mengajukan sengketa…', loading_resolving: 'Menyelesaikan…', loading_registering: 'Mendaftar & membayar biaya…', loading_paying: 'Membayar biaya…', loading_waiving: 'Membebaskan biaya…', loading_importing: 'Mengimpor TPS',
       loading_creating_election: 'Membuat pemilihan…', loading_adding_candidate: 'Menambahkan kandidat {i}/{n}…', loading_importing_station: 'Mengimpor TPS {i}/{n}…',
@@ -290,7 +286,6 @@
       disputes_filed_by: 'diajukan oleh {who}', disputes_has_evidence: 'ada bukti', disputes_no_open: 'Tidak ada sengketa terbuka.', disputes_status_upheld: 'diterima', disputes_status_rejected: 'ditolak', disputes_status_open: 'terbuka', disputes_workspace_note: 'Pengamat yang berwenang dan dompet penyelenggara dapat mengajukan dan menyelesaikan sengketa dari ruang kerja pemilihan.',
       orgs_no_active: 'Belum ada organisasi aktif yang terlihat.',
       evidence_sha256_desc: 'Setiap hasil mungkin memiliki hash SHA-256 dari lembar penghitungannya. Jatuhkan file asli di bawah untuk membuktikan kecocokannya dengan yang dilaporkan di blockchain — file tidak meninggalkan perangkat Anda.', evidence_verifying_label: 'Memverifikasi terhadap:', evidence_verifying_default: 'pilih hasil di bawah, atau hash apa pun', evidence_pick_target: 'Pilih hasil untuk dibandingkan.', evidence_match_yes: '✓ Cocok — file ini persis seperti yang dilaporkan.', evidence_match_no: '✗ Tidak cocok — file ini berbeda dari bukti yang tercatat.',
-      admin_scope_required: 'Diperlukan hak admin platform. Hubungkan dompet admin.', admin_stat_orgs: 'Organisasi', admin_stat_active_orgs: 'Org aktif', admin_stat_elections: 'Pemilihan', admin_stat_org_fee: 'Biaya org', admin_all_orgs: 'Semua organisasi', admin_badge_waived: 'dibebaskan', admin_paid: 'dibayar {amount}',
       select_election_prompt: 'Pilih pemilihan.',
       tab_profile: 'Profil Saya',
       label_bio: 'Bio',
@@ -330,14 +325,13 @@
       readonly_note: '您的用户名和钱包由 Usernode 管理，此处仅供查看。只有显示名称可以修改。',
       no_wallet_note: '关联 Usernode 钱包以设置显示名称。您的语言选择仍会保存在本设备。',
       not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
-      tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议', tab_admin: '管理',
+      tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议',
       method_latest: '最新提交', method_first: '首次提交', method_consensus: '共识', method_median: '中位数', method_verified: '仅已验证',
       dashboard_heading: '仪表盘', dashboard_select_election: '选择一场选举以查看实时结果。', dashboard_export_csv: '导出 CSV', dashboard_export_json: '导出 JSON', dashboard_by_station: '按投票站', dashboard_no_stations: '暂无候选人。', dashboard_last_submission: '最后提交', dashboard_auto_refreshing: '自动刷新', dashboard_no_submissions: '暂无提交', dashboard_stations_reported: '个投票站已上报', dashboard_votes: '票',
       elections_heading: '选举', elections_new: '+ 新建选举', elections_no_elections: '暂无选举。', elections_open_workspace: '打开选举工作区 →',
       orgs_heading: '机构', orgs_active_orgs: '活跃机构', orgs_register_heading: '注册您的机构', orgs_register_desc: '注册需向平台财库缴纳一次性费用 {fee}。在确认之前，您的选举将保持隐藏。', orgs_register_button: '注册并缴费', orgs_pay_fee: '缴纳注册费', orgs_name_placeholder: '机构名称', orgs_jur_placeholder: '管辖区（可选）', orgs_active_badge: '活跃', orgs_pending_badge: '待审 — 费用未缴纳', orgs_connect_first: '请先连接钱包。', orgs_manage_elections: '您的选举已上线，请在"选举"标签页进行管理。',
       evidence_heading: '证据', evidence_upload_label: '证据（计票表）— 在本地哈希，文件不上传', evidence_submit: '验证文件是否匹配', evidence_no_evidence: '此次选举没有记录任何证据哈希。',
       disputes_heading: '争议', disputes_no_disputes: '此次选举尚无争议。', disputes_file: '提交争议', disputes_resolve: '处理争议', disputes_uphold: '支持', disputes_reject: '驳回',
-      admin_heading: '平台管理', admin_waive_fee: '免除费用',
       toast_election_published: '选举已发布 ✓', toast_submit_result: '结果已提交 ✓', toast_station_added: '投票站已添加 ✓', toast_observer_authorized: '观察员已授权 ✓', toast_dispute_filed: '争议已提交 ✓', toast_dispute_upheld: '争议已支持 ✓', toast_dispute_rejected: '争议已驳回 ✓', toast_org_registered: '机构已注册 ✓', toast_fee_paid: '费用已缴纳 ✓', toast_fee_waived: '费用已免除 ✓', toast_failed: '失败：', toast_wallet_unavailable: '钱包桥接不可用 — 请在 Usernode 内打开。', toast_no_wallet: '未关联钱包地址。', toast_add_candidate: '请添加名称和至少一位候选人。', toast_nothing_to_import: '无可导入内容', toast_enter_reason: '请输入原因', toast_enter_org_name: '请输入机构名称', toast_enter_station_name: '请输入投票站名称', toast_enter_observer_addr: '请输入观察员地址',
       loading_submitting: '正在提交结果…', loading_adding_station: '正在添加投票站…', loading_authorizing: '正在授权观察员…', loading_filing: '正在提交争议…', loading_resolving: '正在处理…', loading_registering: '正在注册并缴费…', loading_paying: '正在缴费…', loading_waiving: '正在免除费用…', loading_importing: '正在导入投票站',
       loading_creating_election: '正在创建选举…', loading_adding_candidate: '正在添加候选人 {i}/{n}…', loading_importing_station: '正在导入投票站 {i}/{n}…',
@@ -357,7 +351,6 @@
       disputes_filed_by: '由 {who} 提交', disputes_has_evidence: '有证据', disputes_no_open: '无待处理争议。', disputes_status_upheld: '已支持', disputes_status_rejected: '已驳回', disputes_status_open: '处理中', disputes_workspace_note: '授权观察员和组织钱包可在选举工作区提交和处理争议。',
       orgs_no_active: '暂无可见的活跃机构。',
       evidence_sha256_desc: '每条结果可能附带其计票表的 SHA-256 哈希值。将原始文件拖放到下方，以证明其与链上报告的内容一致——文件不会离开您的设备。', evidence_verifying_label: '验证对象：', evidence_verifying_default: '在下方选择一条结果，或输入任意哈希值', evidence_pick_target: '请选择要对比的结果。', evidence_match_yes: '✓ 匹配 — 此文件与上报内容完全一致。', evidence_match_no: '✗ 不匹配 — 此文件与记录的证据不符。',
-      admin_scope_required: '需要平台管理员权限。请连接管理员钱包。', admin_stat_orgs: '机构', admin_stat_active_orgs: '活跃机构', admin_stat_elections: '选举', admin_stat_org_fee: '注册费', admin_all_orgs: '所有机构', admin_badge_waived: '已豁免', admin_paid: '已缴 {amount}',
       select_election_prompt: '请选择一场选举。',
       tab_profile: '我的资料',
       label_bio: '简介',
@@ -397,14 +390,13 @@
       readonly_note: 'Tu nombre de usuario y tu billetera los gestiona Usernode y aquí son de solo lectura. Solo puedes cambiar tu nombre visible.',
       no_wallet_note: 'Vincula una billetera de Usernode para definir un nombre visible. Tu idioma se guarda igualmente en este dispositivo.',
       not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
-      tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas', tab_admin: 'Admin',
+      tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas',
       method_latest: 'Último envío', method_first: 'Primer envío', method_consensus: 'Consenso', method_median: 'Mediana', method_verified: 'Solo verificados',
       dashboard_heading: 'Panel', dashboard_select_election: 'Selecciona una elección para ver los resultados en vivo.', dashboard_export_csv: 'Exportar CSV', dashboard_export_json: 'Exportar JSON', dashboard_by_station: 'Por mesa', dashboard_no_stations: 'Sin candidatos.', dashboard_last_submission: 'Último envío', dashboard_auto_refreshing: 'actualización automática', dashboard_no_submissions: 'Sin envíos aún', dashboard_stations_reported: 'mesas reportadas', dashboard_votes: 'votos',
       elections_heading: 'Elecciones', elections_new: '+ Nueva elección', elections_no_elections: 'Sin elecciones aún.', elections_open_workspace: 'Abrir espacio de trabajo →',
       orgs_heading: 'Organizaciones', orgs_active_orgs: 'Organizaciones activas', orgs_register_heading: 'Registra tu organización', orgs_register_desc: 'El registro paga una cuota única de {fee} al tesoro de la plataforma. Hasta que se confirme, tus elecciones permanecerán ocultas.', orgs_register_button: 'Registrar y pagar', orgs_pay_fee: 'Pagar cuota de registro', orgs_name_placeholder: 'Nombre de la organización', orgs_jur_placeholder: 'Jurisdicción (opcional)', orgs_active_badge: 'Activa', orgs_pending_badge: 'Pendiente — cuota no pagada', orgs_connect_first: 'Conecta tu billetera primero.', orgs_manage_elections: 'Tus elecciones están activas. Gestiónelas en Elecciones.',
       evidence_heading: 'Evidencia', evidence_upload_label: 'Evidencia (acta de escrutinio) — hash local, el archivo no se sube', evidence_submit: 'Verificar un archivo contra esto', evidence_no_evidence: 'No hay hashes de evidencia registrados para esta elección.',
       disputes_heading: 'Disputas', disputes_no_disputes: 'No se han presentado disputas para esta elección.', disputes_file: 'Presentar disputa', disputes_resolve: 'Resolver disputas', disputes_uphold: 'Aceptar', disputes_reject: 'Rechazar',
-      admin_heading: 'Admin de plataforma', admin_waive_fee: 'Eximir cuota',
       toast_election_published: 'Elección publicada ✓', toast_submit_result: 'Resultado enviado ✓', toast_station_added: 'Mesa añadida ✓', toast_observer_authorized: 'Observador autorizado ✓', toast_dispute_filed: 'Disputa presentada ✓', toast_dispute_upheld: 'Disputa aceptada ✓', toast_dispute_rejected: 'Disputa rechazada ✓', toast_org_registered: 'Organización registrada ✓', toast_fee_paid: 'Cuota pagada ✓', toast_fee_waived: 'Cuota eximida ✓', toast_failed: 'Error:', toast_wallet_unavailable: 'Puente de billetera no disponible — ábrelo dentro de Usernode.', toast_no_wallet: 'No hay dirección de billetera vinculada.', toast_add_candidate: 'Añade un nombre y al menos un candidato.', toast_nothing_to_import: 'Nada para importar', toast_enter_reason: 'Introduce un motivo', toast_enter_org_name: 'Introduce el nombre de la organización', toast_enter_station_name: 'Introduce el nombre de la mesa', toast_enter_observer_addr: 'Introduce la dirección del observador',
       loading_submitting: 'Enviando resultado…', loading_adding_station: 'Añadiendo mesa…', loading_authorizing: 'Autorizando observador…', loading_filing: 'Presentando disputa…', loading_resolving: 'Resolviendo…', loading_registering: 'Registrando y pagando cuota…', loading_paying: 'Pagando cuota…', loading_waiving: 'Eximiendo cuota…', loading_importing: 'Importando mesa',
       loading_creating_election: 'Creando elección…', loading_adding_candidate: 'Añadiendo candidato {i}/{n}…', loading_importing_station: 'Importando mesa {i}/{n}…',
@@ -425,7 +417,6 @@
       disputes_filed_by: 'presentado por {who}', disputes_has_evidence: 'tiene evidencia', disputes_no_open: 'No hay disputas abiertas.', disputes_status_upheld: 'aceptada', disputes_status_rejected: 'rechazada', disputes_status_open: 'abierta', disputes_workspace_note: 'Los observadores autorizados y el monedero organizador pueden presentar y resolver disputas desde el espacio de trabajo de la elección.',
       orgs_no_active: 'No hay organizaciones activas visibles aún.',
       evidence_sha256_desc: 'Cada resultado puede incluir un hash SHA-256 de su acta de escrutinio. Arrastra el archivo original aquí abajo para comprobar que coincide con lo reportado en la cadena — el archivo nunca sale de tu dispositivo.', evidence_verifying_label: 'Verificando contra:', evidence_verifying_default: 'selecciona un resultado abajo, o cualquier hash', evidence_pick_target: 'Selecciona un resultado para comparar.', evidence_match_yes: '✓ Coincide — este archivo es exactamente lo que fue reportado.', evidence_match_no: '✗ No coincide — este archivo difiere de la evidencia registrada.',
-      admin_scope_required: 'Se requiere acceso de admin de plataforma. Conecta un monedero admin.', admin_stat_orgs: 'Organizaciones', admin_stat_active_orgs: 'Orgs activas', admin_stat_elections: 'Elecciones', admin_stat_org_fee: 'Cuota org', admin_all_orgs: 'Todas las organizaciones', admin_badge_waived: 'eximida', admin_paid: 'pagado {amount}',
       select_election_prompt: 'Selecciona una elección.',
       tab_profile: 'Mi perfil',
       label_bio: 'Biografía',
@@ -465,14 +456,13 @@
       readonly_note: 'आपका उपयोगकर्ता नाम और वॉलेट Usernode द्वारा प्रबंधित हैं और यहाँ केवल पढ़े जा सकते हैं। केवल प्रदर्शित नाम बदला जा सकता है।',
       no_wallet_note: 'प्रदर्शित नाम सेट करने के लिए Usernode वॉलेट लिंक करें। आपकी भाषा का चयन फिर भी इस डिवाइस पर सहेजा जाता है।',
       not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
-      tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद', tab_admin: 'प्रशासन',
+      tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद',
       method_latest: 'नवीनतम सबमिशन', method_first: 'पहला सबमिशन', method_consensus: 'सहमति', method_median: 'माध्यिका', method_verified: 'केवल सत्यापित',
       dashboard_heading: 'डैशबोर्ड', dashboard_select_election: 'लाइव परिणाम देखने के लिए चुनाव चुनें।', dashboard_export_csv: 'CSV निर्यात करें', dashboard_export_json: 'JSON निर्यात करें', dashboard_by_station: 'बूथ के अनुसार', dashboard_no_stations: 'कोई उम्मीदवार नहीं।', dashboard_last_submission: 'अंतिम सबमिशन', dashboard_auto_refreshing: 'स्वतः ताज़ा हो रहा है', dashboard_no_submissions: 'अभी तक कोई सबमिशन नहीं', dashboard_stations_reported: 'बूथों ने रिपोर्ट किया', dashboard_votes: 'वोट',
       elections_heading: 'चुनाव', elections_new: '+ नया चुनाव', elections_no_elections: 'अभी तक कोई चुनाव नहीं।', elections_open_workspace: 'चुनाव कार्यक्षेत्र खोलें →',
       orgs_heading: 'संगठन', orgs_active_orgs: 'सक्रिय संगठन', orgs_register_heading: 'अपना संगठन पंजीकृत करें', orgs_register_desc: 'पंजीकरण के लिए प्लेटफ़ॉर्म कोषागार को {fee} का एकमुश्त शुल्क देना होगा। पुष्टि होने तक आपके चुनाव छिपे रहेंगे।', orgs_register_button: 'पंजीकरण करें और शुल्क दें', orgs_pay_fee: 'पंजीकरण शुल्क दें', orgs_name_placeholder: 'संगठन का नाम', orgs_jur_placeholder: 'क्षेत्राधिकार (वैकल्पिक)', orgs_active_badge: 'सक्रिय', orgs_pending_badge: 'लंबित — शुल्क नहीं दिया गया', orgs_connect_first: 'पहले अपना वॉलेट कनेक्ट करें।', orgs_manage_elections: 'आपके चुनाव सक्रिय हैं। चुनाव टैब में उन्हें प्रबंधित करें।',
       evidence_heading: 'साक्ष्य', evidence_upload_label: 'साक्ष्य (मतगणना पत्र) — स्थानीय रूप से हैश किया गया, फ़ाइल अपलोड नहीं होती', evidence_submit: 'इसके विरुद्ध फ़ाइल सत्यापित करें', evidence_no_evidence: 'इस चुनाव के लिए कोई साक्ष्य हैश दर्ज नहीं है।',
       disputes_heading: 'विवाद', disputes_no_disputes: 'इस चुनाव के लिए कोई विवाद दायर नहीं है।', disputes_file: 'विवाद दायर करें', disputes_resolve: 'विवाद हल करें', disputes_uphold: 'स्वीकार करें', disputes_reject: 'अस्वीकार करें',
-      admin_heading: 'प्लेटफ़ॉर्म प्रशासन', admin_waive_fee: 'शुल्क माफ़ करें',
       toast_election_published: 'चुनाव प्रकाशित ✓', toast_submit_result: 'परिणाम सबमिट हुआ ✓', toast_station_added: 'बूथ जोड़ा गया ✓', toast_observer_authorized: 'पर्यवेक्षक अधिकृत ✓', toast_dispute_filed: 'विवाद दायर ✓', toast_dispute_upheld: 'विवाद स्वीकृत ✓', toast_dispute_rejected: 'विवाद अस्वीकृत ✓', toast_org_registered: 'संगठन पंजीकृत ✓', toast_fee_paid: 'शुल्क दिया गया ✓', toast_fee_waived: 'शुल्क माफ़ ✓', toast_failed: 'विफल:', toast_wallet_unavailable: 'वॉलेट ब्रिज उपलब्ध नहीं — Usernode के अंदर खोलें।', toast_no_wallet: 'कोई वॉलेट पता लिंक नहीं है।', toast_add_candidate: 'कम से कम एक उम्मीदवार के साथ नाम जोड़ें।', toast_nothing_to_import: 'आयात करने के लिए कुछ नहीं', toast_enter_reason: 'कारण दर्ज करें', toast_enter_org_name: 'संगठन का नाम दर्ज करें', toast_enter_station_name: 'बूथ का नाम दर्ज करें', toast_enter_observer_addr: 'पर्यवेक्षक का पता दर्ज करें',
       loading_submitting: 'परिणाम सबमिट हो रहा है…', loading_adding_station: 'बूथ जोड़ा जा रहा है…', loading_authorizing: 'पर्यवेक्षक अधिकृत हो रहा है…', loading_filing: 'विवाद दायर हो रहा है…', loading_resolving: 'हल किया जा रहा है…', loading_registering: 'पंजीकरण और शुल्क भुगतान हो रहा है…', loading_paying: 'शुल्क दिया जा रहा है…', loading_waiving: 'शुल्क माफ़ हो रहा है…', loading_importing: 'बूथ आयात हो रहा है',
       loading_creating_election: 'चुनाव बनाया जा रहा है…', loading_adding_candidate: 'उम्मीदवार {i}/{n} जोड़ा जा रहा है…', loading_importing_station: 'बूथ {i}/{n} आयात हो रहा है…',
@@ -492,7 +482,6 @@
       disputes_filed_by: '{who} द्वारा दायर', disputes_has_evidence: 'साक्ष्य है', disputes_no_open: 'कोई खुला विवाद नहीं।', disputes_status_upheld: 'स्वीकृत', disputes_status_rejected: 'अस्वीकृत', disputes_status_open: 'खुला', disputes_workspace_note: 'अधिकृत पर्यवेक्षक और आयोजन वॉलेट चुनाव कार्यक्षेत्र से विवाद दायर और हल कर सकते हैं।',
       orgs_no_active: 'अभी तक कोई सक्रिय संगठन दिखाई नहीं दे रहा।',
       evidence_sha256_desc: 'प्रत्येक परिणाम में उसकी मतगणना पत्र का SHA-256 हैश हो सकता है। मूल फ़ाइल नीचे डालें यह साबित करने के लिए कि यह श्रृंखला पर रिपोर्ट किए गए से मेल खाती है — फ़ाइल आपके डिवाइस से नहीं जाती।', evidence_verifying_label: 'सत्यापन:', evidence_verifying_default: 'नीचे एक परिणाम चुनें, या कोई भी हैश', evidence_pick_target: 'तुलना के लिए एक परिणाम चुनें।', evidence_match_yes: '✓ मेल खाता है — यह फ़ाइल बिल्कुल वैसी है जो रिपोर्ट की गई थी।', evidence_match_no: '✗ मेल नहीं खाता — यह फ़ाइल दर्ज साक्ष्य से भिन्न है।',
-      admin_scope_required: 'प्लेटफ़ॉर्म एडमिन स्कोप आवश्यक। एडमिन वॉलेट कनेक्ट करें।', admin_stat_orgs: 'संगठन', admin_stat_active_orgs: 'सक्रिय संगठन', admin_stat_elections: 'चुनाव', admin_stat_org_fee: 'संगठन शुल्क', admin_all_orgs: 'सभी संगठन', admin_badge_waived: 'माफ़', admin_paid: 'दिया {amount}',
       select_election_prompt: 'चुनाव चुनें।',
       tab_profile: 'मेरी प्रोफ़ाइल',
       label_bio: 'परिचय',
@@ -532,14 +521,13 @@
       readonly_note: 'اسم المستخدم والمحفظة يُداران بواسطة Usernode ويظهران للقراءة فقط. يمكنك تغيير الاسم المعروض فقط.',
       no_wallet_note: 'اربط محفظة Usernode لتعيين اسم معروض. سيظل اختيار اللغة محفوظًا على هذا الجهاز.',
       not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
-      tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات', tab_admin: 'الإدارة',
+      tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات',
       method_latest: 'آخر تقرير', method_first: 'أول تقرير', method_consensus: 'إجماع', method_median: 'الوسيط', method_verified: 'الموثّق فقط',
       dashboard_heading: 'لوحة التحكم', dashboard_select_election: 'اختر انتخابات لعرض النتائج الحية.', dashboard_export_csv: 'تصدير CSV', dashboard_export_json: 'تصدير JSON', dashboard_by_station: 'حسب مركز الاقتراع', dashboard_no_stations: 'لا يوجد مرشحون.', dashboard_last_submission: 'آخر تقرير', dashboard_auto_refreshing: 'تحديث تلقائي', dashboard_no_submissions: 'لا توجد تقارير بعد', dashboard_stations_reported: 'مراكز أبلغت', dashboard_votes: 'أصوات',
       elections_heading: 'الانتخابات', elections_new: '+ انتخابات جديدة', elections_no_elections: 'لا توجد انتخابات بعد.', elections_open_workspace: 'فتح مساحة العمل →',
       orgs_heading: 'المنظمات', orgs_active_orgs: 'المنظمات النشطة', orgs_register_heading: 'سجّل منظمتك', orgs_register_desc: 'يتطلب التسجيل دفع رسوم لمرة واحدة قدرها {fee} إلى خزينة المنصة. حتى التأكيد، ستبقى انتخاباتك مخفية.', orgs_register_button: 'التسجيل ودفع الرسوم', orgs_pay_fee: 'دفع رسوم التسجيل', orgs_name_placeholder: 'اسم المنظمة', orgs_jur_placeholder: 'نطاق الاختصاص (اختياري)', orgs_active_badge: 'نشطة', orgs_pending_badge: 'قيد الانتظار — لم تُدفع الرسوم', orgs_connect_first: 'وصّل محفظتك أولاً.', orgs_manage_elections: 'انتخاباتك نشطة. أدِرها من تبويب الانتخابات.',
       evidence_heading: 'الأدلة', evidence_upload_label: 'دليل (ورقة الفرز) — يُحسب الهاش محلياً، لا يُرفع الملف', evidence_submit: 'تحقق من ملف مقابل هذا', evidence_no_evidence: 'لم يُسجَّل أي هاش دليل لهذه الانتخابات.',
       disputes_heading: 'النزاعات', disputes_no_disputes: 'لم تُقدَّم أي نزاعات لهذه الانتخابات.', disputes_file: 'تقديم نزاع', disputes_resolve: 'حل النزاعات', disputes_uphold: 'قبول', disputes_reject: 'رفض',
-      admin_heading: 'إدارة المنصة', admin_waive_fee: 'الإعفاء من الرسوم',
       toast_election_published: 'تم نشر الانتخابات ✓', toast_submit_result: 'تم تقديم النتيجة ✓', toast_station_added: 'تمت إضافة مركز الاقتراع ✓', toast_observer_authorized: 'تم توثيق المراقب ✓', toast_dispute_filed: 'تم تقديم النزاع ✓', toast_dispute_upheld: 'تم قبول النزاع ✓', toast_dispute_rejected: 'تم رفض النزاع ✓', toast_org_registered: 'تم تسجيل المنظمة ✓', toast_fee_paid: 'تم دفع الرسوم ✓', toast_fee_waived: 'تم الإعفاء من الرسوم ✓', toast_failed: 'فشل:', toast_wallet_unavailable: 'جسر المحفظة غير متاح — افتحه داخل Usernode.', toast_no_wallet: 'لا يوجد عنوان محفظة مرتبط.', toast_add_candidate: 'أضف اسماً ومرشحاً واحداً على الأقل.', toast_nothing_to_import: 'لا شيء للاستيراد', toast_enter_reason: 'أدخل سبباً', toast_enter_org_name: 'أدخل اسم المنظمة', toast_enter_station_name: 'أدخل اسم مركز الاقتراع', toast_enter_observer_addr: 'أدخل عنوان المراقب',
       loading_submitting: 'جارٍ تقديم النتيجة…', loading_adding_station: 'جارٍ إضافة مركز الاقتراع…', loading_authorizing: 'جارٍ توثيق المراقب…', loading_filing: 'جارٍ تقديم النزاع…', loading_resolving: 'جارٍ الحل…', loading_registering: 'جارٍ التسجيل ودفع الرسوم…', loading_paying: 'جارٍ دفع الرسوم…', loading_waiving: 'جارٍ الإعفاء من الرسوم…', loading_importing: 'جارٍ استيراد مركز الاقتراع',
       loading_creating_election: 'جارٍ إنشاء الانتخابات…', loading_adding_candidate: 'جارٍ إضافة المرشح {i}/{n}…', loading_importing_station: 'جارٍ استيراد المركز {i}/{n}…',
@@ -559,7 +547,6 @@
       disputes_filed_by: 'قدّمه {who}', disputes_has_evidence: 'يوجد دليل', disputes_no_open: 'لا توجد نزاعات مفتوحة.', disputes_status_upheld: 'مقبول', disputes_status_rejected: 'مرفوض', disputes_status_open: 'مفتوح', disputes_workspace_note: 'يمكن للمراقبين المفوضين ومحفظة المنظمة تقديم النزاعات وحلها من مساحة عمل الانتخابات.',
       orgs_no_active: 'لا توجد منظمات نشطة مرئية بعد.',
       evidence_sha256_desc: 'كل نتيجة قد تحمل هاش SHA-256 لورقة الفرز الخاصة بها. أسقط الملف الأصلي أدناه لإثبات مطابقته لما أُبلغ عنه على السلسلة — الملف لا يغادر جهازك.', evidence_verifying_label: 'جارٍ التحقق من:', evidence_verifying_default: 'حدد نتيجة أدناه، أو أي هاش', evidence_pick_target: 'اختر نتيجة للمقارنة.', evidence_match_yes: '✓ مطابق — هذا الملف هو بالضبط ما أُبلغ عنه.', evidence_match_no: '✗ غير مطابق — هذا الملف يختلف عن الدليل المسجل.',
-      admin_scope_required: 'يلزم صلاحية مشرف المنصة. وصّل محفظة مشرف.', admin_stat_orgs: 'المنظمات', admin_stat_active_orgs: 'المنظمات النشطة', admin_stat_elections: 'الانتخابات', admin_stat_org_fee: 'رسوم المنظمة', admin_all_orgs: 'جميع المنظمات', admin_badge_waived: 'معفى', admin_paid: 'دفع {amount}',
       select_election_prompt: 'اختر انتخابات.',
       tab_profile: 'ملفي الشخصي',
       label_bio: 'نبذة',
@@ -599,14 +586,13 @@
       readonly_note: "Votre nom d'utilisateur et votre portefeuille sont gérés par Usernode et affichés en lecture seule. Seul votre nom d'affichage est modifiable.",
       no_wallet_note: "Liez un portefeuille Usernode pour définir un nom d'affichage. Votre choix de langue reste enregistré sur cet appareil.",
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
-      tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations', tab_admin: 'Admin',
+      tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations',
       method_latest: 'Dernier envoi', method_first: 'Premier envoi', method_consensus: 'Consensus', method_median: 'Médiane', method_verified: 'Vérifiés seulement',
       dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
       elections_heading: 'Élections', elections_new: '+ Nouvelle élection', elections_no_elections: "Pas encore d'élections.", elections_open_workspace: "Ouvrir l'espace de travail →",
       orgs_heading: 'Organisations', orgs_active_orgs: 'Organisations actives', orgs_register_heading: 'Enregistrez votre organisation', orgs_register_desc: "L'enregistrement nécessite le paiement d'une cotisation unique de {fee} à la trésorerie de la plateforme. Jusqu'à confirmation, vos élections restent masquées.", orgs_register_button: "S'inscrire et payer", orgs_pay_fee: "Payer la cotisation d'inscription", orgs_name_placeholder: "Nom de l'organisation", orgs_jur_placeholder: 'Juridiction (facultatif)', orgs_active_badge: 'Active', orgs_pending_badge: 'En attente — cotisation non payée', orgs_connect_first: 'Connectez votre portefeuille en premier.', orgs_manage_elections: 'Vos élections sont en ligne. Gérez-les dans Élections.',
       evidence_heading: 'Preuves', evidence_upload_label: "Preuve (feuille de dépouillement) — hachée localement, le fichier n'est pas envoyé", evidence_submit: 'Vérifier un fichier contre ceci', evidence_no_evidence: 'Aucune empreinte de preuve enregistrée pour cette élection.',
       disputes_heading: 'Contestations', disputes_no_disputes: 'Aucune contestation déposée pour cette élection.', disputes_file: 'Déposer une contestation', disputes_resolve: 'Résoudre les contestations', disputes_uphold: 'Accepter', disputes_reject: 'Rejeter',
-      admin_heading: 'Administration de la plateforme', admin_waive_fee: 'Dispenser de cotisation',
       toast_election_published: 'Élection publiée ✓', toast_submit_result: 'Résultat soumis ✓', toast_station_added: 'Bureau ajouté ✓', toast_observer_authorized: 'Observateur autorisé ✓', toast_dispute_filed: 'Contestation déposée ✓', toast_dispute_upheld: 'Contestation acceptée ✓', toast_dispute_rejected: 'Contestation rejetée ✓', toast_org_registered: 'Organisation enregistrée ✓', toast_fee_paid: 'Cotisation payée ✓', toast_fee_waived: 'Cotisation dispensée ✓', toast_failed: 'Échec :', toast_wallet_unavailable: 'Pont de portefeuille indisponible — ouvrez dans Usernode.', toast_no_wallet: 'Aucune adresse de portefeuille liée.', toast_add_candidate: 'Ajoutez un nom et au moins un candidat.', toast_nothing_to_import: 'Rien à importer', toast_enter_reason: 'Saisissez une raison', toast_enter_org_name: "Saisissez le nom de l'organisation", toast_enter_station_name: 'Saisissez le nom du bureau', toast_enter_observer_addr: "Saisissez l'adresse de l'observateur",
       loading_submitting: 'Envoi du résultat…', loading_adding_station: 'Ajout du bureau…', loading_authorizing: "Autorisation de l'observateur…", loading_filing: 'Dépôt de la contestation…', loading_resolving: 'Résolution en cours…', loading_registering: "Inscription et paiement de la cotisation…", loading_paying: 'Paiement de la cotisation…', loading_waiving: 'Dispense de cotisation…', loading_importing: 'Importation du bureau',
       loading_creating_election: "Création de l'élection…", loading_adding_candidate: 'Ajout du candidat {i}/{n}…', loading_importing_station: 'Importation du bureau {i}/{n}…',
@@ -627,7 +613,6 @@
       disputes_filed_by: 'déposé par {who}', disputes_has_evidence: 'avec preuve', disputes_no_open: 'Aucune contestation ouverte.', disputes_status_upheld: 'accepté', disputes_status_rejected: 'rejeté', disputes_status_open: 'ouvert', disputes_workspace_note: "Les observateurs autorisés et le portefeuille organisateur peuvent déposer et résoudre des contestations depuis l'espace de travail de l'élection.",
       orgs_no_active: "Aucune organisation active visible pour l'instant.",
       evidence_sha256_desc: "Chaque résultat peut porter un hachage SHA-256 de sa feuille de dépouillement. Déposez le fichier original ci-dessous pour prouver qu'il correspond à ce qui a été déclaré sur la chaîne — le fichier ne quitte pas votre appareil.", evidence_verifying_label: 'Vérification de :', evidence_verifying_default: 'sélectionnez un résultat ci-dessous ou entrez un hachage', evidence_pick_target: 'Choisissez un résultat à comparer.', evidence_match_yes: '✓ Correspondance — ce fichier est exactement ce qui a été déclaré.', evidence_match_no: '✗ Non-correspondance — ce fichier diffère de la preuve enregistrée.',
-      admin_scope_required: "Portée admin de la plateforme requise. Connectez un portefeuille admin.", admin_stat_orgs: 'Organisations', admin_stat_active_orgs: 'Orgs actives', admin_stat_elections: 'Élections', admin_stat_org_fee: 'Cotisation org', admin_all_orgs: 'Toutes les organisations', admin_badge_waived: 'dispensé', admin_paid: 'payé {amount}',
       select_election_prompt: 'Sélectionnez une élection.',
       tab_profile: 'Mon profil',
       label_bio: 'Biographie',
@@ -848,7 +833,6 @@
     res: (eid, sid, votes, tot, inv, ev) => { const m = { app: APP, v: V, t: 'res', eid, sid: Number(sid), votes: {} }; for (const k of Object.keys(votes || {})) { const n = pint(votes[k]); if (n != null) m.votes[String(Number(k))] = n; } const t = pint(tot), i = pint(inv); if (t != null) m.tot = t; if (i != null) m.inv = i; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
     disp: (eid, target, reason, ev) => { const m = { app: APP, v: V, t: 'disp', eid, target, reason: clamp(reason, 200) }; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
     dres: (eid, disp, verdict) => ({ app: APP, v: V, t: 'dres', eid, disp, verdict }),
-    adm: (act, org) => ({ app: APP, v: V, t: 'adm', act, org }),
     // Organization management (mirror lib/memo.js).
     omem: (org, addr, role) => ({ app: APP, v: V, t: 'omem', org, addr, role: ['admin', 'mod', 'member'].indexOf(role) !== -1 ? role : 'member' }),
     orem: (org, addr) => ({ app: APP, v: V, t: 'orem', org, addr }),
@@ -980,8 +964,6 @@
         return m.eid && typeof m.target === 'string' && m.target.length > 0;
       case 'dres':
         return m.eid && m.disp && (m.verdict === 'uphold' || m.verdict === 'reject');
-      case 'adm':
-        return typeof m.act === 'string' && m.act.length > 0;
       case 'omem':
         return typeof m.org === 'string' && m.org.length > 0 && typeof m.addr === 'string' && m.addr.length > 0
           && (m.role === 'admin' || m.role === 'mod' || m.role === 'member');
@@ -1551,7 +1533,6 @@
   function renderChrome() {
     const route = currentRoute();
     const tabs = TABS.filter((tab) => {
-      if (tab.adminOnly && !App.role.isAdmin) return false;
       if (tab.walletOnly && !App.wallet.connected) return false;
       return true;
     });
@@ -1610,7 +1591,6 @@
       case 'verify': return renderEvidence(v);
       case 'disputes': return renderDisputes(v);
       case 'heatmap': return renderHeatmap(v);
-      case 'admin': return renderAdmin(v);
       case 'profile': return renderProfile(v);
       case 'settings': return renderSettings(v);
       case 'user': return renderUserProfile(v, route.arg);
@@ -1661,12 +1641,10 @@
   const inlineEntry = {};
   function inlineKey(sid) { return App.eid + ':' + sid; }
   // Whether the current viewer may enter/edit the working tally for an election
-  // owned by `orgAddr`: the org's owner, administrator, or moderator, or a
-  // platform admin. Mirrors the server-side canOperate/isAdmin guard.
+  // owned by `orgAddr`: the org's owner, administrator, or moderator.
   let workEditable = false;
   function canEditWorkTally(orgAddr) {
     if (!orgAddr || !App.role) return false;
-    if (App.role.isAdmin) return true;
     if (App.role.org && App.role.org.addr === orgAddr) return true; // owner
     return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod'));
   }
@@ -2045,17 +2023,13 @@
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
-    // Surface the viewer's authority over this election's org in the header:
-    // Owner badge for the creator, the org role for Administrators/Moderators,
-    // or a Platform-operator badge when acting via the break-glass override.
+    // Surface the viewer's org role in the header: Owner badge for the creator,
+    // the org role for Administrators/Moderators.
     const myOrgRole = isOrgOwner ? 'owner'
-      : (((App.role.orgsMember || []).find((o) => o.addr === d.election.orgAddr) || {}).role
-        || (App.role.isAdmin ? 'operator' : null));
-    const roleBadgeHtml = myOrgRole === 'operator'
-      ? `<span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${esc(t('admin_heading'))}</span>`
-      : (myOrgRole ? orgRoleBadge(myOrgRole) : '');
+      : (((App.role.orgsMember || []).find((o) => o.addr === d.election.orgAddr) || {}).role || null);
+    const roleBadgeHtml = myOrgRole ? orgRoleBadge(myOrgRole) : '';
     // Hydrate the inline working tally from the persisted detail.workTally and
-    // decide whether this viewer may edit it (owner/admin/mod or platform admin).
+    // decide whether this viewer may edit it (owner/admin/mod).
     workEditable = canEditWorkTally(d.election.orgAddr);
     hydrateInlineFromWorkTally(d);
     subscribeLive(d.election.eid); // live-update this election's screen
@@ -2957,36 +2931,6 @@
       <p class="text-xs text-slate-500 mt-3">${summary} · ${t('dashboard_auto_refreshing')}</p>`;
   }
 
-  // ───────────────────────── Admin ─────────────────────────
-  async function renderAdmin(v) {
-    if (!App.role.isAdmin) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('admin_scope_required')}</p>`; return; }
-    let data;
-    try { data = await api('/__quickcount/admin?viewer=' + encodeURIComponent(App.wallet.address)); }
-    catch (e) { v.innerHTML = '<p class="text-rose-400 text-sm">' + esc(e.message) + '</p>'; return; }
-    const s = data.stats;
-    v.innerHTML = `<h2 class="text-lg font-semibold mb-1">${t('admin_heading')}</h2>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">${t('admin_intro')}</p>
-      ${chainSyncBanner()}
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        ${[[t('admin_stat_orgs'), s.orgs], [t('admin_stat_active_orgs'), s.activeOrgs], [t('admin_stat_elections'), s.elections], [t('admin_stat_org_fee'), s.orgFee]].map(([k, val]) =>
-          `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-slate-600 dark:text-slate-500">${k}</div></div>`).join('')}
-      </div>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
-      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('admin_all_orgs')}</h3>
-      <div class="space-y-2">${data.orgs.map((o) => `
-        <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between gap-2">
-          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
-          <div class="text-xs text-slate-600 dark:text-slate-500 font-mono">${esc(o.addr)} · ${t('admin_paid').replace('{amount}', o.feeAmount)}</div></div>
-          ${o.active ? `<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('orgs_active_badge')}</span>`
-            : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('admin_waive_fee')}</button>`}
-        </div>`).join('')}</div>`;
-    v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
-      const org = b.dataset.org;
-      runTx({ to: org, amount: 0, memo: QC.adm('waive', org) },
-        { loading: t('loading_waiving'), success: () => { txSuccessToast('toast_fee_waived'); refreshSoon(); } });
-    });
-  }
-
   // ───────────────────────── Profile & Settings ─────────────────────────
   function langSelect(id) {
     const opts = LANGS.map((l) => `<option value="${l}" ${l === App.lang ? 'selected' : ''}>${esc(LANG_NAMES[l])}</option>`).join('');
@@ -3249,9 +3193,9 @@
     if (App.refreshTimer) clearInterval(App.refreshTimer);
     // refresh() updates global state (role + activeOrgs) AND re-renders the
     // current tab; for tabs whose render() fetches its own data (orgs, profile,
-    // admin, user) the re-render re-runs those fetches, so a still-syncing
+    // user) the re-render re-runs those fetches, so a still-syncing
     // registration appears without a manual reload.
-    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
+    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'user'];
     // Cadence comes from server config (TIMER_DURATION_MS), floored at 1000ms so
     // a stray small value can't spin the refresh loop; falls back to 6000ms.
     const cadence = Math.max(1000, Number(App.cfg && App.cfg.timerDurationMs) || 6000);
