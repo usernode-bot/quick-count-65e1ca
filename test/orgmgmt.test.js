@@ -246,6 +246,60 @@ test('orgsForViewer returns rosters with the owner first', () => {
   assert.strictEqual(ix.orgsForViewer(OUTSIDER, { admin: false }).orgs.length, 0);
 });
 
+// ── Edit org details (oedit) ────────────────────────────────────────────────
+test('oedit memo round-trip', () => {
+  assert.deepStrictEqual(memo.decode(memo.encode(memo.editOrgMemo('O', 'New Name', 'NewJur'))),
+    { app: 'quickcount', v: 1, t: 'oedit', org: 'O', name: 'New Name', jur: 'NewJur' });
+});
+
+test('owner can update org name and jurisdiction', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('e1', OWNER, 'x', 0, memo.editOrgMemo('orgOwner', 'Renamed Org', 'NewJur')),
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).name, 'Renamed Org');
+  assert.strictEqual(ix.orgs.get(OWNER).jur, 'NewJur');
+});
+
+test('oedit rejects empty name', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('e1', OWNER, 'x', 0, { app: 'quickcount', v: 1, t: 'oedit', org: 'orgOwner', name: '', jur: '' }),
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).name, 'Owned Org'); // unchanged
+});
+
+test('oedit decode rejects empty name', () => {
+  assert.strictEqual(memo.decode(JSON.stringify({ app: 'quickcount', v: 1, t: 'oedit', org: 'O', name: '', jur: '' })), null);
+  assert.strictEqual(memo.decode(JSON.stringify({ app: 'quickcount', v: 1, t: 'oedit', org: 'O', name: '   ', jur: '' })), null);
+});
+
+test('admin cannot call oedit', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('m1', OWNER, 'x', 0, memo.memberMemo('orgOwner', ADMIN_M, 'admin')),
+    mk('e1', ADMIN_M, 'x', 0, memo.editOrgMemo('orgOwner', 'Admin Renamed', '')),
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).name, 'Owned Org'); // unchanged
+});
+
+test('non-member cannot call oedit', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('e1', OUTSIDER, 'x', 0, memo.editOrgMemo('orgOwner', 'Outsider Renamed', '')),
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).name, 'Owned Org'); // unchanged
+});
+
+test('oedit on deleted org is a no-op', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('del', OWNER, 'x', 0, memo.deleteOrgMemo('orgOwner')),
+    mk('e1', OWNER, 'x', 0, memo.editOrgMemo('orgOwner', 'Post-delete Rename', '')),
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).name, 'Owned Org'); // unchanged
+});
+
 // ── Membership independent of fee/active ────────────────────────────────────
 test('members can be added to a pending (unpaid) org', () => {
   const ix = new QuickCountIndexer(CFG);
