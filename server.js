@@ -72,7 +72,6 @@ const TIMER_DURATION_MS = Math.max(1000, Number(process.env.TIMER_DURATION_MS) |
 
 // Demo personas (local-dev persona switcher + admin).
 const DEMO = {
-  admin: 'ut1demoadmin000000000000000000000000000000',
   orgA: 'ut1democitizenscount0000000000000000000000',
   orgB: 'ut1demounpaidorg000000000000000000000000000',
   orgC: 'ut1demoprivateorg00000000000000000000000000', // private org
@@ -86,14 +85,11 @@ const DEMO = {
   orgMod: 'ut1demoorgmod000000000000000000000000000000',
   orgMember: 'ut1demoorgmember00000000000000000000000000',
 };
-const ADMIN_ADDRS = (process.env.ADMIN_ADDRS || '').split(',').map((s) => s.trim()).filter(Boolean);
-if (IS_DEMO) ADMIN_ADDRS.push(DEMO.admin);
-
 const pool = (Pool && process.env.DATABASE_URL)
   ? new Pool({ connectionString: process.env.DATABASE_URL })
   : null;
 
-const indexer = new QuickCountIndexer({ treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS });
+const indexer = new QuickCountIndexer({ treasury: TREASURY_ADDR, orgFee: ORG_FEE });
 const source = makeSource({ localDev: LOCAL_DEV, nodeUrl: NODE_RPC_URL, explorerUrl: EXPLORER_API_URL, chainId: CHAIN_ID });
 
 // In-memory transaction log (source for every rebuild) and dedupe set.
@@ -461,7 +457,6 @@ app.get('/__quickcount/config', (_req, res) => {
     { label: 'Org Owner — Pemilu Watch (Indonesia)', addr: DEMO.orgID, username: 'pemilu_watch_id' },
     { label: 'Observer One', addr: DEMO.obs1, username: 'observer_one' },
     { label: 'Observer Three (Station B)', addr: DEMO.obs3, username: 'observer_three' },
-    { label: 'Platform Admin', addr: DEMO.admin, username: 'platform_admin' },
     { label: 'Fresh wallet', addr: null, username: null },
   ] : null;
   res.json({
@@ -469,7 +464,7 @@ app.get('/__quickcount/config', (_req, res) => {
     // Self-contained local-ingest mode: the client confirms optimistically and
     // suppresses the "on-chain sync not configured" banner / awaiting-sync notice.
     mockMode: MOCK_TX_FLOW,
-    treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
+    treasury: TREASURY_ADDR, orgFee: ORG_FEE,
     methods: require('./lib/aggregate').METHODS, personas,
     // Chain read config for the client confirmation poll. The browser builds
     // <explorerApiBase>/<chainId>/transactions; both are auth-exempt.
@@ -545,7 +540,7 @@ app.get('/__quickcount/state', async (req, res) => {
     const viewer = (req.query.viewer || '').toString() || null;
     const method = require('./lib/aggregate').METHODS.includes(req.query.method) ? req.query.method : 'latest';
     const role = indexer.viewerRole(viewer);
-    const visible = indexer.visibleElections({ viewer, admin: role.isAdmin });
+    const visible = indexer.visibleElections({ viewer });
     const elections = visible.map((el) => indexer.electionSummary(el));
 
     let detail = null;
@@ -574,28 +569,10 @@ app.get('/__quickcount/state', async (req, res) => {
 app.get('/__quickcount/orgs', (req, res) => {
   try {
     const viewer = (req.query.viewer || '').toString() || null;
-    const admin = indexer.isAdmin(viewer);
-    res.json(indexer.orgsForViewer(viewer, { admin }));
+    res.json(indexer.orgsForViewer(viewer));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-// Platform-admin read view — all orgs incl. pending. Scoped to admin wallets.
-app.get('/__quickcount/admin', (req, res) => {
-  const viewer = (req.query.viewer || '').toString() || null;
-  if (!indexer.isAdmin(viewer)) return res.status(403).json({ error: 'admin scope required' });
-  const orgs = indexer.allOrgs();
-  res.json({
-    orgs,
-    stats: {
-      orgs: orgs.length,
-      activeOrgs: orgs.filter((o) => o.active).length,
-      elections: indexer.elections.size,
-      treasury: TREASURY_ADDR,
-      orgFee: ORG_FEE,
-    },
-  });
 });
 
 // ── Off-chain working tallies (per-station inline vote entry) ────────────────
@@ -651,14 +628,14 @@ app.put('/api/elections/:eid/worktally/:sid', async (req, res) => {
     if (!Number.isInteger(sid) || sid <= 0) return res.status(400).json({ error: 'bad station id' });
 
     // Authorization first (so "not allowed" wins over "unavailable"): only the
-    // election's organizing wallet — Owner, Administrator, or Moderator — or a
-    // platform admin may write. When the election isn't indexed yet (organizer
-    // saving before the chain tx lands) we can't resolve the owner — allow it,
-    // since there is nothing to overwrite.
+    // election's organizing wallet — Owner, Administrator, or Moderator — may
+    // write. When the election isn't indexed yet (organizer saving before the
+    // chain tx lands) we can't resolve the owner — allow it, since there is
+    // nothing to overwrite.
     const authorPubkey = (req.user && req.user.usernode_pubkey) || null;
     const authorUsername = (req.user && req.user.username) || null;
     const el = indexer.elections.get(eid);
-    if (el && !indexer.canOperate(el.orgAddr, authorPubkey) && !indexer.isAdmin(authorPubkey)) {
+    if (el && !indexer.canOperate(el.orgAddr, authorPubkey)) {
       return res.status(403).json({ error: 'Only the organizing wallet can save this election\'s working tally' });
     }
 
@@ -719,12 +696,13 @@ app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, 
 
     const uploaderPubkey = (req.user && req.user.usernode_pubkey) || null;
     const uploaderUsername = (req.user && req.user.username) || null;
-    // Org-ownership guard: only the election's organizing wallet (or an admin)
-    // may write its images. When the election isn't indexed yet (an organizer
-    // uploading at create time, before the on-chain `el` tx lands), we can't
-    // resolve the owner — allow it, since there is nothing to overwrite.
+    // Org-ownership guard: only the election's organizing wallet (Owner,
+    // Administrator, or Moderator) may write its images. When the election
+    // isn't indexed yet (an organizer uploading at create time, before the
+    // on-chain `el` tx lands), we can't resolve the owner — allow it.
+
     const el = indexer.elections.get(eid);
-    if (el && uploaderPubkey !== el.orgAddr && !indexer.isAdmin(uploaderPubkey)) {
+    if (el && !indexer.canOperate(el.orgAddr, uploaderPubkey)) {
       return res.status(403).json({ error: 'Only the organizing wallet can upload this election\'s images' });
     }
 
@@ -805,13 +783,12 @@ async function loadBallotProofMeta(eid) {
 
 // May `pubkey` upload/replace a station's ballot proof? The station's assigned
 // observer (broader than the worktally guard — they hold the physical ballot),
-// the org's operators (Owner/Administrator/Moderator), or a platform operator.
+// or the org's operators (Owner/Administrator/Moderator).
 // When the election isn't indexed yet, allow (nothing to overwrite).
 function canUploadProof(eid, sid, pubkey) {
   if (!pubkey) return false;
   const el = indexer.elections.get(eid);
   if (!el) return true;
-  if (indexer.isAdmin(pubkey)) return true;
   if (indexer.canOperate(el.orgAddr, pubkey)) return true;
   const obsMap = indexer.observers.get(eid);
   const obs = obsMap && obsMap.get(pubkey);
@@ -878,8 +855,8 @@ app.put('/api/elections/:eid/ballot-proof/:sid', ballotJson, async (req, res) =>
 });
 
 // Authenticated: read a station's ballot-proof bytes (or ?meta=1 for status
-// only). NOT public — restricted to the uploader, org operators, or a platform
-// operator. The anonymous public only ever gets the badge on the public detail.
+// only). NOT public — restricted to the uploader or org operators.
+// The anonymous public only ever gets the badge on the public detail.
 app.get('/api/elections/:eid/ballot-proof/:sid', async (req, res) => {
   try {
     const { eid } = req.params;
@@ -895,8 +872,7 @@ app.get('/api/elections/:eid/ballot-proof/:sid', async (req, res) => {
     const row = rows[0];
     const el = indexer.elections.get(eid);
     const allowed = !!pubkey && (
-      indexer.isAdmin(pubkey)
-      || (el && indexer.canOperate(el.orgAddr, pubkey))
+      (el && indexer.canOperate(el.orgAddr, pubkey))
       || pubkey === row.uploader_pubkey
     );
     if (!allowed) return res.status(403).json({ error: 'Not authorized to view this ballot proof' });
@@ -940,7 +916,7 @@ app.get('/api/public/elections/:eid/stream', (req, res) => {
 // Public: list elections with counts (backed by in-memory indexer).
 app.get('/api/public/elections', (_req, res) => {
   try {
-    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    const visible = indexer.visibleElections({ viewer: null });
     res.json({
       elections: visible.map((el) => {
         const s = indexer.electionSummary(el);
@@ -962,7 +938,7 @@ app.get('/api/public/elections', (_req, res) => {
 app.get('/api/public/elections/:eid', async (req, res) => {
   try {
     const eid = req.params.eid;
-    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    const visible = indexer.visibleElections({ viewer: null });
     if (!visible.some((el) => el.eid === eid)) return res.status(404).json({ error: 'not found' });
     const d = indexer.electionDetail(eid, 'latest');
     if (!d) return res.status(404).json({ error: 'not found' });
@@ -1228,10 +1204,9 @@ app.get('/api/public/profiles/:addr', async (req, res) => {
       }
     }
 
-    const admin = indexer.isAdmin(viewer);
-    const visible = indexer.visibleElections({ viewer, admin });
+    const visible = indexer.visibleElections({ viewer });
     const visibleEids = visible.map((el) => el.eid);
-    const activity = indexer.activityByAddr(addr, visibleEids, { viewer, admin });
+    const activity = indexer.activityByAddr(addr, visibleEids, { viewer });
 
     res.json({
       usernode_pubkey: addr,
