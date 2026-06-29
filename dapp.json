@@ -314,6 +314,11 @@
       "name": "Election workspace renders the ballot-proof upload panel for an organizer",
       "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
       "expectSelector": "[data-ballot-proof]"
+    },
+    {
+      "name": "Closed election workspace shows Closed badge",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-closed-election",
+      "expectText": "Closed"
     }
   ]
 }
