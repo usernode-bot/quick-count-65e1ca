@@ -191,6 +191,7 @@
       org_role_owner: 'Owner', org_role_admin: 'Administrator', org_role_mod: 'Moderator', org_role_member: 'Member',
       org_vis_public: 'Public', org_vis_private: 'Private',
       org_manage: 'Manage', org_back: '← Back to organizations', org_members_heading: 'Members', org_visibility_heading: 'Visibility', org_danger_heading: 'Danger zone',
+      org_details_heading: 'Organization details', org_name_label: 'Name', org_jur_label: 'Jurisdiction', org_save_details: 'Save changes', toast_details_updated: 'Details updated ✓', loading_updating_details: 'Saving details…',
       org_add_member: 'Add member', org_member_addr_placeholder: 'Member wallet address (ut1…)', org_add_button: 'Add member',
       org_make_public: 'Make public', org_make_private: 'Make private', org_current_visibility: 'This organization is currently {vis}.',
       org_remove: 'Remove', org_change_role: 'Change role', org_delete: 'Delete organization', org_delete_confirm: 'Delete this organization? Its elections will be hidden. This is recorded on-chain and cannot be undone.',
@@ -854,6 +855,7 @@
     orem: (org, addr) => ({ app: APP, v: V, t: 'orem', org, addr }),
     ovis: (org, vis) => ({ app: APP, v: V, t: 'ovis', org, vis: vis === 'private' ? 'private' : 'public' }),
     odel: (org) => ({ app: APP, v: V, t: 'odel', org }),
+    oedit: (org, name, jur) => ({ app: APP, v: V, t: 'oedit', org, name: String(name == null ? '' : name).slice(0, 120), jur: String(jur == null ? '' : jur).slice(0, 80) }),
   };
 
   // ───────────────────────── Helpers ─────────────────────────
@@ -991,6 +993,8 @@
         return typeof m.org === 'string' && m.org.length > 0 && (m.vis === 'public' || m.vis === 'private');
       case 'odel':
         return typeof m.org === 'string' && m.org.length > 0;
+      case 'oedit':
+        return typeof m.org === 'string' && m.org.length > 0 && typeof m.name === 'string' && m.name.trim().length > 0;
       default:
         return false;
     }
@@ -1942,7 +1946,7 @@
       // bare "select an election" that makes their just-registered org feel lost.
       const ownerCard = (myOrg && myOrg.active)
         ? `<div class="p-4 mb-4 rounded-xl bg-indigo-50 border border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30">
-            <p class="text-sm text-slate-700 dark:text-slate-200 mb-3">${t('dashboard_owner_no_election').replace('{org}', '<strong>' + esc(myOrg.name) + '</strong>')}</p>
+            <p class="text-sm text-slate-700 dark:text-slate-200 mb-3">${t('dashboard_owner_no_election').replace('{org}', '<button class="org-manage font-semibold text-indigo-600 dark:text-indigo-400 hover:underline" data-addr="' + esc(myOrg.addr) + '">' + esc(myOrg.name) + '</button>')}</p>
             <a href="#/elections" class="inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">${t('elections_new')}</a>
           </div>`
         : '';
@@ -1950,6 +1954,7 @@
         ? `<p class="text-xs text-slate-500 dark:text-slate-500 mt-3">${esc(t('orgs_active_orgs'))}: ${activeCount}</p>`
         : '';
       body.innerHTML = ownerCard + `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_select_election')}</p>` + activeLine;
+      body.querySelectorAll('.org-manage').forEach((b) => { b.onclick = () => { App.orgView = b.dataset.addr; location.hash = '#/orgs'; }; });
       return;
     }
     // The Dashboard is now a focused view of the off-chain working tally,
@@ -1986,19 +1991,28 @@
     else if (!App.role.org.active) html += `<p class="text-sm text-amber-600 dark:text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
 
     html += '<div id="new-el-form"></div>';
-    html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => `
+    html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => {
+      const isOrgMember = (App.role.org && App.role.org.addr === e.orgAddr) || (App.role.orgsMember || []).some((o) => o.addr === e.orgAddr);
+      const orgNameHtml = isOrgMember
+        ? `<button class="el-org-manage text-xs text-indigo-400 hover:underline" data-addr="${esc(e.orgAddr)}">${esc(e.orgName || '—')}</button>`
+        : `<span>${esc(e.orgName || '—')}</span>`;
+      return `
       <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold">${esc(e.name)}</h3>
           ${e.orgActive ? '' : `<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('badge_pending')}</span>`}
         </div>
-        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(e.orgName || '—')}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${orgNameHtml}</p>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
-      </a>`).join('') + '</div>'
+      </a>`;
+    }).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm">${canCreate ? t('elections_active_no_elections') : t('elections_no_elections')}</p>`;
     v.innerHTML = html;
 
     if (canCreate) document.getElementById('new-el').onclick = () => showNewElectionForm();
+    v.querySelectorAll('.el-org-manage').forEach((b) => {
+      b.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); App.orgView = b.dataset.addr; location.hash = '#/orgs'; };
+    });
   }
   function showNewElectionForm() {
     const f = document.getElementById('new-el-form');
@@ -2065,7 +2079,7 @@
       <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
       <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
         <div><h2 class="text-xl font-semibold flex items-center gap-2 flex-wrap">${esc(d.election.name)}${roleBadgeHtml}</h2>
-        <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
+        <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${myOrgRole ? `<button id="ws-org-manage" class="text-indigo-400 hover:underline" data-addr="${esc(d.election.orgAddr)}">${esc(d.election.orgName || '—')}</button>` : esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
         ${methodSel}
       </div>
       ${marginBanner(d)}
@@ -2074,6 +2088,8 @@
       <div id="station-table-wrap">${stationTable(d, { inlineEntry: true, editable: workEditable })}</div>
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
+    const wsOrgBtn = document.getElementById('ws-org-manage');
+    if (wsOrgBtn) wsOrgBtn.onclick = () => { App.orgView = wsOrgBtn.dataset.addr; location.hash = '#/orgs'; };
 
     const ws = document.getElementById('ws');
     if (myObs) ws.appendChild(observerPanel(d, myObs));
@@ -2503,7 +2519,12 @@
     // Authoritative list of active orgs from the indexer — independent of whether
     // an org has published elections, so a just-registered org shows instantly.
     const orgList = (App.state.activeOrgs || []);
-    html += orgList.length ? '<div class="space-y-2">' + orgList.map((o) => `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between"><span>${esc(o.name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(o.addr)}</span></div>`).join('') + '</div>'
+    html += orgList.length ? '<div class="space-y-2">' + orgList.map((o) => {
+      const isMember = (App.role.org && App.role.org.addr === o.addr) || (App.role.orgsMember || []).some((m) => m.addr === o.addr);
+      return isMember
+        ? `<button class="org-manage w-full text-left p-3 rounded-lg bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between" data-addr="${esc(o.addr)}"><span>${esc(o.name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(o.addr)}</span></button>`
+        : `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between"><span>${esc(o.name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(o.addr)}</span></div>`;
+    }).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('orgs_no_active')}</p>`;
     v.innerHTML = html;
 
@@ -2525,6 +2546,18 @@
     let html = `<button id="org-back" class="text-sm text-indigo-500 hover:underline mb-3">${t('org_back')}</button>
       <div class="flex items-center gap-2 flex-wrap mb-1"><h2 class="text-lg font-semibold">${esc(org.name)}</h2>${orgRoleBadge(vr)}${orgVisBadge(org.visibility || 'public')}</div>
       <p class="text-xs text-slate-600 dark:text-slate-500 mb-5 font-mono">${esc(org.addr)}</p>`;
+
+    // Organization details (owner only) — edit name and jurisdiction.
+    if (canDelete) {
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <h3 class="font-semibold mb-3">${t('org_details_heading')}</h3>
+        <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">${t('org_name_label')}</label>
+        <input id="org-edit-name" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none" value="${esc(org.name)}" maxlength="120">
+        <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">${t('org_jur_label')}</label>
+        <input id="org-edit-jur" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none" value="${esc(org.jur || '')}" maxlength="80">
+        <button id="org-details-save" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">${t('org_save_details')}</button>
+      </div>`;
+    }
 
     // Members roster.
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('org_members_heading')} (${org.members.length})</h3>
@@ -2577,6 +2610,8 @@
     v.innerHTML = html;
 
     document.getElementById('org-back').onclick = () => { App.orgView = null; render(); };
+    const detailsBtn = document.getElementById('org-details-save');
+    if (detailsBtn) detailsBtn.onclick = () => editOrgDetails(org.addr);
     const addBtn = document.getElementById('org-mem-add');
     if (addBtn) addBtn.onclick = () => addOrgMember(org.addr);
     v.querySelectorAll('.org-role-sel').forEach((sel) => {
@@ -2613,6 +2648,13 @@
     if (!window.confirm(t('org_delete_confirm'))) return;
     runTx({ to: orgAddr, amount: 0, memo: QC.odel(orgAddr), idempotent: true },
       { loading: t('loading_deleting_org'), success: () => { App.orgView = null; toast(t('toast_org_deleted')); refreshSoon(); } });
+  }
+  function editOrgDetails(orgAddr) {
+    const name = (document.getElementById('org-edit-name').value || '').trim();
+    const jur = (document.getElementById('org-edit-jur').value || '').trim();
+    if (!name) return toast(t('toast_enter_org_name'), 'warn');
+    runTx({ to: orgAddr, amount: 0, memo: QC.oedit(orgAddr, name, jur), idempotent: true },
+      { loading: t('loading_updating_details'), success: () => { toast(t('toast_details_updated')); refreshSoon(); } });
   }
   async function registerOrg() {
     if (!App.wallet.connected) { await connectWallet(); if (!App.wallet.connected) return; }
