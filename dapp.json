@@ -309,6 +309,11 @@
       "expectSelector": "[data-ballot-proof]"
     },
     {
+      "name": "Closed election workspace shows Closed badge",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-closed-election",
+      "expectText": "Closed"
+    },
+    {
       "name": "C1-KWK panel renders for Indonesia election",
       "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/election/demo-pilpres-2024",
       "expectSelector": "[data-c1kwk-panel]"

@@ -216,6 +216,10 @@
       ballot_proof_title: 'Ballot proof', ballot_proof_desc: 'Attach a photo or scan of the ballot / count form. It is imported, auto-checked, and reviewed before you submit. Shown only to your organization — the public sees a “validated” badge, not the image.', ballot_proof_choose: 'Choose a file (JPG, PNG, or PDF)', ballot_proof_replace: 'Replace / re-scan', ballot_proof_submit: 'Submit ballot proof', ballot_proof_station: 'Polling station', ballot_proof_valid: 'Looks valid ✓', ballot_proof_invalid: 'This doesn’t look like a usable ballot scan:', ballot_proof_submitted: 'Ballot proof submitted ✓', ballot_proof_attached: 'Validated proof attached ✓', ballot_proof_draft_saved: 'Draft saved — not yet submitted', ballot_proof_unavailable: 'Ballot proofs are unavailable in this environment.', ballot_proof_fingerprint: 'Fingerprint', ballot_proof_pick_first: 'Choose a file to review first.',
       election_stations_title: 'Stations', election_station_name_ph: 'Station name', election_station_label_ph: 'Label / region', election_station_add_btn: 'Add', election_station_bulk_import: 'Bulk import from CSV', election_station_csv_desc: 'One station per line: name,label', election_station_import_btn: 'Import all', election_station_count: '{n} stations:', election_station_preview: '{n} station(s) ready to import.',
       election_observers_title: 'Observers', election_observer_addr_ph: 'Observer wallet (ut1…)', election_observer_all_stations: 'All stations', election_observer_authorize_btn: 'Authorize', election_observer_count: '{n} observer(s):',
+      election_candidates_title: 'Candidates', election_candidate_name_ph: 'Candidate name', election_candidate_add_btn: 'Add', election_candidate_count: '{n} candidates:', toast_candidate_added: 'Candidate added ✓', loading_adding_candidate_post: 'Adding candidate…',
+      election_avatar_upload_btn: 'Upload photo', election_avatar_uploading: 'Uploading…', election_avatar_uploaded: 'Photo uploaded ✓', election_avatar_replace: 'Replace photo',
+      election_c1_upload_btn: 'Upload C1', election_c1_uploading: 'Uploading…', election_c1_uploaded: 'C1 form uploaded ✓', election_c1_replace: 'Replace C1 form',
+      election_closed_badge: 'Closed', election_close_btn: 'Close election', election_close_confirm: 'Close this election? Structural changes (stations, candidates, observers) will be permanently locked. Results and dispute resolution remain open. This is recorded on-chain and cannot be undone.', election_close_locked_note: 'This election is closed — structure is locked. Results and dispute resolution remain open.', toast_election_closed: 'Election closed ✓', loading_closing_election: 'Closing election…',
       election_dispute_target_label: 'Target result', election_dispute_no_results: 'No reported results to dispute yet.', election_dispute_reason_ph: 'Reason for dispute',
       toast_stations_imported: '{n} stations imported ✓',
       disputes_filed_by: 'filed by {who}', disputes_has_evidence: 'has evidence', disputes_no_open: 'No open disputes.', disputes_status_upheld: 'upheld', disputes_status_rejected: 'rejected', disputes_status_open: 'open', disputes_workspace_note: 'Authorized observers and the organizing wallet can file and resolve disputes from the election workspace.',
@@ -283,6 +287,10 @@
       election_observer_title: 'Laporkan hasil', election_observer_your_station: '(TPS Anda)', election_observer_station_label: 'Tempat pemungutan suara', election_observer_total_label: 'Total surat suara', election_observer_invalid_label: 'Tidak sah / kosong', election_observer_submit_btn: 'Kirim / revisi hasil',
       election_stations_title: 'TPS', election_station_name_ph: 'Nama TPS', election_station_label_ph: 'Label / wilayah', election_station_add_btn: 'Tambah', election_station_bulk_import: 'Impor massal dari CSV', election_station_csv_desc: 'Satu TPS per baris: nama,label', election_station_import_btn: 'Impor semua', election_station_count: '{n} TPS:', election_station_preview: '{n} TPS siap diimpor.',
       election_observers_title: 'Pengamat', election_observer_addr_ph: 'Dompet pengamat (ut1…)', election_observer_all_stations: 'Semua TPS', election_observer_authorize_btn: 'Otorisasi', election_observer_count: '{n} pengamat:',
+      election_candidates_title: 'Kandidat', election_candidate_name_ph: 'Nama kandidat', election_candidate_add_btn: 'Tambah', election_candidate_count: '{n} kandidat:', toast_candidate_added: 'Kandidat ditambahkan ✓', loading_adding_candidate_post: 'Menambahkan kandidat…',
+      election_avatar_upload_btn: 'Unggah foto', election_avatar_uploading: 'Mengunggah…', election_avatar_uploaded: 'Foto diunggah ✓', election_avatar_replace: 'Ganti foto',
+      election_c1_upload_btn: 'Unggah C1', election_c1_uploading: 'Mengunggah…', election_c1_uploaded: 'Formulir C1 diunggah ✓', election_c1_replace: 'Ganti formulir C1',
+      election_closed_badge: 'Ditutup', election_close_btn: 'Tutup pemilihan', election_close_confirm: 'Tutup pemilihan ini? Perubahan struktural (TPS, kandidat, pengamat) akan dikunci secara permanen. Hasil dan penyelesaian sengketa tetap terbuka. Ini dicatat on-chain dan tidak dapat dibatalkan.', election_close_locked_note: 'Pemilihan ini sudah ditutup — struktur dikunci. Hasil dan penyelesaian sengketa tetap terbuka.', toast_election_closed: 'Pemilihan ditutup ✓', loading_closing_election: 'Menutup pemilihan…',
       election_dispute_target_label: 'Hasil yang ditarget', election_dispute_no_results: 'Belum ada hasil yang dilaporkan untuk disengketakan.', election_dispute_reason_ph: 'Alasan sengketa',
       toast_stations_imported: '{n} TPS diimpor ✓',
       disputes_filed_by: 'diajukan oleh {who}', disputes_has_evidence: 'ada bukti', disputes_no_open: 'Tidak ada sengketa terbuka.', disputes_status_upheld: 'diterima', disputes_status_rejected: 'ditolak', disputes_status_open: 'terbuka', disputes_workspace_note: 'Pengamat yang berwenang dan dompet penyelenggara dapat mengajukan dan menyelesaikan sengketa dari ruang kerja pemilihan.',
@@ -349,6 +357,10 @@
       election_observer_title: '上报结果', election_observer_your_station: '（您的投票站）', election_observer_station_label: '投票站', election_observer_total_label: '总票数', election_observer_invalid_label: '无效/空白', election_observer_submit_btn: '提交/修改结果',
       election_stations_title: '投票站', election_station_name_ph: '投票站名称', election_station_label_ph: '标签/地区', election_station_add_btn: '添加', election_station_bulk_import: '从 CSV 批量导入', election_station_csv_desc: '每行一个投票站：名称,标签', election_station_import_btn: '全部导入', election_station_count: '{n} 个投票站：', election_station_preview: '{n} 个投票站待导入。',
       election_observers_title: '观察员', election_observer_addr_ph: '观察员钱包 (ut1…)', election_observer_all_stations: '所有投票站', election_observer_authorize_btn: '授权', election_observer_count: '{n} 位观察员：',
+      election_candidates_title: '候选人', election_candidate_name_ph: '候选人姓名', election_candidate_add_btn: '添加', election_candidate_count: '{n} 位候选人：', toast_candidate_added: '候选人已添加 ✓', loading_adding_candidate_post: '正在添加候选人…',
+      election_avatar_upload_btn: '上传照片', election_avatar_uploading: '上传中…', election_avatar_uploaded: '照片已上传 ✓', election_avatar_replace: '更换照片',
+      election_c1_upload_btn: '上传C1表', election_c1_uploading: '上传中…', election_c1_uploaded: 'C1表已上传 ✓', election_c1_replace: '更换C1表',
+      election_closed_badge: '已结束', election_close_btn: '结束选举', election_close_confirm: '结束此次选举？结构性更改（投票站、候选人、观察员）将被永久锁定。结果提交和争议解决仍可进行。此操作记录在链上，无法撤销。', election_close_locked_note: '此次选举已结束——结构已锁定。结果提交和争议解决仍可进行。', toast_election_closed: '选举已结束 ✓', loading_closing_election: '正在结束选举…',
       election_dispute_target_label: '争议目标', election_dispute_no_results: '暂无可争议的已上报结果。', election_dispute_reason_ph: '争议原因',
       toast_stations_imported: '{n} 个投票站已导入 ✓',
       disputes_filed_by: '由 {who} 提交', disputes_has_evidence: '有证据', disputes_no_open: '无待处理争议。', disputes_status_upheld: '已支持', disputes_status_rejected: '已驳回', disputes_status_open: '处理中', disputes_workspace_note: '授权观察员和组织钱包可在选举工作区提交和处理争议。',
@@ -416,6 +428,10 @@
       election_observer_title: 'Reportar resultado', election_observer_your_station: '(tu mesa)', election_observer_station_label: 'Mesa electoral', election_observer_total_label: 'Total de votos emitidos', election_observer_invalid_label: 'Nulos / en blanco', election_observer_submit_btn: 'Enviar / revisar resultado',
       election_stations_title: 'Mesas', election_station_name_ph: 'Nombre de la mesa', election_station_label_ph: 'Etiqueta / zona', election_station_add_btn: 'Agregar', election_station_bulk_import: 'Importar en lote desde CSV', election_station_csv_desc: 'Una mesa por línea: nombre,etiqueta', election_station_import_btn: 'Importar todo', election_station_count: '{n} mesas:', election_station_preview: '{n} mesa(s) lista(s) para importar.',
       election_observers_title: 'Observadores', election_observer_addr_ph: 'Monedero del observador (ut1…)', election_observer_all_stations: 'Todas las mesas', election_observer_authorize_btn: 'Autorizar', election_observer_count: '{n} observador(es):',
+      election_candidates_title: 'Candidatos', election_candidate_name_ph: 'Nombre del candidato', election_candidate_add_btn: 'Agregar', election_candidate_count: '{n} candidato(s):', toast_candidate_added: 'Candidato agregado ✓', loading_adding_candidate_post: 'Agregando candidato…',
+      election_avatar_upload_btn: 'Subir foto', election_avatar_uploading: 'Subiendo…', election_avatar_uploaded: 'Foto subida ✓', election_avatar_replace: 'Reemplazar foto',
+      election_c1_upload_btn: 'Subir C1', election_c1_uploading: 'Subiendo…', election_c1_uploaded: 'Formulario C1 subido ✓', election_c1_replace: 'Reemplazar formulario C1',
+      election_closed_badge: 'Cerrada', election_close_btn: 'Cerrar elección', election_close_confirm: '¿Cerrar esta elección? Los cambios estructurales (mesas, candidatos, observadores) quedarán bloqueados permanentemente. El envío de resultados y la resolución de disputas permanecen abiertos. Esto se registra en la cadena y no se puede deshacer.', election_close_locked_note: 'Esta elección está cerrada — la estructura está bloqueada. El envío de resultados y la resolución de disputas permanecen abiertos.', toast_election_closed: 'Elección cerrada ✓', loading_closing_election: 'Cerrando elección…',
       election_dispute_target_label: 'Resultado en disputa', election_dispute_no_results: 'No hay resultados reportados para disputar aún.', election_dispute_reason_ph: 'Motivo de la disputa',
       toast_stations_imported: '{n} mesas importadas ✓',
       disputes_filed_by: 'presentado por {who}', disputes_has_evidence: 'tiene evidencia', disputes_no_open: 'No hay disputas abiertas.', disputes_status_upheld: 'aceptada', disputes_status_rejected: 'rechazada', disputes_status_open: 'abierta', disputes_workspace_note: 'Los observadores autorizados y el monedero organizador pueden presentar y resolver disputas desde el espacio de trabajo de la elección.',
@@ -482,6 +498,10 @@
       election_observer_title: 'परिणाम रिपोर्ट करें', election_observer_your_station: '(आपका बूथ)', election_observer_station_label: 'मतदान केंद्र', election_observer_total_label: 'कुल मतपत्र', election_observer_invalid_label: 'अमान्य / रिक्त', election_observer_submit_btn: 'परिणाम सबमिट/संशोधित करें',
       election_stations_title: 'बूथ', election_station_name_ph: 'बूथ का नाम', election_station_label_ph: 'लेबल / क्षेत्र', election_station_add_btn: 'जोड़ें', election_station_bulk_import: 'CSV से बल्क आयात', election_station_csv_desc: 'प्रति पंक्ति एक बूथ: नाम,लेबल', election_station_import_btn: 'सभी आयात करें', election_station_count: '{n} बूथ:', election_station_preview: '{n} बूथ आयात के लिए तैयार।',
       election_observers_title: 'पर्यवेक्षक', election_observer_addr_ph: 'पर्यवेक्षक वॉलेट (ut1…)', election_observer_all_stations: 'सभी बूथ', election_observer_authorize_btn: 'अधिकृत करें', election_observer_count: '{n} पर्यवेक्षक:',
+      election_candidates_title: 'उम्मीदवार', election_candidate_name_ph: 'उम्मीदवार का नाम', election_candidate_add_btn: 'जोड़ें', election_candidate_count: '{n} उम्मीदवार:', toast_candidate_added: 'उम्मीदवार जोड़ा गया ✓', loading_adding_candidate_post: 'उम्मीदवार जोड़ रहे हैं…',
+      election_avatar_upload_btn: 'फोटो अपलोड करें', election_avatar_uploading: 'अपलोड हो रहा है…', election_avatar_uploaded: 'फोटो अपलोड हुई ✓', election_avatar_replace: 'फोटो बदलें',
+      election_c1_upload_btn: 'C1 अपलोड करें', election_c1_uploading: 'अपलोड हो रहा है…', election_c1_uploaded: 'C1 फॉर्म अपलोड हुआ ✓', election_c1_replace: 'C1 फॉर्म बदलें',
+      election_closed_badge: 'बंद', election_close_btn: 'चुनाव बंद करें', election_close_confirm: 'यह चुनाव बंद करें? संरचनात्मक परिवर्तन (बूथ, उम्मीदवार, पर्यवेक्षक) स्थायी रूप से लॉक हो जाएंगे। परिणाम सबमिशन और विवाद समाधान खुले रहेंगे। यह on-chain दर्ज होता है और पूर्ववत नहीं किया जा सकता।', election_close_locked_note: 'यह चुनाव बंद हो गया है — संरचना लॉक है। परिणाम सबमिशन और विवाद समाधान खुले रहेंगे।', toast_election_closed: 'चुनाव बंद हुआ ✓', loading_closing_election: 'चुनाव बंद कर रहे हैं…',
       election_dispute_target_label: 'लक्षित परिणाम', election_dispute_no_results: 'अभी तक विवाद करने के लिए कोई रिपोर्ट नहीं।', election_dispute_reason_ph: 'विवाद का कारण',
       toast_stations_imported: '{n} बूथ आयात हुए ✓',
       disputes_filed_by: '{who} द्वारा दायर', disputes_has_evidence: 'साक्ष्य है', disputes_no_open: 'कोई खुला विवाद नहीं।', disputes_status_upheld: 'स्वीकृत', disputes_status_rejected: 'अस्वीकृत', disputes_status_open: 'खुला', disputes_workspace_note: 'अधिकृत पर्यवेक्षक और आयोजन वॉलेट चुनाव कार्यक्षेत्र से विवाद दायर और हल कर सकते हैं।',
@@ -548,6 +568,10 @@
       election_observer_title: 'تسجيل النتيجة', election_observer_your_station: '(مركزك)', election_observer_station_label: 'مركز الاقتراع', election_observer_total_label: 'إجمالي الأوراق', election_observer_invalid_label: 'غير صالحة / فارغة', election_observer_submit_btn: 'إرسال / تعديل النتيجة',
       election_stations_title: 'المراكز', election_station_name_ph: 'اسم المركز', election_station_label_ph: 'التسمية / المنطقة', election_station_add_btn: 'إضافة', election_station_bulk_import: 'استيراد مجمّع من CSV', election_station_csv_desc: 'مركز واحد في كل سطر: الاسم، التسمية', election_station_import_btn: 'استيراد الكل', election_station_count: '{n} مراكز:', election_station_preview: '{n} مركز جاهز للاستيراد.',
       election_observers_title: 'المراقبون', election_observer_addr_ph: 'محفظة المراقب (ut1…)', election_observer_all_stations: 'جميع المراكز', election_observer_authorize_btn: 'تفويض', election_observer_count: '{n} مراقب(ون):',
+      election_candidates_title: 'المرشحون', election_candidate_name_ph: 'اسم المرشح', election_candidate_add_btn: 'إضافة', election_candidate_count: '{n} مرشح(ون):', toast_candidate_added: 'تمت إضافة المرشح ✓', loading_adding_candidate_post: 'جارٍ إضافة المرشح…',
+      election_avatar_upload_btn: 'رفع صورة', election_avatar_uploading: 'جارٍ الرفع…', election_avatar_uploaded: 'تم رفع الصورة ✓', election_avatar_replace: 'تغيير الصورة',
+      election_c1_upload_btn: 'رفع نموذج C1', election_c1_uploading: 'جارٍ الرفع…', election_c1_uploaded: 'تم رفع نموذج C1 ✓', election_c1_replace: 'تغيير نموذج C1',
+      election_closed_badge: 'مغلقة', election_close_btn: 'إغلاق الانتخاب', election_close_confirm: 'إغلاق هذا الانتخاب؟ سيتم قفل التغييرات الهيكلية (المراكز، المرشحون، المراقبون) بشكل دائم. يبقى تقديم النتائج وحل النزاعات مفتوحاً. يُسجَّل هذا على السلسلة ولا يمكن التراجع عنه.', election_close_locked_note: 'هذا الانتخاب مغلق — الهيكل مقفل. يبقى تقديم النتائج وحل النزاعات مفتوحاً.', toast_election_closed: 'تم إغلاق الانتخاب ✓', loading_closing_election: 'جارٍ إغلاق الانتخاب…',
       election_dispute_target_label: 'النتيجة المستهدفة', election_dispute_no_results: 'لا توجد نتائج مُبلَّغ عنها للطعن بها بعد.', election_dispute_reason_ph: 'سبب النزاع',
       toast_stations_imported: '{n} مراكز مستوردة ✓',
       disputes_filed_by: 'قدّمه {who}', disputes_has_evidence: 'يوجد دليل', disputes_no_open: 'لا توجد نزاعات مفتوحة.', disputes_status_upheld: 'مقبول', disputes_status_rejected: 'مرفوض', disputes_status_open: 'مفتوح', disputes_workspace_note: 'يمكن للمراقبين المفوضين ومحفظة المنظمة تقديم النزاعات وحلها من مساحة عمل الانتخابات.',
@@ -615,6 +639,10 @@
       election_observer_title: 'Soumettre un résultat', election_observer_your_station: '(votre bureau)', election_observer_station_label: 'Bureau de vote', election_observer_total_label: 'Total bulletins', election_observer_invalid_label: 'Nuls / blancs', election_observer_submit_btn: 'Soumettre / réviser le résultat',
       election_stations_title: 'Bureaux', election_station_name_ph: 'Nom du bureau', election_station_label_ph: 'Étiquette / région', election_station_add_btn: 'Ajouter', election_station_bulk_import: 'Import groupé depuis CSV', election_station_csv_desc: 'Un bureau par ligne : nom,étiquette', election_station_import_btn: 'Tout importer', election_station_count: '{n} bureaux :', election_station_preview: '{n} bureau(x) prêt(s) à importer.',
       election_observers_title: 'Observateurs', election_observer_addr_ph: 'Portefeuille observateur (ut1…)', election_observer_all_stations: 'Tous les bureaux', election_observer_authorize_btn: 'Autoriser', election_observer_count: '{n} observateur(s) :',
+      election_candidates_title: 'Candidats', election_candidate_name_ph: 'Nom du candidat', election_candidate_add_btn: 'Ajouter', election_candidate_count: '{n} candidat(s) :', toast_candidate_added: 'Candidat ajouté ✓', loading_adding_candidate_post: 'Ajout du candidat…',
+      election_avatar_upload_btn: 'Téléverser photo', election_avatar_uploading: 'Téléversement…', election_avatar_uploaded: 'Photo téléversée ✓', election_avatar_replace: 'Remplacer la photo',
+      election_c1_upload_btn: 'Téléverser C1', election_c1_uploading: 'Téléversement…', election_c1_uploaded: 'Formulaire C1 téléversé ✓', election_c1_replace: 'Remplacer le formulaire C1',
+      election_closed_badge: 'Clôturée', election_close_btn: "Clôturer l'élection", election_close_confirm: "Clôturer cette élection ? Les modifications structurelles (bureaux, candidats, observateurs) seront définitivement verrouillées. La soumission des résultats et la résolution des litiges restent ouvertes. Cette action est enregistrée sur la chaîne et ne peut être annulée.", election_close_locked_note: 'Cette élection est clôturée — la structure est verrouillée. La soumission des résultats et la résolution des litiges restent ouvertes.', toast_election_closed: 'Élection clôturée ✓', loading_closing_election: "Clôture de l'élection…",
       election_dispute_target_label: 'Résultat ciblé', election_dispute_no_results: "Aucun résultat déclaré à contester pour l'instant.", election_dispute_reason_ph: 'Raison de la contestation',
       toast_stations_imported: '{n} bureaux importés ✓',
       disputes_filed_by: 'déposé par {who}', disputes_has_evidence: 'avec preuve', disputes_no_open: 'Aucune contestation ouverte.', disputes_status_upheld: 'accepté', disputes_status_rejected: 'rejeté', disputes_status_open: 'ouvert', disputes_workspace_note: "Les observateurs autorisés et le portefeuille organisateur peuvent déposer et résoudre des contestations depuis l'espace de travail de l'élection.",
@@ -846,6 +874,7 @@
     orem: (org, addr) => ({ app: APP, v: V, t: 'orem', org, addr }),
     ovis: (org, vis) => ({ app: APP, v: V, t: 'ovis', org, vis: vis === 'private' ? 'private' : 'public' }),
     odel: (org) => ({ app: APP, v: V, t: 'odel', org }),
+    ecl: (eid) => ({ app: APP, v: V, t: 'ecl', eid: String(eid) }),
     oedit: (org, name, jur) => ({ app: APP, v: V, t: 'oedit', org, name: String(name == null ? '' : name).slice(0, 120), jur: String(jur == null ? '' : jur).slice(0, 80) }),
   };
 
@@ -982,6 +1011,8 @@
         return typeof m.org === 'string' && m.org.length > 0 && (m.vis === 'public' || m.vis === 'private');
       case 'odel':
         return typeof m.org === 'string' && m.org.length > 0;
+      case 'ecl':
+        return typeof m.eid === 'string' && m.eid.length > 0;
       case 'oedit':
         return typeof m.org === 'string' && m.org.length > 0 && typeof m.name === 'string' && m.name.trim().length > 0;
       default:
@@ -2043,6 +2074,10 @@
     const d = App.state && App.state.detail;
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
+    const canOperate = isOrgOwner
+      || (App.role.orgsMember || []).some((o) => o.addr === d.election.orgAddr && (o.role === 'admin' || o.role === 'mod'))
+      || App.role.isAdmin;
+    const isClosed = !!(d.election && d.election.closed);
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
     // Surface the viewer's org role in the header: Owner badge for the creator,
     // the org role for Administrators/Moderators.
@@ -2059,7 +2094,7 @@
     v.innerHTML = `
       <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
       <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
-        <div><h2 class="text-xl font-semibold flex items-center gap-2 flex-wrap">${esc(d.election.name)}${roleBadgeHtml}</h2>
+        <div><h2 class="text-xl font-semibold flex items-center gap-2 flex-wrap">${esc(d.election.name)}${roleBadgeHtml}${isClosed ? `<span class="badge bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${esc(t('election_closed_badge'))}</span>` : ''}</h2>
         <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${myOrgRole ? `<button id="ws-org-manage" class="text-indigo-400 hover:underline" data-addr="${esc(d.election.orgAddr)}">${esc(d.election.orgName || '—')}</button>` : esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
         ${methodSel}
       </div>
@@ -2077,10 +2112,23 @@
     // Ballot-proof upload — observers attach their own station's proof; operators
     // (Owner/Administrator/Moderator) can attach for any station via the picker.
     if (myObs) ws.appendChild(ballotProofPanel(d, myObs.sid != null ? myObs.sid : null));
-    else if (isOrgOwner && (d.stations || []).length) ws.appendChild(ballotProofPanel(d, null));
-    if (myObs || isOrgOwner) ws.appendChild(disputeFilePanel(d));
-    if (isOrgOwner) { ws.appendChild(stationsPanel(d)); ws.appendChild(observersPanel(d)); ws.appendChild(resolvePanel(d)); }
-    if (!myObs && !isOrgOwner) {
+    else if (canOperate && (d.stations || []).length) ws.appendChild(ballotProofPanel(d, null));
+    if (myObs || canOperate) ws.appendChild(disputeFilePanel(d));
+    if (canOperate) {
+      if (isClosed) {
+        const lockedEl = document.createElement('div');
+        lockedEl.className = 'p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800';
+        lockedEl.innerHTML = `<p class="text-sm text-slate-600 dark:text-slate-500">${esc(t('election_close_locked_note'))}</p>`;
+        ws.appendChild(lockedEl);
+      } else {
+        ws.appendChild(stationsPanel(d));
+        ws.appendChild(candidatesPanel(d));
+        ws.appendChild(observersPanel(d));
+      }
+      ws.appendChild(resolvePanel(d));
+      if (isOrgOwner && !isClosed) ws.appendChild(closeElectionPanel(d));
+    }
+    if (!myObs && !canOperate) {
       const p = document.createElement('p'); p.className = 'text-sm text-slate-600 dark:text-slate-500';
       p.textContent = t('election_detail_connect_note');
       ws.appendChild(p);
@@ -2382,7 +2430,19 @@
         <div id="st-csv-preview" class="text-xs text-slate-500 dark:text-slate-400 mb-2"></div>
         <button id="st-csv-import" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_station_import_btn')}</button>
       </details>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mt-3">${t('election_station_count').replace('{n}', d.stations.length)} ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
+      <div class="mt-3">
+        <p class="text-xs text-slate-600 dark:text-slate-500 mb-1.5">${t('election_station_count').replace('{n}', d.stations.length)}</p>
+        <input id="st-c1-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden">
+        <div id="st-c1-upload-area" class="hidden mb-2 p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800">
+          <p id="st-c1-upload-name" class="text-xs text-slate-600 dark:text-slate-500 mb-1"></p>
+          <img id="st-c1-preview" src="" alt="" class="max-h-20 rounded border border-slate-200 dark:border-slate-800 mb-2 hidden">
+          <div class="flex gap-2">
+            <button id="st-c1-cancel" class="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('election_c1_replace')}</button>
+            <button id="st-c1-submit" class="text-xs px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-40" disabled>${t('election_c1_upload_btn')}</button>
+          </div>
+        </div>
+        ${d.stations.length ? '<div class="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">' + d.stations.map((s) => `<div class="flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-slate-950"><span class="text-xs text-slate-700 dark:text-slate-300">${esc(s.name)}${s.label ? ' <span class="text-slate-500 dark:text-slate-500">· ' + esc(s.label) + '</span>' : ''}</span><button data-c1sid="${s.sid}" class="c1-upload-btn text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 shrink-0">${t('election_c1_upload_btn')}</button></div>`).join('') + '</div>' : '<span class="text-xs text-slate-500 dark:text-slate-400">—</span>'}
+      </div>`;
     const p = panel(t('election_stations_title'), inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
@@ -2408,6 +2468,115 @@
           partial: (done, total) => t('partial_stations').replace('{done}', done).replace('{total}', total),
           success: () => { toast(t('toast_stations_imported').replace('{n}', rows.length)); refreshSoon(); },
         });
+      };
+      // C1 upload per station
+      const c1FileEl = p.querySelector('#st-c1-file');
+      const c1AreaEl = p.querySelector('#st-c1-upload-area');
+      const c1NameEl = p.querySelector('#st-c1-upload-name');
+      const c1PreviewEl = p.querySelector('#st-c1-preview');
+      const c1SubmitBtn = p.querySelector('#st-c1-submit');
+      const c1CancelBtn = p.querySelector('#st-c1-cancel');
+      let c1ActiveSid = null; let c1CurrentFile = null;
+      p.querySelectorAll('.c1-upload-btn').forEach((btn) => {
+        btn.onclick = () => { c1ActiveSid = Number(btn.dataset.c1sid); c1FileEl.value = ''; c1FileEl.click(); };
+      });
+      c1FileEl.onchange = (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { toast(t('toast_failed') + ' max 2 MB', 'warn'); return; }
+        c1CurrentFile = f;
+        const url = URL.createObjectURL(f); c1PreviewEl.src = url; c1PreviewEl.classList.remove('hidden');
+        c1AreaEl.classList.remove('hidden'); c1NameEl.textContent = f.name; c1SubmitBtn.disabled = false;
+      };
+      c1CancelBtn.onclick = () => { c1FileEl.value = ''; c1CurrentFile = null; c1AreaEl.classList.add('hidden'); c1PreviewEl.classList.add('hidden'); c1SubmitBtn.disabled = true; };
+      c1SubmitBtn.onclick = async () => {
+        if (!c1CurrentFile || !c1ActiveSid) return;
+        c1SubmitBtn.disabled = true;
+        try {
+          const data_base64 = await fileToBase64(c1CurrentFile);
+          const r = await fetch('/api/elections/' + encodeURIComponent(d.election.eid) + '/attachments/station_c1/' + encodeURIComponent(c1ActiveSid),
+            { method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ mime: c1CurrentFile.type, data_base64 }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('election_c1_uploaded')); c1AreaEl.classList.add('hidden'); c1PreviewEl.classList.add('hidden');
+        } catch (err) { c1SubmitBtn.disabled = false; handleTxFailure(err, { onRetry: () => c1SubmitBtn.onclick() }); }
+      };
+    });
+    return p;
+  }
+
+  function candidatesPanel(d) {
+    const cands = d.candidates || [];
+    const nextCid = cands.length > 0 ? Math.max(...cands.map((c) => c.cid)) + 1 : 1;
+    const candRows = cands.map((c) => `<div class="flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-slate-950"><span class="text-xs text-slate-700 dark:text-slate-300"><span class="text-slate-400 mr-1">#${c.cid}</span>${esc(c.name)}</span><button data-cvcid="${c.cid}" class="cv-upload-btn text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 shrink-0">${t('election_avatar_upload_btn')}</button></div>`).join('');
+    const inner = `
+      ${cands.length ? '<div class="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden mb-3">' + candRows + '</div>' : ''}
+      <input id="cv-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden">
+      <div id="cv-upload-area" class="hidden mb-3 p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800">
+        <p id="cv-upload-name" class="text-xs text-slate-600 dark:text-slate-500 mb-1"></p>
+        <img id="cv-preview" src="" alt="" class="max-h-24 rounded border border-slate-200 dark:border-slate-800 mb-2 hidden">
+        <div class="flex gap-2">
+          <button id="cv-cancel" class="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('election_avatar_replace')}</button>
+          <button id="cv-submit" class="text-xs px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-40" disabled>${t('election_avatar_upload_btn')}</button>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <input id="cv-name" placeholder="${t('election_candidate_name_ph')}" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+        <button id="cv-add" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_candidate_add_btn')}</button>
+      </div>
+      <p class="text-xs text-slate-600 dark:text-slate-500 mt-2">${t('election_candidate_count').replace('{n}', cands.length)}</p>`;
+    const p = panel(t('election_candidates_title'), inner);
+    setTimeout(() => {
+      const cvFileEl = p.querySelector('#cv-file');
+      const cvAreaEl = p.querySelector('#cv-upload-area');
+      const cvNameEl = p.querySelector('#cv-upload-name');
+      const cvPreviewEl = p.querySelector('#cv-preview');
+      const cvSubmitBtn = p.querySelector('#cv-submit');
+      const cvCancelBtn = p.querySelector('#cv-cancel');
+      let cvActiveCid = null; let cvCurrentFile = null;
+      p.querySelectorAll('.cv-upload-btn').forEach((btn) => {
+        btn.onclick = () => { cvActiveCid = Number(btn.dataset.cvcid); cvFileEl.value = ''; cvFileEl.click(); };
+      });
+      cvFileEl.onchange = (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { toast(t('toast_failed') + ' max 2 MB', 'warn'); return; }
+        cvCurrentFile = f;
+        const url = URL.createObjectURL(f); cvPreviewEl.src = url; cvPreviewEl.classList.remove('hidden');
+        cvAreaEl.classList.remove('hidden'); cvNameEl.textContent = f.name; cvSubmitBtn.disabled = false;
+      };
+      cvCancelBtn.onclick = () => { cvFileEl.value = ''; cvCurrentFile = null; cvAreaEl.classList.add('hidden'); cvPreviewEl.classList.add('hidden'); cvSubmitBtn.disabled = true; };
+      cvSubmitBtn.onclick = async () => {
+        if (!cvCurrentFile || !cvActiveCid) return;
+        cvSubmitBtn.disabled = true;
+        try {
+          const data_base64 = await fileToBase64(cvCurrentFile);
+          const r = await fetch('/api/elections/' + encodeURIComponent(d.election.eid) + '/attachments/cand_avatar/' + encodeURIComponent(cvActiveCid),
+            { method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ mime: cvCurrentFile.type, data_base64 }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('election_avatar_uploaded')); cvAreaEl.classList.add('hidden'); cvPreviewEl.classList.add('hidden');
+        } catch (err) { cvSubmitBtn.disabled = false; handleTxFailure(err, { onRetry: () => cvSubmitBtn.onclick() }); }
+      };
+      p.querySelector('#cv-add').onclick = () => {
+        const name = p.querySelector('#cv-name').value.trim();
+        if (!name) return toast(t('toast_add_candidate'), 'warn');
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.cand(d.election.eid, nextCid, name) },
+          { loading: t('loading_adding_candidate_post'), success: () => { toast(t('toast_candidate_added')); refreshSoon(); } });
+      };
+    });
+    return p;
+  }
+
+  function closeElectionPanel(d) {
+    const inner = `
+      <p class="text-sm text-slate-600 dark:text-slate-500 mb-3">${esc(t('election_close_confirm'))}</p>
+      <button id="el-close-btn" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 font-semibold text-sm text-white">${esc(t('election_close_btn'))}</button>`;
+    const p = panel(t('org_danger_heading'), inner);
+    p.classList.add('border-rose-300', 'dark:border-rose-800');
+    setTimeout(() => {
+      p.querySelector('#el-close-btn').onclick = () => {
+        if (!confirm(t('election_close_confirm'))) return;
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.ecl(d.election.eid) },
+          { loading: t('loading_closing_election'), success: () => { toast(t('toast_election_closed')); refreshSoon(); } });
       };
     });
     return p;

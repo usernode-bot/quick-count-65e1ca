@@ -368,6 +368,15 @@ function buildDemoTxs() {
     // Station 4 (East Java): Prabowo dominant.
     mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 110, 2: 400, 3: 90 }, 622, 14)),
     // Station 5 (North Sumatra): no submission → "4 of 5 stations reported".
+
+    // ── Closed election — demonstrates the closed badge and locked workspace ──
+    mk('demo-closed-election', DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — Closed Election')),
+    mk('demo_closed_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo-closed-election', 1, 'Demo Candidate Alpha')),
+    mk('demo_closed_c2', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo-closed-election', 2, 'Demo Candidate Beta')),
+    mk('demo_closed_s1', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo('demo-closed-election', 1, 'Demo Station X', 'Central')),
+    mk('demo_closed_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo('demo-closed-election', DEMO.obs1)),
+    mk('demo_closed_r1', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo('demo-closed-election', 1, { 1: 85, 2: 42 }, 132, 5)),
+    mk('demo_closed_ecl', DEMO.orgA, DEMO.orgA, 0, memo.electionCloseMemo('demo-closed-election')),
   ];
   return txs;
 }
@@ -731,8 +740,8 @@ app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, 
     // on-chain `el` tx lands), we can't resolve the owner — allow it.
 
     const el = indexer.elections.get(eid);
-    if (el && !indexer.canOperate(el.orgAddr, uploaderPubkey)) {
-      return res.status(403).json({ error: 'Only the organizing wallet can upload this election\'s images' });
+    if (el && !indexer.canOperate(el.orgAddr, uploaderPubkey) && !indexer.isAdmin(uploaderPubkey)) {
+      return res.status(403).json({ error: 'Only the organizing wallet or its operators can upload this election\'s images' });
     }
 
     const { mime, data_base64 } = req.body || {};
@@ -1543,6 +1552,9 @@ async function seedStaging() {
     [PILPRES_EID, 'cand_avatar', 1, RED_PNG],
     [PILPRES_EID, 'cand_avatar', 2, BLUE_PNG],
     [PILPRES_EID, 'cand_avatar', 3, GREEN_PNG],
+    // Closed election candidate avatars.
+    ['demo-closed-election', 'cand_avatar', 1, RED_PNG],
+    ['demo-closed-election', 'cand_avatar', 2, BLUE_PNG],
   ];
   for (const [eid, kind, refId, b64] of demoAtt) {
     const buf = Buffer.from(b64, 'base64');
