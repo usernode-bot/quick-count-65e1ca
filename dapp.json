@@ -314,6 +314,16 @@
       "name": "Election workspace renders the ballot-proof upload panel for an organizer",
       "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
       "expectSelector": "[data-ballot-proof]"
+    },
+    {
+      "name": "C1-KWK panel renders for Indonesia election",
+      "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/election/demo-pilpres-2024",
+      "expectSelector": "[data-c1kwk-panel]"
+    },
+    {
+      "name": "C1-KWK verify endpoint returns JSON for any payload",
+      "path": "/api/public/c1kwk/verify?payload=dGVzdA",
+      "expectText": "\"valid\""
     }
   ]
 }

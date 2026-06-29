@@ -22,6 +22,11 @@ const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
+let PDFDocument = null;
+try { PDFDocument = require('pdfkit'); } catch { /* pdfkit optional */ }
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch { /* qrcode optional */ }
+
 const { normalizeTx, QuickCountIndexer } = require('./lib/indexer');
 const memo = require('./lib/memo');
 const mock = require('./lib/mockledger');
@@ -233,6 +238,30 @@ async function pollOnce() {
 // Election id for the 2024 Indonesian presidential presentation dataset.
 const PILPRES_EID = 'demo-pilpres-2024';
 function evHash(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
+
+function c1kwkCanonical(eid, form) {
+  return JSON.stringify({
+    eid,
+    province: form.province || '',
+    regency: form.regency || '',
+    subdistrict: form.subdistrict || '',
+    village: form.village || '',
+    tps: form.tps || '',
+    candidates: (Array.isArray(form.candidates) ? form.candidates : []).map((c) => ({
+      cid: Number(c.cid) || 0, name: String(c.name || ''), votes: Number(c.votes) || 0,
+    })),
+    validVotes: Number(form.validVotes) || 0,
+    invalidVotes: Number(form.invalidVotes) || 0,
+    totalVotes: Number(form.totalVotes) || 0,
+    dpt: Number(form.dpt) || 0,
+  });
+}
+function c1kwkSign(docHash, eid, wallet, ts) {
+  if (!JWT_SECRET) return null;
+  return crypto.createHmac('sha256', JWT_SECRET)
+    .update(JSON.stringify({ doc_hash: docHash, eid, ts, wallet }))
+    .digest('hex');
+}
 
 function buildDemoTxs() {
   let t = Date.parse('2026-06-19T08:00:00.000Z');
@@ -937,6 +966,128 @@ app.get('/api/public/elections/:eid/stream', (req, res) => {
   req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
 });
 
+// Authenticated: generate and download a signed C1-KWK ballot-count PDF for an
+// Indonesia election. Signs the form's canonical JSON with HMAC-SHA256 using the
+// platform JWT_SECRET and embeds a QR code linking to the public verify endpoint.
+// Logged to c1kwk_downloads when DATABASE_URL is set.
+app.post('/api/elections/:eid/c1kwk/download', express.json(), async (req, res) => {
+  try {
+    const { eid } = req.params;
+    if (!PDFDocument || !QRCode) return res.status(503).json({ error: 'PDF generation libraries unavailable' });
+    if (!JWT_SECRET) return res.status(503).json({ error: 'Signing not available in this environment' });
+
+    const el = indexer.elections.get(eid);
+    if (!el) return res.status(404).json({ error: 'Election not found' });
+    const org = indexer.orgs.get(el.orgAddr);
+    const orgJur = org ? (org.jur || '').toLowerCase() : '';
+    if (orgJur !== 'indonesia') return res.status(400).json({ error: 'C1-KWK forms are only available for Indonesia elections' });
+
+    const pubkey = (req.user && req.user.usernode_pubkey) || null;
+    const form = req.body || {};
+    const canonical = c1kwkCanonical(eid, form);
+    const docHash = crypto.createHash('sha256').update(canonical).digest('hex');
+    const ts = new Date().toISOString();
+    const wallet = pubkey || '';
+    const sig = c1kwkSign(docHash, eid, wallet, ts);
+
+    if (pool) {
+      await pool.query(
+        'INSERT INTO c1kwk_downloads (eid, doc_hash, sig, wallet, downloaded_at) VALUES ($1,$2,$3,$4,NOW())',
+        [eid, docHash, sig, wallet || null]
+      );
+    }
+
+    const verifyPayload = Buffer.from(JSON.stringify({ doc_hash: docHash, eid, ts, wallet, sig })).toString('base64url');
+    const verifyUrl = `${req.protocol}://${req.get('host')}/#/verify?c1kwk=${encodeURIComponent(verifyPayload)}`;
+    const qrPng = await QRCode.toBuffer(verifyUrl, { type: 'png', width: 200 });
+
+    const detail = indexer.electionDetail(eid, null, 'latest');
+    const elName = (detail && detail.election && detail.election.name) || eid;
+    const cands = (detail && detail.candidates) || [];
+    const formCands = Array.isArray(form.candidates) ? form.candidates : [];
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const pdfDone = new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+    });
+
+    doc.fontSize(16).font('Helvetica-Bold').text('MODEL C1-KWK', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text('Catatan Hasil Penghitungan Perolehan Suara', { align: 'center' });
+    doc.text('Pemilihan Umum — Quick Count Platform', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica-Bold').text('Pemilihan: ', { continued: true }).font('Helvetica').text(elName);
+    doc.font('Helvetica-Bold').text('No. TPS: ', { continued: true }).font('Helvetica').text(String(form.tps || '—'));
+    doc.font('Helvetica-Bold').text('Provinsi: ', { continued: true }).font('Helvetica').text(String(form.province || '—'));
+    doc.font('Helvetica-Bold').text('Kab/Kota: ', { continued: true }).font('Helvetica').text(String(form.regency || '—'));
+    doc.font('Helvetica-Bold').text('Kecamatan: ', { continued: true }).font('Helvetica').text(String(form.subdistrict || '—'));
+    doc.font('Helvetica-Bold').text('Kel/Desa: ', { continued: true }).font('Helvetica').text(String(form.village || '—'));
+    doc.font('Helvetica-Bold').text('DPT: ', { continued: true }).font('Helvetica').text(String(Number(form.dpt) || 0));
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica-Bold').text('Perolehan Suara Sah');
+    for (const c of formCands) {
+      const name = c.name || (cands.find((x) => x.cid === c.cid) || {}).name || `No. ${c.cid}`;
+      doc.fontSize(10).font('Helvetica').text(`  Pasangan No. ${c.cid} — ${name}: ${Number(c.votes) || 0} suara`);
+    }
+    doc.moveDown(0.3);
+    doc.fontSize(11).font('Helvetica-Bold').text(`Jumlah Suara Sah: ${Number(form.validVotes) || 0}`);
+    doc.font('Helvetica-Bold').text(`Jumlah Suara Tidak Sah: ${Number(form.invalidVotes) || 0}`);
+    doc.font('Helvetica-Bold').text(`Jumlah Seluruh Suara: ${Number(form.totalVotes) || 0}`);
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica-Bold').text('Hash Dokumen (SHA-256):');
+    doc.font('Courier').fontSize(8).text(docHash);
+    doc.fontSize(9).font('Helvetica-Bold').text('Tanda Tangan Platform (HMAC-SHA256):');
+    doc.font('Courier').fontSize(8).text(sig || '—');
+    doc.fontSize(9).font('Helvetica').text(`Timestamp: ${ts}`);
+    doc.fontSize(9).font('Helvetica').text(`Dompet: ${wallet || '(tidak ada)'}`);
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica').text('Scan QR untuk verifikasi tanda tangan:');
+    doc.image(qrPng, doc.page.margins.left, doc.y, { width: 100 });
+    doc.end();
+    await pdfDone;
+
+    const pdf = Buffer.concat(chunks);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="c1kwk_${eid}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: verify a C1-KWK signed payload from a QR code. Under /api/public/ so
+// it is ungated — anyone scanning a QR code can check the signature.
+app.get('/api/public/c1kwk/verify', (req, res) => {
+  try {
+    const { payload } = req.query;
+    if (!payload || typeof payload !== 'string') return res.json({ valid: false, error: 'payload required' });
+    let parsed;
+    try {
+      const json = Buffer.from(payload, 'base64url').toString('utf-8');
+      parsed = JSON.parse(json);
+    } catch {
+      return res.json({ valid: false, error: 'invalid payload' });
+    }
+    const { doc_hash, eid, ts, wallet, sig } = parsed || {};
+    if (!doc_hash || !eid || !ts || !sig) return res.json({ valid: false, error: 'missing fields' });
+    if (!JWT_SECRET) return res.json({ valid: false, error: 'signing not configured' });
+    const expected = crypto.createHmac('sha256', JWT_SECRET)
+      .update(JSON.stringify({ doc_hash, eid, ts, wallet: wallet || '' }))
+      .digest('hex');
+    let valid = false;
+    try {
+      const sigBuf = Buffer.from(sig, 'hex');
+      const expBuf = Buffer.from(expected, 'hex');
+      valid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch { valid = false; }
+    res.json({ valid, doc_hash, eid, ts, wallet: wallet || null });
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
+});
+
 // Public: list elections with counts (backed by in-memory indexer).
 app.get('/api/public/elections', (_req, res) => {
   try {
@@ -1355,6 +1506,19 @@ async function migrate() {
       PRIMARY KEY (eid, sid)
     )`);
   await pool.query(`COMMENT ON TABLE ballot_proofs IS 'staging:private'`);
+  // C1-KWK signed PDF download audit log. PRIVATE: records wallet addresses
+  // that downloaded a signed form — PII. Staging gets schema only; seedStaging()
+  // inserts obviously-fake rows so the endpoint is exercisable in previews.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS c1kwk_downloads (
+      id SERIAL PRIMARY KEY,
+      eid TEXT NOT NULL,
+      doc_hash TEXT NOT NULL,
+      sig TEXT,
+      wallet TEXT,
+      downloaded_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  await pool.query(`COMMENT ON TABLE c1kwk_downloads IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
   // v3 — username-as-identity: `profiles` is the authoritative username↔address
@@ -1504,6 +1668,17 @@ async function seedStaging() {
       [eid, sid, buf, buf.length, valid, JSON.stringify(validation), status, up, upName]
     );
   }
+
+  // C1-KWK download log (staging:private → seed obviously-fake rows so the
+  // audit trail is non-empty in PR previews). WHERE NOT EXISTS guards idempotency
+  // since the SERIAL PK has no natural unique key to ON CONFLICT against.
+  const demoHash = 'staging-demo-c1kwk-doc-hash-0000000000000000000000000000000000000000000000000000000000';
+  await pool.query(
+    `INSERT INTO c1kwk_downloads (eid, doc_hash, sig, wallet, downloaded_at)
+     SELECT $1, $2, $3, $4, NOW()
+     WHERE NOT EXISTS (SELECT 1 FROM c1kwk_downloads WHERE eid = $1 AND doc_hash = $2)`,
+    [PILPRES_EID, demoHash, 'staging-demo-sig', DEMO.obs1]
+  );
 }
 
 async function start() {
