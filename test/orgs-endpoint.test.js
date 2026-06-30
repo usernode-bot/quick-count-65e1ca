@@ -50,6 +50,14 @@ test('owner sees their org with the full roster', async () => {
   assert.strictEqual(roles[ORG_MEMBER], 'member');
 });
 
+test('the orgs projection exposes active so the client can gate management', async () => {
+  // The locked-vs-unlocked Manage workspace keys off org.active; the endpoint
+  // must surface it. Citizens Count is paid → active true.
+  const { json } = await get('/__quickcount/orgs?viewer=' + encodeURIComponent(ORG_A));
+  const org = json.orgs.find((o) => o.addr === ORG_A);
+  assert.strictEqual(org.active, true);
+});
+
 test('an administrator sees the org under member-of with role admin', async () => {
   const { json } = await get('/__quickcount/orgs?viewer=' + encodeURIComponent(ORG_ADMIN));
   const org = json.orgs.find((o) => o.addr === ORG_A);

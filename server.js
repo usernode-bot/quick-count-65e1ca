@@ -162,6 +162,10 @@ function ingestRaw(raw) {
   const n = normalizeTx(raw);
   if (!n.txId || seen.has(n.txId)) return false;
   seen.add(n.txId);
+  // Keep the mock ledger's id counter ahead of every id we've ingested, so a
+  // freshly minted submission can never reuse an id already in `seen` (which
+  // would be dropped as a duplicate here and never reach the indexer).
+  mock.noteId(n.txId);
   txLog.push(n);
   if (pool) {
     pool.query(
@@ -1524,6 +1528,11 @@ async function loadFromDb() {
   for (const r of rows) {
     if (seen.has(r.tx_id)) continue;
     seen.add(r.tx_id);
+    // Persisted ids include mock-ledger ids (mocktx_NNNNNN) from prior sessions —
+    // and, in staging, ids copied from the production DB. Advance the in-memory
+    // counter past them so post-restart submissions don't regenerate a colliding
+    // id that gets silently dropped as a duplicate.
+    mock.noteId(r.tx_id);
     txLog.push({
       txId: r.tx_id, from: r.from_addr, to: r.to_addr,
       amount: Number(r.amount) || 0, memo: r.memo,
