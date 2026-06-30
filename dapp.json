@@ -322,6 +322,21 @@
       "name": "C1-KWK verify endpoint returns JSON for any payload",
       "path": "/api/public/c1kwk/verify?payload=dGVzdA",
       "expectText": "\"valid\""
+    },
+    {
+      "name": "Public elections list endpoint surfaces a seeded election (ingest→index→list path)",
+      "path": "/api/public/elections",
+      "expectText": "General Election"
+    },
+    {
+      "name": "Quick-count state lists a seeded active organization (orgs render in the list)",
+      "path": "/__quickcount/state",
+      "expectText": "Citizens Count"
+    },
+    {
+      "name": "Elections list screen shows a seeded election row",
+      "path": "/#/elections",
+      "expectText": "General Election"
     }
   ]
 }
