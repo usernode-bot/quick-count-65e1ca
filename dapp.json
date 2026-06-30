@@ -249,6 +249,11 @@
       "expectText": "Member of"
     },
     {
+      "name": "Unpaid org owner sees the pay-fee prompt (management gated on payment)",
+      "path": "/?viewer=ut1demounpaidorg000000000000000000000000000#/orgs",
+      "expectText": "Pay registration fee"
+    },
+    {
       "name": "Orgs endpoint returns the seeded owner roster",
       "path": "/__quickcount/orgs?viewer=ut1democitizenscount0000000000000000000000",
       "expectText": "\"viewerRole\":\"owner\""

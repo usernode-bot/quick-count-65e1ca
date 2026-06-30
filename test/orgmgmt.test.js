@@ -148,7 +148,8 @@ test('private org elections are hidden from public but visible to members/owner/
   assert.strictEqual(ix.visibleElections({ viewer: OUTSIDER }).length, 0);
   assert.strictEqual(ix.visibleElections({ viewer: OWNER }).length, 1);
   assert.strictEqual(ix.visibleElections({ viewer: MEMBER_M }).length, 1);
-  assert.strictEqual(ix.visibleElections({ admin: true }).length, 1);
+  // (The platform-admin break-glass viewer was removed in #52; visibleElections
+  // honors only `viewer`, so there is no admin-sees-all path to assert.)
 });
 
 test('public org elections stay public (regression)', () => {
@@ -172,10 +173,12 @@ test('delete tombstones the org and makes it inert', () => {
   assert.strictEqual(ix.orgRole(OWNER, OWNER), null); // deleted org has no roles
   assert.strictEqual(ix.orgs.get(OWNER).members.size, 0);
   assert.strictEqual(ix.orgs.get(OWNER).visibility, 'public'); // change after delete rejected
-  // E2 (created after delete) never registered; E1 hidden from non-admins.
+  // E2 (created after delete) never registered; E1 hidden once the org is a tombstone.
   assert.strictEqual(ix.elections.has('el2'), false);
   assert.strictEqual(ix.visibleElections({ viewer: OWNER }).length, 0);
-  assert.strictEqual(ix.visibleElections({ admin: true }).length, 1);
+  // A deleted org's elections are hidden from everyone (the #52 admin break-glass
+  // viewer no longer exists), so there is no viewer that still sees E1.
+  assert.strictEqual(ix.visibleElections({ viewer: null }).length, 0);
 });
 
 test('only the owner can delete', () => {
@@ -300,13 +303,42 @@ test('oedit on deleted org is a no-op', () => {
   assert.strictEqual(ix.orgs.get(OWNER).name, 'Owned Org'); // unchanged
 });
 
-// ── Membership independent of fee/active ────────────────────────────────────
-test('members can be added to a pending (unpaid) org', () => {
+// ── Management is gated on paid (active) status ─────────────────────────────
+test('a pending (unpaid) org cannot be managed — every mutation is rejected', () => {
   const ix = new QuickCountIndexer(CFG);
   ix.rebuild([
     mk('o1', OWNER, 'TREASURY', 0, memo.orgMemo('Pending Org', 'J')), // fee unpaid
+    // Owner of a pending org tries the full management surface — all rejected.
+    mk('m1', OWNER, 'x', 0, memo.memberMemo('orgOwner', MEMBER_M, 'member')),
+    mk('v1', OWNER, 'x', 0, memo.visibilityMemo('orgOwner', 'private')),
+    mk('e1', OWNER, 'x', 0, memo.editOrgMemo('orgOwner', 'Renamed', 'K')),
+    mk('el1', OWNER, OWNER, 0, memo.electionMemo('Should not exist')),
+  ]);
+  const org = ix.orgs.get(OWNER);
+  assert.strictEqual(org.active, false);
+  assert.strictEqual(ix.orgRole(OWNER, MEMBER_M), null, 'member was not added');
+  assert.strictEqual(org.visibility, 'public', 'visibility unchanged');
+  assert.strictEqual(org.name, 'Pending Org', 'name unchanged');
+  assert.strictEqual(ix.elections.size, 0, 'no election created');
+  assert.strictEqual(ix.canOperate(OWNER, OWNER), false);
+});
+
+test('the owner can still pay (top-up) or delete a pending org', () => {
+  // Delete an abandoned pending registration.
+  const del = new QuickCountIndexer(CFG);
+  del.rebuild([
+    mk('o1', OWNER, 'TREASURY', 0, memo.orgMemo('Pending Org', 'J')),
+    mk('d1', OWNER, 'x', 0, memo.deleteOrgMemo('orgOwner')),
+  ]);
+  assert.strictEqual(del.orgs.get(OWNER).deleted, true);
+
+  // Pay the fee, then management unlocks.
+  const pay = new QuickCountIndexer(CFG);
+  pay.rebuild([
+    mk('o1', OWNER, 'TREASURY', 0, memo.orgMemo('Pending Org', 'J')),
+    mk('o2', OWNER, 'TREASURY', 100, memo.orgMemo('Pending Org', 'J')), // top-up
     mk('m1', OWNER, 'x', 0, memo.memberMemo('orgOwner', MEMBER_M, 'member')),
   ]);
-  assert.strictEqual(ix.orgs.get(OWNER).active, false);
-  assert.strictEqual(ix.orgRole(OWNER, MEMBER_M), 'member');
+  assert.strictEqual(pay.orgs.get(OWNER).active, true);
+  assert.strictEqual(pay.orgRole(OWNER, MEMBER_M), 'member', 'member added after payment');
 });

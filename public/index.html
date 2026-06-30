@@ -190,6 +190,7 @@
       org_role_owner: 'Owner', org_role_admin: 'Administrator', org_role_mod: 'Moderator', org_role_member: 'Member',
       org_vis_public: 'Public', org_vis_private: 'Private',
       org_manage: 'Manage', org_back: '← Back to organizations', org_members_heading: 'Members', org_visibility_heading: 'Visibility', org_danger_heading: 'Danger zone',
+      org_locked_heading: 'Management is locked', org_locked_desc: 'Management unlocks once your organization\'s registration fee is paid. Until then you can pay the fee or delete this registration.',
       org_details_heading: 'Organization details', org_name_label: 'Name', org_jur_label: 'Jurisdiction', org_save_details: 'Save changes', toast_details_updated: 'Details updated ✓', loading_updating_details: 'Saving details…',
       org_add_member: 'Add member', org_member_addr_placeholder: 'Member wallet address (ut1…)', org_add_button: 'Add member',
       org_make_public: 'Make public', org_make_private: 'Make private', org_current_visibility: 'This organization is currently {vis}.',
@@ -1687,8 +1688,10 @@
   let workEditable = false;
   function canEditWorkTally(orgAddr) {
     if (!orgAddr || !App.role) return false;
-    if (App.role.org && App.role.org.addr === orgAddr) return true; // owner
-    return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod'));
+    // Editing the working tally is an operating power → requires the org to be
+    // paid (active), matching the indexer's canOperate gate.
+    if (App.role.org && App.role.org.addr === orgAddr) return App.role.org.active === true; // owner
+    return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod') && o.active);
   }
   // Hydrate the inlineEntry map from the persisted working tally returned in the
   // election detail. Each saved station becomes a saved (collapsed) entry. Never
@@ -2074,8 +2077,11 @@
     const d = App.state && App.state.detail;
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
-    const canOperate = isOrgOwner
-      || (App.role.orgsMember || []).some((o) => o.addr === d.election.orgAddr && (o.role === 'admin' || o.role === 'mod'))
+    // Operating powers require the org to be PAID (active), mirroring the
+    // indexer's canOperate gate. A platform admin (break-glass) bypasses it.
+    const orgActive = !!(d.election && d.election.orgActive);
+    const canOperate = (orgActive && (isOrgOwner
+      || (App.role.orgsMember || []).some((o) => o.addr === d.election.orgAddr && (o.role === 'admin' || o.role === 'mod'))))
       || App.role.isAdmin;
     const isClosed = !!(d.election && d.election.closed);
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
@@ -2765,6 +2771,37 @@
   // Org management workspace: roster + role-gated controls.
   function renderOrgWorkspace(v, org) {
     const vr = org.viewerRole;
+
+    // Paid gate: management unlocks only for owners/founders (and their
+    // delegates) once the org has paid its fee (org.active). A pending org's
+    // owner gets a locked workspace exposing only Pay fee + Delete (abandon) —
+    // mirroring the indexer, which rejects every management mutation until paid.
+    if (!org.active) {
+      let lockedHtml = `<button id="org-back" class="text-sm text-indigo-500 hover:underline mb-3">${t('org_back')}</button>
+        <div class="flex items-center gap-2 flex-wrap mb-1"><h2 class="text-lg font-semibold">${esc(org.name)}</h2>${orgRoleBadge(vr)}<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('orgs_pending_badge')}</span></div>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mb-5 font-mono">${esc(org.addr)}</p>
+        <div class="p-4 mb-4 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30">
+          <h3 class="font-semibold mb-2 text-amber-800 dark:text-amber-200">${t('org_locked_heading')}</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-300 mb-3">${t('org_locked_desc')}</p>
+          ${vr === 'owner' ? `<button id="pay-fee" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold">${t('orgs_pay_fee')} (${App.cfg.orgFee})</button>` : ''}
+        </div>`;
+      // Danger zone — delete/abandon (Owner only). Deletion stays available on a
+      // pending org so an unwanted registration can be cleaned up.
+      if (vr === 'owner') {
+        lockedHtml += `<div class="p-4 mb-4 rounded-xl border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10">
+          <h3 class="font-semibold mb-2 text-rose-700 dark:text-rose-300">${t('org_danger_heading')}</h3>
+          <button id="org-del" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">${t('org_delete')}</button>
+        </div>`;
+      }
+      v.innerHTML = lockedHtml;
+      document.getElementById('org-back').onclick = () => { App.orgView = null; render(); };
+      const payBtn = document.getElementById('pay-fee');
+      if (payBtn) payBtn.onclick = payOrgFee;
+      const delBtnL = document.getElementById('org-del');
+      if (delBtnL) delBtnL.onclick = () => deleteOrg(org.addr);
+      return;
+    }
+
     const canManageMembers = vr === 'owner' || vr === 'admin';
     const canSetVisibility = vr === 'owner' || vr === 'admin';
     const canDelete = vr === 'owner';
