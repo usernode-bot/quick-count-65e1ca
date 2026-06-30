@@ -89,6 +89,8 @@ const DEMO = {
   orgAdmin: 'ut1demoorgadmin0000000000000000000000000000',
   orgMod: 'ut1demoorgmod000000000000000000000000000000',
   orgMember: 'ut1demoorgmember00000000000000000000000000',
+  orgE: 'ut1demoorgexowner0000000000000000000000000', // ex-owner of completed-transfer demo
+  orgF: 'ut1demoorgfpending000000000000000000000000', // founder of pending-transfer demo
 };
 const pool = (Pool && process.env.DATABASE_URL)
   ? new Pool({ connectionString: process.env.DATABASE_URL })
@@ -221,6 +223,7 @@ async function pollOnce() {
     }
   }
   rebuild(); // deterministic full replay — cheap at this scale
+  syncAuditLog(); // fire-and-forget mirror of derived audit entries to DB
   // Push live updates for any election whose signature changed (new result,
   // vote-resolved dispute, structural change) or that is brand new.
   const after = electionSignatures();
@@ -377,6 +380,17 @@ function buildDemoTxs() {
     mk('demo_closed_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo('demo-closed-election', DEMO.obs1)),
     mk('demo_closed_r1', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo('demo-closed-election', 1, { 1: 85, 2: 42 }, 132, 5)),
     mk('demo_closed_ecl', DEMO.orgA, DEMO.orgA, 0, memo.electionCloseMemo('demo-closed-election')),
+
+    // ── Ownership transfer demos ─────────────────────────────────────────────
+    // orgE: completed transfer — orgE founded the org, then transferred to orgAdmin.
+    // After transfer: orgAdmin is owner, orgE is demoted to admin.
+    mk('demo_org_e', DEMO.orgE, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Transfer Demo (Completed)', 'Demo Republic')),
+    mk('demo_oxfer_e', DEMO.orgE, DEMO.orgE, 0, memo.transferOfferMemo(DEMO.orgE, DEMO.orgAdmin)),
+    mk('demo_oxacc_e', DEMO.orgAdmin, DEMO.orgE, 0, memo.transferAcceptMemo(DEMO.orgE)),
+
+    // orgF: pending transfer — orgF founded the org, offered ownership to obs1, not yet accepted.
+    mk('demo_org_f', DEMO.orgF, TREASURY_ADDR, ORG_FEE, memo.orgMemo('Staging demo — Transfer Demo (Pending)', 'Demo Republic')),
+    mk('demo_oxfer_f', DEMO.orgF, DEMO.orgF, 0, memo.transferOfferMemo(DEMO.orgF, DEMO.obs1)),
   ];
   return txs;
 }
@@ -1503,6 +1517,23 @@ async function migrate() {
       downloaded_at TIMESTAMPTZ DEFAULT NOW()
     )`);
   await pool.query(`COMMENT ON TABLE c1kwk_downloads IS 'staging:private'`);
+  // Audit log — derived read-model of sensitive org governance actions (ownership
+  // transfers, member removal, visibility changes). PRIVATE: records wallet
+  // addresses (PII). Staging gets schema only; seedStaging() inserts fake rows.
+  // tx_id UNIQUE so syncAuditLog() (fire-and-forget after every rebuild) is
+  // idempotent. Rebuilt deterministically from the transaction log on replay.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id SERIAL PRIMARY KEY,
+      org_addr TEXT,
+      actor_addr TEXT,
+      action TEXT,
+      target_addr TEXT,
+      detail TEXT,
+      tx_id TEXT UNIQUE,
+      created_at TIMESTAMPTZ
+    )`);
+  await pool.query(`COMMENT ON TABLE audit_log IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
   // v3 — username-as-identity: `profiles` is the authoritative username↔address
@@ -1516,6 +1547,23 @@ async function migrate() {
   // address stays the cryptographic/replay key; username is the restore key).
   await pool.query(`ALTER TABLE unlocks ADD COLUMN IF NOT EXISTS username TEXT`);
   await pool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS uploader_username TEXT`);
+}
+
+// Mirror the derived audit entries (rebuilt on every replay) into the durable
+// audit_log table. Fire-and-forget — a transient DB error never breaks ingest.
+// ON CONFLICT (tx_id) DO NOTHING makes it safe to call after every rebuild.
+function syncAuditLog() {
+  if (!pool) return;
+  for (const [orgAddr, entries] of indexer.auditEntries) {
+    for (const entry of entries) {
+      if (!entry.txId) continue;
+      pool.query(
+        `INSERT INTO audit_log (org_addr, actor_addr, action, target_addr, detail, tx_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (tx_id) DO NOTHING`,
+        [orgAddr, entry.actor, entry.action, entry.target || null, entry.detail || null, entry.txId, entry.createdAt || null]
+      ).catch((e) => console.error('syncAuditLog failed:', e.message));
+    }
+  }
 }
 
 async function loadFromDb() {
@@ -1653,6 +1701,23 @@ async function seedStaging() {
        VALUES ($1, $2, 'image/png', $3, $4, $5, $6::jsonb, $7, $8, $9, NOW())
        ON CONFLICT (eid, sid) DO NOTHING`,
       [eid, sid, buf, buf.length, valid, JSON.stringify(validation), status, up, upName]
+    );
+  }
+
+  // Audit log (staging:private → seed fake rows so the Activity & Audit panel
+  // renders non-empty in PR previews). Covers completed transfer + member removal.
+  const demoAudit = [
+    [DEMO.orgE, DEMO.orgE, 'ownership_offered', DEMO.orgAdmin, null, 'staging-demo-oxfer-e', '2026-06-19T10:00:00.000Z'],
+    [DEMO.orgE, DEMO.orgAdmin, 'ownership_transferred', DEMO.orgE, null, 'staging-demo-oxacc-e', '2026-06-19T10:01:00.000Z'],
+    [DEMO.orgF, DEMO.orgF, 'ownership_offered', DEMO.obs1, null, 'staging-demo-oxfer-f', '2026-06-19T10:02:00.000Z'],
+    [DEMO.orgA, DEMO.orgA, 'member_removed', DEMO.obs2, 'member', 'staging-demo-rem-audit', '2026-06-19T09:00:00.000Z'],
+    [DEMO.orgA, DEMO.orgA, 'visibility_changed', null, 'public', 'staging-demo-vis-audit', '2026-06-19T08:30:00.000Z'],
+  ];
+  for (const [orgAddr, actor, action, target, detail, txId, createdAt] of demoAudit) {
+    await pool.query(
+      `INSERT INTO audit_log (org_addr, actor_addr, action, target_addr, detail, tx_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (tx_id) DO NOTHING`,
+      [orgAddr, actor, action, target || null, detail || null, txId, createdAt]
     );
   }
 
