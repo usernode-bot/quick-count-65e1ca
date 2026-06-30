@@ -32,6 +32,10 @@ const { isValidDisplayName, isValidBio, isSupportedLang } = require('./lib/profi
 
 let Pool = null;
 try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
+let PDFDocument = null;
+try { PDFDocument = require('pdfkit'); } catch { /* pdfkit optional */ }
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch { /* qrcode optional */ }
 
 // ── Configuration ───────────────────────────────────────────────────────────
 const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
@@ -65,6 +69,7 @@ const ORG_FEE = Number(process.env.ORG_FEE) || 100;
 // Secrets now and it is reserved for future app-signed operations.
 const APP_PUBKEY = process.env.APP_PUBKEY || '';
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY || '';
+const C1KWK_HMAC_SECRET = process.env.C1KWK_HMAC_SECRET || APP_SECRET_KEY || 'quickcount-c1kwk-dev';
 // Poll / auto-refresh cadence (ms). Floored at 1000 so a stray small value
 // can't hammer the chain read source or the client. Surfaced to the SPA via
 // /__quickcount/config so the browser auto-refresh uses the same interval.
@@ -86,14 +91,11 @@ const DEMO = {
   orgMod: 'ut1demoorgmod000000000000000000000000000000',
   orgMember: 'ut1demoorgmember00000000000000000000000000',
 };
-const ADMIN_ADDRS = (process.env.ADMIN_ADDRS || '').split(',').map((s) => s.trim()).filter(Boolean);
-if (IS_DEMO) ADMIN_ADDRS.push(DEMO.admin);
-
 const pool = (Pool && process.env.DATABASE_URL)
   ? new Pool({ connectionString: process.env.DATABASE_URL })
   : null;
 
-const indexer = new QuickCountIndexer({ treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS });
+const indexer = new QuickCountIndexer({ treasury: TREASURY_ADDR, orgFee: ORG_FEE });
 const source = makeSource({ localDev: LOCAL_DEV, nodeUrl: NODE_RPC_URL, explorerUrl: EXPLORER_API_URL, chainId: CHAIN_ID });
 
 // In-memory transaction log (source for every rebuild) and dedupe set.
@@ -343,6 +345,17 @@ function buildDemoTxs() {
     // Station 4 (East Java): Prabowo dominant.
     mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 110, 2: 400, 3: 90 }, 622, 14)),
     // Station 5 (North Sumatra): no submission → "4 of 5 stations reported".
+
+    // ── Closed election — exercises the ecl transaction type and Closed badge ──
+    // A simple two-candidate, one-station election that has been closed by its
+    // organizer after results were submitted.
+    mk('demo_closed_el', DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — Closed Election')),
+    mk('demo_closed_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo_closed_el', 1, 'Closed Candidate Alpha')),
+    mk('demo_closed_c2', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo_closed_el', 2, 'Closed Candidate Beta')),
+    mk('demo_closed_s1', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo('demo_closed_el', 1, 'Closed Station 1', 'Central')),
+    mk('demo_closed_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo('demo_closed_el', DEMO.obs1)),
+    mk('demo_closed_r1', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo('demo_closed_el', 1, { 1: 300, 2: 200 }, 510, 10)),
+    mk('demo_closed_ecl', DEMO.orgA, DEMO.orgA, 0, memo.electionCloseMemo('demo_closed_el')),
   ];
   return txs;
 }
@@ -469,7 +482,7 @@ app.get('/__quickcount/config', (_req, res) => {
     // Self-contained local-ingest mode: the client confirms optimistically and
     // suppresses the "on-chain sync not configured" banner / awaiting-sync notice.
     mockMode: MOCK_TX_FLOW,
-    treasury: TREASURY_ADDR, orgFee: ORG_FEE, adminAddrs: ADMIN_ADDRS,
+    treasury: TREASURY_ADDR, orgFee: ORG_FEE,
     methods: require('./lib/aggregate').METHODS, personas,
     // Chain read config for the client confirmation poll. The browser builds
     // <explorerApiBase>/<chainId>/transactions; both are auth-exempt.
@@ -545,7 +558,7 @@ app.get('/__quickcount/state', async (req, res) => {
     const viewer = (req.query.viewer || '').toString() || null;
     const method = require('./lib/aggregate').METHODS.includes(req.query.method) ? req.query.method : 'latest';
     const role = indexer.viewerRole(viewer);
-    const visible = indexer.visibleElections({ viewer, admin: role.isAdmin });
+    const visible = indexer.visibleElections({ viewer });
     const elections = visible.map((el) => indexer.electionSummary(el));
 
     let detail = null;
@@ -574,28 +587,10 @@ app.get('/__quickcount/state', async (req, res) => {
 app.get('/__quickcount/orgs', (req, res) => {
   try {
     const viewer = (req.query.viewer || '').toString() || null;
-    const admin = indexer.isAdmin(viewer);
-    res.json(indexer.orgsForViewer(viewer, { admin }));
+    res.json(indexer.orgsForViewer(viewer));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-// Platform-admin read view — all orgs incl. pending. Scoped to admin wallets.
-app.get('/__quickcount/admin', (req, res) => {
-  const viewer = (req.query.viewer || '').toString() || null;
-  if (!indexer.isAdmin(viewer)) return res.status(403).json({ error: 'admin scope required' });
-  const orgs = indexer.allOrgs();
-  res.json({
-    orgs,
-    stats: {
-      orgs: orgs.length,
-      activeOrgs: orgs.filter((o) => o.active).length,
-      elections: indexer.elections.size,
-      treasury: TREASURY_ADDR,
-      orgFee: ORG_FEE,
-    },
-  });
 });
 
 // ── Off-chain working tallies (per-station inline vote entry) ────────────────
@@ -658,7 +653,7 @@ app.put('/api/elections/:eid/worktally/:sid', async (req, res) => {
     const authorPubkey = (req.user && req.user.usernode_pubkey) || null;
     const authorUsername = (req.user && req.user.username) || null;
     const el = indexer.elections.get(eid);
-    if (el && !indexer.canOperate(el.orgAddr, authorPubkey) && !indexer.isAdmin(authorPubkey)) {
+    if (el && !indexer.canOperate(el.orgAddr, authorPubkey)) {
       return res.status(403).json({ error: 'Only the organizing wallet can save this election\'s working tally' });
     }
 
@@ -719,12 +714,11 @@ app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, 
 
     const uploaderPubkey = (req.user && req.user.usernode_pubkey) || null;
     const uploaderUsername = (req.user && req.user.username) || null;
-    // Org-ownership guard: only the election's organizing wallet (or an admin)
-    // may write its images. When the election isn't indexed yet (an organizer
-    // uploading at create time, before the on-chain `el` tx lands), we can't
-    // resolve the owner — allow it, since there is nothing to overwrite.
+    // Org-operator guard: Owner, Administrator, or Moderator may write images.
+    // When the election isn't indexed yet (uploading before the on-chain `el` tx
+    // lands), allow — nothing to overwrite.
     const el = indexer.elections.get(eid);
-    if (el && uploaderPubkey !== el.orgAddr && !indexer.isAdmin(uploaderPubkey)) {
+    if (el && !indexer.canOperate(el.orgAddr, uploaderPubkey)) {
       return res.status(403).json({ error: 'Only the organizing wallet can upload this election\'s images' });
     }
 
@@ -804,14 +798,12 @@ async function loadBallotProofMeta(eid) {
 }
 
 // May `pubkey` upload/replace a station's ballot proof? The station's assigned
-// observer (broader than the worktally guard — they hold the physical ballot),
-// the org's operators (Owner/Administrator/Moderator), or a platform operator.
-// When the election isn't indexed yet, allow (nothing to overwrite).
+// observer (they hold the physical ballot) or the org's operators
+// (Owner/Administrator/Moderator). When the election isn't indexed yet, allow.
 function canUploadProof(eid, sid, pubkey) {
   if (!pubkey) return false;
   const el = indexer.elections.get(eid);
   if (!el) return true;
-  if (indexer.isAdmin(pubkey)) return true;
   if (indexer.canOperate(el.orgAddr, pubkey)) return true;
   const obsMap = indexer.observers.get(eid);
   const obs = obsMap && obsMap.get(pubkey);
@@ -895,8 +887,7 @@ app.get('/api/elections/:eid/ballot-proof/:sid', async (req, res) => {
     const row = rows[0];
     const el = indexer.elections.get(eid);
     const allowed = !!pubkey && (
-      indexer.isAdmin(pubkey)
-      || (el && indexer.canOperate(el.orgAddr, pubkey))
+      (el && indexer.canOperate(el.orgAddr, pubkey))
       || pubkey === row.uploader_pubkey
     );
     if (!allowed) return res.status(403).json({ error: 'Not authorized to view this ballot proof' });
@@ -909,6 +900,117 @@ app.get('/api/elections/:eid/ballot-proof/:sid', async (req, res) => {
     res.set('Content-Type', row.mime || 'application/octet-stream');
     res.set('Cache-Control', 'private, max-age=30');
     res.send(row.bytes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── C1-KWK ballot PDF (Indonesia quick-count form) ───────────────────────────
+// Authenticated: generate a signed C1-KWK PDF for a specific station. Records
+// the download. Returns the PDF bytes. Only org operators may download.
+app.post('/api/elections/:eid/c1kwk/download', async (req, res) => {
+  try {
+    const { eid } = req.params;
+    const sid = Number((req.body && req.body.sid) || req.query.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return res.status(400).json({ error: 'sid required' });
+    if (!PDFDocument || !QRCode) return res.status(503).json({ error: 'PDF generation not available' });
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+
+    const pubkey = (req.user && req.user.usernode_pubkey) || null;
+    const username = (req.user && req.user.username) || null;
+    const el = indexer.elections.get(eid);
+    if (!el) return res.status(404).json({ error: 'election not found' });
+    if (!indexer.canOperate(el.orgAddr, pubkey)) return res.status(403).json({ error: 'Operator access required' });
+
+    const detail = indexer.electionDetail(eid, 'latest');
+    if (!detail) return res.status(404).json({ error: 'election detail not found' });
+    const station = (detail.stations || []).find((s) => s.sid === sid);
+    if (!station) return res.status(404).json({ error: 'station not found' });
+
+    const ts = Date.now();
+    const payload = JSON.stringify({ eid, sid, ts });
+    const token = crypto.createHmac('sha256', C1KWK_HMAC_SECRET).update(payload).digest('hex');
+    const verifyUrl = `${req.protocol}://${req.get('host')}/api/public/c1kwk/verify?eid=${encodeURIComponent(eid)}&sid=${sid}&ts=${ts}&token=${token}`;
+
+    // Generate QR code as PNG buffer.
+    const qrBuf = await QRCode.toBuffer(verifyUrl, { type: 'png', width: 120, margin: 1 });
+
+    // Build PDF.
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    await new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+      const org = indexer.orgs.get(el.orgAddr);
+      doc.fontSize(16).font('Helvetica-Bold').text('Formulir C1-KWK', { align: 'center' });
+      doc.fontSize(10).font('Helvetica').text(`(Quick Count — ${eid})`, { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(12).font('Helvetica-Bold').text(`Pemilihan: ${detail.election.name}`);
+      doc.fontSize(10).font('Helvetica').text(`Organisasi: ${org ? org.name : el.orgAddr}`);
+      doc.text(`Wilayah: ${detail.election.orgJur || '—'}`);
+      doc.text(`TPS / Station: ${station.name}${station.label ? ' — ' + station.label : ''}`);
+      doc.moveDown();
+      doc.fontSize(12).font('Helvetica-Bold').text('Perolehan Suara / Vote Counts:');
+      doc.moveDown(0.3);
+      for (const cand of detail.candidates) {
+        const votes = station.votes ? (station.votes[String(cand.cid)] || 0) : 0;
+        doc.fontSize(10).font('Helvetica').text(`  ${cand.name}: ${votes}`);
+      }
+      doc.moveDown();
+      doc.fontSize(9).font('Helvetica').fillColor('#666')
+        .text(`Total: ${station.tot != null ? station.tot : '—'}  Invalid: ${station.inv != null ? station.inv : '—'}`);
+      doc.fillColor('#000').moveDown();
+      doc.fontSize(9).font('Helvetica').text('Verifikasi / Verify QR:', { continued: false });
+      doc.image(qrBuf, { width: 100 });
+      doc.fontSize(7).font('Helvetica').fillColor('#444').text(verifyUrl, { link: verifyUrl });
+      doc.fillColor('#000').moveDown();
+      doc.fontSize(8).font('Helvetica').text(`Token: ${token.slice(0, 16)}…`, { align: 'right' });
+      doc.end();
+    });
+    const pdfBuf = Buffer.concat(chunks);
+
+    // Record the download.
+    await pool.query(
+      `INSERT INTO c1kwk_downloads (eid, sid, downloader_pubkey, downloader_username, token, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [eid, sid, pubkey, username, token]
+    );
+
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="c1kwk-${eid}-stn${sid}.pdf"`);
+    res.send(pdfBuf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: verify a C1-KWK QR token. Returns election/station info when the
+// token is valid, 400 when it is not.
+app.get('/api/public/c1kwk/verify', (req, res) => {
+  try {
+    const { eid, sid: sidStr, ts: tsStr, token } = req.query;
+    const sid = Number(sidStr);
+    const ts = Number(tsStr);
+    if (!eid || !Number.isInteger(sid) || !ts || !token) return res.status(400).json({ error: 'missing params' });
+    const expected = crypto.createHmac('sha256', C1KWK_HMAC_SECRET)
+      .update(JSON.stringify({ eid, sid, ts }))
+      .digest('hex');
+    if (expected !== token) return res.status(400).json({ error: 'invalid token' });
+    const el = indexer.elections.get(eid);
+    if (!el) return res.status(404).json({ error: 'election not found' });
+    const org = indexer.orgs.get(el.orgAddr);
+    const stMap = indexer.stations.get(eid) || new Map();
+    const station = stMap.get(sid);
+    res.json({
+      valid: true,
+      eid,
+      sid,
+      ts,
+      election: el.name,
+      station: station ? station.name : ('Station ' + sid),
+      organization: org ? org.name : el.orgAddr,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -940,7 +1042,7 @@ app.get('/api/public/elections/:eid/stream', (req, res) => {
 // Public: list elections with counts (backed by in-memory indexer).
 app.get('/api/public/elections', (_req, res) => {
   try {
-    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    const visible = indexer.visibleElections({ viewer: null });
     res.json({
       elections: visible.map((el) => {
         const s = indexer.electionSummary(el);
@@ -962,7 +1064,7 @@ app.get('/api/public/elections', (_req, res) => {
 app.get('/api/public/elections/:eid', async (req, res) => {
   try {
     const eid = req.params.eid;
-    const visible = indexer.visibleElections({ viewer: null, admin: false });
+    const visible = indexer.visibleElections({ viewer: null });
     if (!visible.some((el) => el.eid === eid)) return res.status(404).json({ error: 'not found' });
     const d = indexer.electionDetail(eid, 'latest');
     if (!d) return res.status(404).json({ error: 'not found' });
@@ -1228,10 +1330,9 @@ app.get('/api/public/profiles/:addr', async (req, res) => {
       }
     }
 
-    const admin = indexer.isAdmin(viewer);
-    const visible = indexer.visibleElections({ viewer, admin });
+    const visible = indexer.visibleElections({ viewer });
     const visibleEids = visible.map((el) => el.eid);
-    const activity = indexer.activityByAddr(addr, visibleEids, { viewer, admin });
+    const activity = indexer.activityByAddr(addr, visibleEids, { viewer });
 
     res.json({
       usernode_pubkey: addr,
@@ -1355,6 +1456,19 @@ async function migrate() {
       PRIMARY KEY (eid, sid)
     )`);
   await pool.query(`COMMENT ON TABLE ballot_proofs IS 'staging:private'`);
+  // C1-KWK ballot PDF download log (Indonesia-specific). PRIVATE — ties a
+  // wallet to a specific election+station download; not visible to the public.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS c1kwk_downloads (
+      id SERIAL PRIMARY KEY,
+      eid TEXT NOT NULL,
+      sid INTEGER NOT NULL,
+      downloader_pubkey TEXT,
+      downloader_username TEXT,
+      token TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  await pool.query(`COMMENT ON TABLE c1kwk_downloads IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
   // v3 — username-as-identity: `profiles` is the authoritative username↔address
@@ -1404,6 +1518,9 @@ async function seedStaging() {
     [PILPRES_EID, 'cand_avatar', 1, RED_PNG],
     [PILPRES_EID, 'cand_avatar', 2, BLUE_PNG],
     [PILPRES_EID, 'cand_avatar', 3, GREEN_PNG],
+    // Closed election avatars.
+    ['demo_closed_el', 'cand_avatar', 1, RED_PNG],
+    ['demo_closed_el', 'cand_avatar', 2, BLUE_PNG],
   ];
   for (const [eid, kind, refId, b64] of demoAtt) {
     const buf = Buffer.from(b64, 'base64');
@@ -1504,6 +1621,18 @@ async function seedStaging() {
       [eid, sid, buf, buf.length, valid, JSON.stringify(validation), status, up, upName]
     );
   }
+
+  // C1-KWK download log seed — staging:private. One obviously-fake row so the
+  // verify endpoint is testable without going through the full PDF flow.
+  const demoToken = crypto.createHmac('sha256', 'quickcount-c1kwk-dev')
+    .update(JSON.stringify({ eid: PILPRES_EID, sid: 1, ts: 1719792000000 }))
+    .digest('hex');
+  await pool.query(
+    `INSERT INTO c1kwk_downloads (eid, sid, downloader_pubkey, downloader_username, token, created_at)
+     VALUES ($1, 1, $2, 'pemilu_watch_id', $3, '2026-06-01T00:00:00.000Z')
+     ON CONFLICT DO NOTHING`,
+    [PILPRES_EID, DEMO.orgID, demoToken]
+  );
 }
 
 async function start() {

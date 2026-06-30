@@ -123,7 +123,7 @@
   // ───────────────────────── App state ─────────────────────────
   const App = {
     cfg: null,
-    role: { addr: null, isAdmin: false, org: null, observerOf: [] },
+    role: { addr: null, org: null, observerOf: [] },
     state: null,        // last /__quickcount/state response
     eid: '',            // selected election
     method: 'latest',
@@ -143,7 +143,6 @@
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
     { id: 'heatmap', label: 'Heatmap', icon: '🗺️' },
-    { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
@@ -175,7 +174,13 @@
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
-      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes', tab_admin: 'Operator',
+      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes',
+      badge_closed: 'Closed',
+      station_upload_c1: 'Upload C1', toast_c1_uploaded: 'C1 scan uploaded ✓',
+      candidates_panel_title: 'Candidates', cand_upload_avatar: 'Upload photo',
+      close_election_title: 'Danger zone', close_election_desc: 'Once closed, no more results can be submitted. This is recorded on-chain and cannot be undone.', close_election_btn: 'Close election', close_election_confirm: 'Close this election? No more results can be submitted after this. This cannot be undone.', loading_closing_election: 'Closing election…', toast_election_closed: 'Election closed ✓',
+      c1kwk_panel_title: 'C1-KWK Ballot PDF', c1kwk_panel_desc: 'Generate a signed C1-KWK ballot count PDF for a station.', c1kwk_download_btn: 'Download PDF',
+      org_edit_heading: 'Edit organization', org_edit_name_ph: 'Organization name', org_edit_jur_ph: 'Jurisdiction (optional)', org_edit_save: 'Save changes', toast_org_updated: 'Organization updated ✓', loading_editing_org: 'Saving…',
       evidence_pdf_download: 'Evidence PDF', evidence_pdf_generating: 'Generating…', evidence_pdf_unavailable: 'PDF tools unavailable — open this page online to enable Evidence PDFs.', evidence_pdf_ready: 'Evidence PDF downloaded ✓', evidence_pdf_ready_prompt: 'Result submitted on-chain. Download your Evidence PDF?',
       verify_heading: 'Verify evidence', verify_intro: 'Drop an Evidence PDF below to check it on your device. Nothing is uploaded — the file is parsed locally, its fingerprint is recomputed, and (when a live chain is configured) it is cross-checked against the blockchain.',
       verify_drop: 'Drop an Evidence PDF here, or click to choose a file', verify_checking: 'Checking…', verify_sample: 'Run a sample', verify_sample_hint: 'Generate and verify an Evidence PDF for the demo election.',
@@ -262,7 +267,7 @@
       readonly_note: 'Nama pengguna dan dompet Anda dikelola oleh Usernode dan hanya bisa dibaca. Hanya nama tampilan yang dapat diubah.',
       no_wallet_note: 'Tautkan dompet Usernode untuk mengatur nama tampilan. Pilihan bahasa Anda tetap disimpan di perangkat ini.',
       not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
-      tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa', tab_admin: 'Admin',
+      tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa',
       method_latest: 'Laporan terbaru', method_first: 'Laporan pertama', method_consensus: 'Konsensus', method_median: 'Median', method_verified: 'Terverifikasi saja',
       dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
       dashboard_working_tally: 'Hitungan kerja', dashboard_working_tally_desc: 'Dimasukkan oleh penyelenggara di ruang kerja — terpisah dari hasil resmi.', dashboard_working_tally_reported: '{reported} dari {total} TPS dimasukkan',
@@ -330,7 +335,7 @@
       readonly_note: '您的用户名和钱包由 Usernode 管理，此处仅供查看。只有显示名称可以修改。',
       no_wallet_note: '关联 Usernode 钱包以设置显示名称。您的语言选择仍会保存在本设备。',
       not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
-      tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议', tab_admin: '管理',
+      tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议',
       method_latest: '最新提交', method_first: '首次提交', method_consensus: '共识', method_median: '中位数', method_verified: '仅已验证',
       dashboard_heading: '仪表盘', dashboard_select_election: '选择一场选举以查看实时结果。', dashboard_export_csv: '导出 CSV', dashboard_export_json: '导出 JSON', dashboard_by_station: '按投票站', dashboard_no_stations: '暂无候选人。', dashboard_last_submission: '最后提交', dashboard_auto_refreshing: '自动刷新', dashboard_no_submissions: '暂无提交', dashboard_stations_reported: '个投票站已上报', dashboard_votes: '票',
       elections_heading: '选举', elections_new: '+ 新建选举', elections_no_elections: '暂无选举。', elections_open_workspace: '打开选举工作区 →',
@@ -397,7 +402,7 @@
       readonly_note: 'Tu nombre de usuario y tu billetera los gestiona Usernode y aquí son de solo lectura. Solo puedes cambiar tu nombre visible.',
       no_wallet_note: 'Vincula una billetera de Usernode para definir un nombre visible. Tu idioma se guarda igualmente en este dispositivo.',
       not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
-      tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas', tab_admin: 'Admin',
+      tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas',
       method_latest: 'Último envío', method_first: 'Primer envío', method_consensus: 'Consenso', method_median: 'Mediana', method_verified: 'Solo verificados',
       dashboard_heading: 'Panel', dashboard_select_election: 'Selecciona una elección para ver los resultados en vivo.', dashboard_export_csv: 'Exportar CSV', dashboard_export_json: 'Exportar JSON', dashboard_by_station: 'Por mesa', dashboard_no_stations: 'Sin candidatos.', dashboard_last_submission: 'Último envío', dashboard_auto_refreshing: 'actualización automática', dashboard_no_submissions: 'Sin envíos aún', dashboard_stations_reported: 'mesas reportadas', dashboard_votes: 'votos',
       elections_heading: 'Elecciones', elections_new: '+ Nueva elección', elections_no_elections: 'Sin elecciones aún.', elections_open_workspace: 'Abrir espacio de trabajo →',
@@ -465,7 +470,7 @@
       readonly_note: 'आपका उपयोगकर्ता नाम और वॉलेट Usernode द्वारा प्रबंधित हैं और यहाँ केवल पढ़े जा सकते हैं। केवल प्रदर्शित नाम बदला जा सकता है।',
       no_wallet_note: 'प्रदर्शित नाम सेट करने के लिए Usernode वॉलेट लिंक करें। आपकी भाषा का चयन फिर भी इस डिवाइस पर सहेजा जाता है।',
       not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
-      tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद', tab_admin: 'प्रशासन',
+      tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद',
       method_latest: 'नवीनतम सबमिशन', method_first: 'पहला सबमिशन', method_consensus: 'सहमति', method_median: 'माध्यिका', method_verified: 'केवल सत्यापित',
       dashboard_heading: 'डैशबोर्ड', dashboard_select_election: 'लाइव परिणाम देखने के लिए चुनाव चुनें।', dashboard_export_csv: 'CSV निर्यात करें', dashboard_export_json: 'JSON निर्यात करें', dashboard_by_station: 'बूथ के अनुसार', dashboard_no_stations: 'कोई उम्मीदवार नहीं।', dashboard_last_submission: 'अंतिम सबमिशन', dashboard_auto_refreshing: 'स्वतः ताज़ा हो रहा है', dashboard_no_submissions: 'अभी तक कोई सबमिशन नहीं', dashboard_stations_reported: 'बूथों ने रिपोर्ट किया', dashboard_votes: 'वोट',
       elections_heading: 'चुनाव', elections_new: '+ नया चुनाव', elections_no_elections: 'अभी तक कोई चुनाव नहीं।', elections_open_workspace: 'चुनाव कार्यक्षेत्र खोलें →',
@@ -532,7 +537,7 @@
       readonly_note: 'اسم المستخدم والمحفظة يُداران بواسطة Usernode ويظهران للقراءة فقط. يمكنك تغيير الاسم المعروض فقط.',
       no_wallet_note: 'اربط محفظة Usernode لتعيين اسم معروض. سيظل اختيار اللغة محفوظًا على هذا الجهاز.',
       not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
-      tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات', tab_admin: 'الإدارة',
+      tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات',
       method_latest: 'آخر تقرير', method_first: 'أول تقرير', method_consensus: 'إجماع', method_median: 'الوسيط', method_verified: 'الموثّق فقط',
       dashboard_heading: 'لوحة التحكم', dashboard_select_election: 'اختر انتخابات لعرض النتائج الحية.', dashboard_export_csv: 'تصدير CSV', dashboard_export_json: 'تصدير JSON', dashboard_by_station: 'حسب مركز الاقتراع', dashboard_no_stations: 'لا يوجد مرشحون.', dashboard_last_submission: 'آخر تقرير', dashboard_auto_refreshing: 'تحديث تلقائي', dashboard_no_submissions: 'لا توجد تقارير بعد', dashboard_stations_reported: 'مراكز أبلغت', dashboard_votes: 'أصوات',
       elections_heading: 'الانتخابات', elections_new: '+ انتخابات جديدة', elections_no_elections: 'لا توجد انتخابات بعد.', elections_open_workspace: 'فتح مساحة العمل →',
@@ -599,7 +604,7 @@
       readonly_note: "Votre nom d'utilisateur et votre portefeuille sont gérés par Usernode et affichés en lecture seule. Seul votre nom d'affichage est modifiable.",
       no_wallet_note: "Liez un portefeuille Usernode pour définir un nom d'affichage. Votre choix de langue reste enregistré sur cet appareil.",
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
-      tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations', tab_admin: 'Admin',
+      tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations',
       method_latest: 'Dernier envoi', method_first: 'Premier envoi', method_consensus: 'Consensus', method_median: 'Médiane', method_verified: 'Vérifiés seulement',
       dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
       elections_heading: 'Élections', elections_new: '+ Nouvelle élection', elections_no_elections: "Pas encore d'élections.", elections_open_workspace: "Ouvrir l'espace de travail →",
@@ -848,12 +853,13 @@
     res: (eid, sid, votes, tot, inv, ev) => { const m = { app: APP, v: V, t: 'res', eid, sid: Number(sid), votes: {} }; for (const k of Object.keys(votes || {})) { const n = pint(votes[k]); if (n != null) m.votes[String(Number(k))] = n; } const t = pint(tot), i = pint(inv); if (t != null) m.tot = t; if (i != null) m.inv = i; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
     disp: (eid, target, reason, ev) => { const m = { app: APP, v: V, t: 'disp', eid, target, reason: clamp(reason, 200) }; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
     dres: (eid, disp, verdict) => ({ app: APP, v: V, t: 'dres', eid, disp, verdict }),
-    adm: (act, org) => ({ app: APP, v: V, t: 'adm', act, org }),
     // Organization management (mirror lib/memo.js).
     omem: (org, addr, role) => ({ app: APP, v: V, t: 'omem', org, addr, role: ['admin', 'mod', 'member'].indexOf(role) !== -1 ? role : 'member' }),
     orem: (org, addr) => ({ app: APP, v: V, t: 'orem', org, addr }),
     ovis: (org, vis) => ({ app: APP, v: V, t: 'ovis', org, vis: vis === 'private' ? 'private' : 'public' }),
     odel: (org) => ({ app: APP, v: V, t: 'odel', org }),
+    oedit: (org, name, jur) => ({ app: APP, v: V, t: 'oedit', org: clamp(org, 100), name: clamp(name, 120), jur: clamp(jur, 80) }),
+    ecl: (eid) => ({ app: APP, v: V, t: 'ecl', eid: String(eid) }),
   };
 
   // ───────────────────────── Helpers ─────────────────────────
@@ -980,8 +986,10 @@
         return m.eid && typeof m.target === 'string' && m.target.length > 0;
       case 'dres':
         return m.eid && m.disp && (m.verdict === 'uphold' || m.verdict === 'reject');
-      case 'adm':
-        return typeof m.act === 'string' && m.act.length > 0;
+      case 'oedit':
+        return typeof m.org === 'string' && m.org.length > 0 && typeof m.name === 'string' && m.name.length > 0;
+      case 'ecl':
+        return typeof m.eid === 'string' && m.eid.length > 0;
       case 'omem':
         return typeof m.org === 'string' && m.org.length > 0 && typeof m.addr === 'string' && m.addr.length > 0
           && (m.role === 'admin' || m.role === 'mod' || m.role === 'member');
@@ -1551,7 +1559,6 @@
   function renderChrome() {
     const route = currentRoute();
     const tabs = TABS.filter((tab) => {
-      if (tab.adminOnly && !App.role.isAdmin) return false;
       if (tab.walletOnly && !App.wallet.connected) return false;
       return true;
     });
@@ -1610,7 +1617,6 @@
       case 'verify': return renderEvidence(v);
       case 'disputes': return renderDisputes(v);
       case 'heatmap': return renderHeatmap(v);
-      case 'admin': return renderAdmin(v);
       case 'profile': return renderProfile(v);
       case 'settings': return renderSettings(v);
       case 'user': return renderUserProfile(v, route.arg);
@@ -1661,12 +1667,11 @@
   const inlineEntry = {};
   function inlineKey(sid) { return App.eid + ':' + sid; }
   // Whether the current viewer may enter/edit the working tally for an election
-  // owned by `orgAddr`: the org's owner, administrator, or moderator, or a
-  // platform admin. Mirrors the server-side canOperate/isAdmin guard.
+  // owned by `orgAddr`: the org's owner, administrator, or moderator.
+  // Mirrors the server-side canOperate guard.
   let workEditable = false;
   function canEditWorkTally(orgAddr) {
     if (!orgAddr || !App.role) return false;
-    if (App.role.isAdmin) return true;
     if (App.role.org && App.role.org.addr === orgAddr) return true; // owner
     return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod'));
   }
@@ -1992,7 +1997,7 @@
           <h3 class="font-semibold">${esc(e.name)}</h3>
           ${e.orgActive ? '' : `<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('badge_pending')}</span>`}
         </div>
-        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(e.orgName || '—')}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1"><a href="#/orgs" onclick="event.stopPropagation();App.orgView='${e.orgAddr}';location.hash='#/orgs';" class="hover:underline">${esc(e.orgName || '—')}</a></p>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
       </a>`).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm">${canCreate ? t('elections_active_no_elections') : t('elections_no_elections')}</p>`;
@@ -2045,15 +2050,11 @@
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
-    // Surface the viewer's authority over this election's org in the header:
-    // Owner badge for the creator, the org role for Administrators/Moderators,
-    // or a Platform-operator badge when acting via the break-glass override.
-    const myOrgRole = isOrgOwner ? 'owner'
-      : (((App.role.orgsMember || []).find((o) => o.addr === d.election.orgAddr) || {}).role
-        || (App.role.isAdmin ? 'operator' : null));
-    const roleBadgeHtml = myOrgRole === 'operator'
-      ? `<span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${esc(t('admin_heading'))}</span>`
-      : (myOrgRole ? orgRoleBadge(myOrgRole) : '');
+    const memberInOrg = (App.role.orgsMember || []).find((o) => o.addr === d.election.orgAddr);
+    const isOrgOperator = isOrgOwner || (memberInOrg && ['owner', 'admin', 'mod'].includes(memberInOrg.role));
+    const myOrgRole = isOrgOwner ? 'owner' : (memberInOrg ? memberInOrg.role : null);
+    const roleBadgeHtml = myOrgRole ? orgRoleBadge(myOrgRole) : '';
+    const closedBadge = d.election.closed ? `<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('badge_closed')}</span>` : '';
     // Hydrate the inline working tally from the persisted detail.workTally and
     // decide whether this viewer may edit it (owner/admin/mod or platform admin).
     workEditable = canEditWorkTally(d.election.orgAddr);
@@ -2064,8 +2065,8 @@
     v.innerHTML = `
       <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
       <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
-        <div><h2 class="text-xl font-semibold flex items-center gap-2 flex-wrap">${esc(d.election.name)}${roleBadgeHtml}</h2>
-        <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
+        <div><h2 class="text-xl font-semibold flex items-center gap-2 flex-wrap">${esc(d.election.name)}${roleBadgeHtml}${closedBadge}</h2>
+        <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} <a href="#/orgs" onclick="App.orgView='${esc(d.election.orgAddr)}';return false;" class="hover:underline text-indigo-400">${esc(d.election.orgName || '—')}</a>${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
         ${methodSel}
       </div>
       ${marginBanner(d)}
@@ -2080,10 +2081,17 @@
     // Ballot-proof upload — observers attach their own station's proof; operators
     // (Owner/Administrator/Moderator) can attach for any station via the picker.
     if (myObs) ws.appendChild(ballotProofPanel(d, myObs.sid != null ? myObs.sid : null));
-    else if (isOrgOwner && (d.stations || []).length) ws.appendChild(ballotProofPanel(d, null));
-    if (myObs || isOrgOwner) ws.appendChild(disputeFilePanel(d));
-    if (isOrgOwner) { ws.appendChild(stationsPanel(d)); ws.appendChild(observersPanel(d)); ws.appendChild(resolvePanel(d)); }
-    if (!myObs && !isOrgOwner) {
+    else if (isOrgOperator && (d.stations || []).length) ws.appendChild(ballotProofPanel(d, null));
+    if (myObs || isOrgOperator) ws.appendChild(disputeFilePanel(d));
+    if (isOrgOperator) {
+      ws.appendChild(candidatesPanel(d));
+      ws.appendChild(stationsPanel(d));
+      ws.appendChild(observersPanel(d));
+      ws.appendChild(resolvePanel(d));
+      if (d.election.closed) ws.appendChild(c1kwkPanel(d));
+    }
+    if (isOrgOwner && !d.election.closed) ws.appendChild(closeElectionPanel(d));
+    if (!myObs && !isOrgOperator) {
       const p = document.createElement('p'); p.className = 'text-sm text-slate-600 dark:text-slate-500';
       p.textContent = t('election_detail_connect_note');
       ws.appendChild(p);
@@ -2308,7 +2316,7 @@
         <div id="st-csv-preview" class="text-xs text-slate-500 dark:text-slate-400 mb-2"></div>
         <button id="st-csv-import" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_station_import_btn')}</button>
       </details>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mt-3">${t('election_station_count').replace('{n}', d.stations.length)} ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
+      <div class="mt-3 space-y-2">${d.stations.map((s) => `<div class="flex items-center justify-between gap-2 text-xs py-1.5 border-b border-slate-200 dark:border-slate-800"><span class="text-slate-700 dark:text-slate-300">${esc(s.name)}${s.label ? ' <span class="text-slate-500">· ' + esc(s.label) + '</span>' : ''}</span><button class="c1-upload-btn px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 font-medium" data-sid="${s.sid}" data-eid="${esc(d.election.eid)}">${t('station_upload_c1')}</button></div>`).join('') || '<p class="text-xs text-slate-500">' + t('election_station_count').replace('{n}', 0) + '</p>'}</div>`;
     const p = panel(t('election_stations_title'), inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
@@ -2335,6 +2343,10 @@
           success: () => { toast(t('toast_stations_imported').replace('{n}', rows.length)); refreshSoon(); },
         });
       };
+      p.querySelectorAll('.c1-upload-btn').forEach((btn) => {
+        btn.onclick = () => pickAndUploadAttachment(d.election.eid, 'station_c1', Number(btn.dataset.sid),
+          () => { toast(t('toast_c1_uploaded')); });
+      });
     });
     return p;
   }
@@ -2526,6 +2538,16 @@
       <div class="flex items-center gap-2 flex-wrap mb-1"><h2 class="text-lg font-semibold">${esc(org.name)}</h2>${orgRoleBadge(vr)}${orgVisBadge(org.visibility || 'public')}</div>
       <p class="text-xs text-slate-600 dark:text-slate-500 mb-5 font-mono">${esc(org.addr)}</p>`;
 
+    // Edit org (owner only).
+    if (canDelete) {
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <h3 class="font-semibold mb-2">${t('org_edit_heading')}</h3>
+        <input id="org-edit-name" placeholder="${t('org_edit_name_ph')}" value="${esc(org.name)}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">
+        <input id="org-edit-jur" placeholder="${t('org_edit_jur_ph')}" value="${esc(org.jur || '')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">
+        <button id="org-edit-save" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">${t('org_edit_save')}</button>
+      </div>`;
+    }
+
     // Members roster.
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('org_members_heading')} (${org.members.length})</h3>
       <div class="space-y-2 mb-4">`;
@@ -2577,6 +2599,14 @@
     v.innerHTML = html;
 
     document.getElementById('org-back').onclick = () => { App.orgView = null; render(); };
+    const editSaveBtn = document.getElementById('org-edit-save');
+    if (editSaveBtn) editSaveBtn.onclick = () => {
+      const name = (document.getElementById('org-edit-name').value || '').trim();
+      const jur = (document.getElementById('org-edit-jur').value || '').trim();
+      if (!name) return toast(t('toast_enter_org_name'), 'warn');
+      runTx({ to: org.addr, amount: 0, memo: QC.oedit(org.addr, name, jur) },
+        { loading: t('loading_editing_org'), success: () => { toast(t('toast_org_updated')); refreshSoon(); } });
+    };
     const addBtn = document.getElementById('org-mem-add');
     if (addBtn) addBtn.onclick = () => addOrgMember(org.addr);
     v.querySelectorAll('.org-role-sel').forEach((sel) => {
@@ -2842,6 +2872,26 @@
     // Auto-verify when arriving via a deep link from an Evidence PDF QR code.
     if (deepParams.fp && deepParams.tx) run(window.QCEvidenceVerify.verifyFromQuery(deepParams, App.cfg));
 
+    // Handle ?c1kwk= deep link from C1-KWK ballot PDF QR code.
+    if (deepParams.c1kwk) {
+      out.innerHTML = `<p class="text-sm text-slate-500">${t('verify_checking')}</p>`;
+      fetch('/api/public/c1kwk/verify?token=' + encodeURIComponent(deepParams.c1kwk))
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.error) {
+            out.innerHTML = `<div class="p-4 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-300 dark:border-rose-500/40"><p class="font-semibold text-rose-700 dark:text-rose-300">${t('verify_verdict_fail')}</p><p class="text-sm mt-1">${esc(data.error)}</p></div>`;
+          } else {
+            out.innerHTML = `<div class="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/40">
+              <p class="font-semibold text-emerald-700 dark:text-emerald-300">✓ C1-KWK ${t('verify_verdict_verified')}</p>
+              <p class="text-sm mt-2">${t('election_detail_back')} <strong>${esc(data.election)}</strong></p>
+              <p class="text-sm">Station: <strong>${esc(data.station)}</strong></p>
+              <p class="text-xs text-slate-600 dark:text-slate-500 mt-2">${t('verify_fingerprint_label')}: <span class="font-mono break-all">${esc(data.token)}</span></p>
+            </div>`;
+          }
+        })
+        .catch((e) => { out.innerHTML = `<p class="text-sm text-rose-500">${esc(e.message)}</p>`; });
+    }
+
     const sample = document.getElementById('vr-sample');
     if (sample) sample.onclick = () => run(runSampleVerify());
   }
@@ -2957,34 +3007,99 @@
       <p class="text-xs text-slate-500 mt-3">${summary} · ${t('dashboard_auto_refreshing')}</p>`;
   }
 
-  // ───────────────────────── Admin ─────────────────────────
-  async function renderAdmin(v) {
-    if (!App.role.isAdmin) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('admin_scope_required')}</p>`; return; }
-    let data;
-    try { data = await api('/__quickcount/admin?viewer=' + encodeURIComponent(App.wallet.address)); }
-    catch (e) { v.innerHTML = '<p class="text-rose-400 text-sm">' + esc(e.message) + '</p>'; return; }
-    const s = data.stats;
-    v.innerHTML = `<h2 class="text-lg font-semibold mb-1">${t('admin_heading')}</h2>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">${t('admin_intro')}</p>
-      ${chainSyncBanner()}
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        ${[[t('admin_stat_orgs'), s.orgs], [t('admin_stat_active_orgs'), s.activeOrgs], [t('admin_stat_elections'), s.elections], [t('admin_stat_org_fee'), s.orgFee]].map(([k, val]) =>
-          `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-slate-600 dark:text-slate-500">${k}</div></div>`).join('')}
-      </div>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
-      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('admin_all_orgs')}</h3>
-      <div class="space-y-2">${data.orgs.map((o) => `
-        <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between gap-2">
-          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
-          <div class="text-xs text-slate-600 dark:text-slate-500 font-mono">${esc(o.addr)} · ${t('admin_paid').replace('{amount}', o.feeAmount)}</div></div>
-          ${o.active ? `<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('orgs_active_badge')}</span>`
-            : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('admin_waive_fee')}</button>`}
-        </div>`).join('')}</div>`;
-    v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
-      const org = b.dataset.org;
-      runTx({ to: org, amount: 0, memo: QC.adm('waive', org) },
-        { loading: t('loading_waiving'), success: () => { txSuccessToast('toast_fee_waived'); refreshSoon(); } });
+  // ───────────────────────── Election management panels ─────────────────────────
+  function candidatesPanel(d) {
+    const existing = (d.candidates || []).map((c) => `<div class="flex items-center justify-between text-sm py-1 border-b border-slate-200 dark:border-slate-800"><span>${esc(c.name)}</span><button class="cand-avatar-btn text-xs px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600" data-cid="${c.cid}">${t('cand_upload_avatar')}</button></div>`).join('');
+    const inner = `
+      ${existing ? '<div class="mb-3">' + existing + '</div>' : ''}
+      <div class="flex gap-2">
+        <input id="cand-name" placeholder="${t('elections_form_candidate_ph')}" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">
+        <button id="cand-add" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('elections_form_add_candidate')}</button>
+      </div>`;
+    const p = panel(t('candidates_panel_title'), inner);
+    setTimeout(() => {
+      const nextCid = () => (d.candidates.reduce((m, c) => Math.max(m, c.cid), 0) + 1);
+      p.querySelector('#cand-add').onclick = () => {
+        const name = p.querySelector('#cand-name').value.trim(); if (!name) return;
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.cand(d.election.eid, nextCid(), name) },
+          { loading: t('loading_adding_candidate').replace('{i}', '').replace('{n}', ''), success: () => { toast(t('toast_election_published')); refreshSoon(); } });
+      };
+      p.querySelectorAll('.cand-avatar-btn').forEach((btn) => {
+        btn.onclick = () => pickAndUploadAttachment(d.election.eid, 'cand_avatar', Number(btn.dataset.cid),
+          () => toast(t('toast_c1_uploaded')));
+      });
     });
+    return p;
+  }
+
+  function closeElectionPanel(d) {
+    const inner = `<p class="text-sm text-slate-600 dark:text-slate-500 mb-3">${t('close_election_desc')}</p>
+      <button id="close-el-btn" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">${t('close_election_btn')}</button>`;
+    const p = panel(t('close_election_title'), inner);
+    p.classList.add('border-rose-300', 'dark:border-rose-500/40');
+    setTimeout(() => {
+      p.querySelector('#close-el-btn').onclick = () => {
+        if (!window.confirm(t('close_election_confirm'))) return;
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.ecl(d.election.eid) },
+          { loading: t('loading_closing_election'), success: () => { toast(t('toast_election_closed')); refreshSoon(); } });
+      };
+    });
+    return p;
+  }
+
+  function c1kwkPanel(d) {
+    const stations = d.stations || [];
+    const opts = stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('');
+    const inner = `<p class="text-sm text-slate-600 dark:text-slate-500 mb-3">${t('c1kwk_panel_desc')}</p>
+      <select id="c1kwk-stn" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">${opts}</select>
+      <button id="c1kwk-dl" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">${t('c1kwk_download_btn')}</button>
+      <span id="c1kwk-status" class="ml-2 text-xs text-slate-500"></span>`;
+    const p = panel(t('c1kwk_panel_title'), inner);
+    setTimeout(() => {
+      p.querySelector('#c1kwk-dl').onclick = async () => {
+        const sid = Number(p.querySelector('#c1kwk-stn').value);
+        const st = p.querySelector('#c1kwk-status');
+        st.textContent = t('loading_submitting');
+        try {
+          const token = App.wallet.address ? await api('/api/me').then(() => {}).catch(() => {}) : null;
+          const r = await fetch('/api/elections/' + encodeURIComponent(d.election.eid) + '/c1kwk/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(App._token ? { 'X-Usernode-Token': App._token } : {}) },
+            body: JSON.stringify({ sid }),
+          });
+          if (!r.ok) { const e = await r.json().catch(() => ({})); st.textContent = e.error || ('HTTP ' + r.status); return; }
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = 'c1kwk-' + d.election.eid + '-stn' + sid + '.pdf';
+          document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+          st.textContent = '✓';
+        } catch (e) { st.textContent = e.message; }
+      };
+    });
+    return p;
+  }
+
+  // Upload an image attachment (cand_avatar or station_c1) via a hidden file input.
+  function pickAndUploadAttachment(eid, kind, refId, onSuccess) {
+    const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async () => {
+      const f = input.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = async () => {
+        const b64 = r.result.split(',')[1];
+        try {
+          const resp = await fetch('/api/elections/' + encodeURIComponent(eid) + '/attachments/' + kind + '/' + refId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mime: f.type, data_base64: b64 }),
+          });
+          if (!resp.ok) { const e = await resp.json().catch(() => ({})); toast(e.error || 'Upload failed', 'error'); return; }
+          if (onSuccess) onSuccess();
+        } catch (e) { toast(e.message, 'error'); }
+      };
+      r.readAsDataURL(f);
+    };
+    input.click();
   }
 
   // ───────────────────────── Profile & Settings ─────────────────────────
@@ -3251,7 +3366,7 @@
     // current tab; for tabs whose render() fetches its own data (orgs, profile,
     // admin, user) the re-render re-runs those fetches, so a still-syncing
     // registration appears without a manual reload.
-    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
+    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'user'];
     // Cadence comes from server config (TIMER_DURATION_MS), floored at 1000ms so
     // a stray small value can't spin the refresh loop; falls back to 6000ms.
     const cadence = Math.max(1000, Number(App.cfg && App.cfg.timerDurationMs) || 6000);
