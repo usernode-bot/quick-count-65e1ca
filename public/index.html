@@ -127,6 +127,7 @@
     state: null,        // last /__quickcount/state response
     eid: '',            // selected election
     method: 'latest',
+    chartType: 'bar_h', // bar_h | bar_v | dot — how vote-tally bars render
     wallet: { connected: false, address: null },
     user: { username: null, address: null }, // active Usernode identity (username = UI/identity key)
     refreshTimer: null,
@@ -146,6 +147,7 @@
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
+  const CHART_TYPES = ['bar_h', 'bar_v', 'dot'];
 
   // ───────────────────────── i18n (full-app) ─────────────────────────
   // Mirrors lib/profile.js (LANGS + display-name regex). Translations are
@@ -171,6 +173,8 @@
       label_joined: 'Joined', joined_unknown: 'Unknown',
       label_language: 'Language',
       desc_language: 'Choose the language for your profile and settings. Your choice is saved on this device and to your profile.',
+      label_chart_type: 'Chart style', desc_chart_type: 'How vote totals are displayed in the election workspace.',
+      chart_type_bar_h: 'Horizontal bars', chart_type_bar_v: 'Vertical bars', chart_type_dot: 'Dot chart',
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
@@ -262,6 +266,8 @@
       label_joined: 'Bergabung', joined_unknown: 'Tidak diketahui',
       label_language: 'Bahasa',
       desc_language: 'Pilih bahasa untuk profil dan pengaturan Anda. Pilihan Anda disimpan di perangkat ini dan ke profil Anda.',
+      label_chart_type: 'Gaya grafik', desc_chart_type: 'Cara total suara ditampilkan di ruang kerja pemilihan.',
+      chart_type_bar_h: 'Batang horizontal', chart_type_bar_v: 'Batang vertikal', chart_type_dot: 'Grafik titik',
       readonly_note: 'Nama pengguna dan dompet Anda dikelola oleh Usernode dan hanya bisa dibaca. Hanya nama tampilan yang dapat diubah.',
       no_wallet_note: 'Tautkan dompet Usernode untuk mengatur nama tampilan. Pilihan bahasa Anda tetap disimpan di perangkat ini.',
       not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
@@ -333,6 +339,8 @@
       label_joined: '加入时间', joined_unknown: '未知',
       label_language: '语言',
       desc_language: '选择您的资料和设置所用的语言。您的选择会保存在本设备并同步到您的资料。',
+      label_chart_type: '图表样式', desc_chart_type: '选举工作区中票数的显示方式。',
+      chart_type_bar_h: '横向条形图', chart_type_bar_v: '纵向条形图', chart_type_dot: '点状图',
       readonly_note: '您的用户名和钱包由 Usernode 管理，此处仅供查看。只有显示名称可以修改。',
       no_wallet_note: '关联 Usernode 钱包以设置显示名称。您的语言选择仍会保存在本设备。',
       not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
@@ -403,6 +411,8 @@
       label_joined: 'Te uniste', joined_unknown: 'Desconocido',
       label_language: 'Idioma',
       desc_language: 'Elige el idioma de tu perfil y tu configuración. Tu elección se guarda en este dispositivo y en tu perfil.',
+      label_chart_type: 'Estilo de gráfico', desc_chart_type: 'Cómo se muestran los totales de votos en el espacio de trabajo de la elección.',
+      chart_type_bar_h: 'Barras horizontales', chart_type_bar_v: 'Barras verticales', chart_type_dot: 'Gráfico de puntos',
       readonly_note: 'Tu nombre de usuario y tu billetera los gestiona Usernode y aquí son de solo lectura. Solo puedes cambiar tu nombre visible.',
       no_wallet_note: 'Vincula una billetera de Usernode para definir un nombre visible. Tu idioma se guarda igualmente en este dispositivo.',
       not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
@@ -474,6 +484,8 @@
       label_joined: 'शामिल हुए', joined_unknown: 'अज्ञात',
       label_language: 'भाषा',
       desc_language: 'अपनी प्रोफ़ाइल और सेटिंग्स के लिए भाषा चुनें। आपका चयन इस डिवाइस और आपकी प्रोफ़ाइल में सहेजा जाता है।',
+      label_chart_type: 'चार्ट शैली', desc_chart_type: 'चुनाव कार्यक्षेत्र में मतों की कुल संख्या कैसे दिखाई जाती है।',
+      chart_type_bar_h: 'क्षैतिज बार', chart_type_bar_v: 'लंबवत बार', chart_type_dot: 'डॉट चार्ट',
       readonly_note: 'आपका उपयोगकर्ता नाम और वॉलेट Usernode द्वारा प्रबंधित हैं और यहाँ केवल पढ़े जा सकते हैं। केवल प्रदर्शित नाम बदला जा सकता है।',
       no_wallet_note: 'प्रदर्शित नाम सेट करने के लिए Usernode वॉलेट लिंक करें। आपकी भाषा का चयन फिर भी इस डिवाइस पर सहेजा जाता है।',
       not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
@@ -544,6 +556,8 @@
       label_joined: 'انضم في', joined_unknown: 'غير معروف',
       label_language: 'اللغة',
       desc_language: 'اختر لغة ملفك الشخصي وإعداداتك. يُحفظ اختيارك على هذا الجهاز وفي ملفك الشخصي.',
+      label_chart_type: 'نمط الرسم البياني', desc_chart_type: 'كيفية عرض إجماليات الأصوات في مساحة عمل الانتخابات.',
+      chart_type_bar_h: 'أعمدة أفقية', chart_type_bar_v: 'أعمدة عمودية', chart_type_dot: 'رسم نقطي',
       readonly_note: 'اسم المستخدم والمحفظة يُداران بواسطة Usernode ويظهران للقراءة فقط. يمكنك تغيير الاسم المعروض فقط.',
       no_wallet_note: 'اربط محفظة Usernode لتعيين اسم معروض. سيظل اختيار اللغة محفوظًا على هذا الجهاز.',
       not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
@@ -614,6 +628,8 @@
       label_joined: 'Inscrit le', joined_unknown: 'Inconnu',
       label_language: 'Langue',
       desc_language: 'Choisissez la langue de votre profil et de vos paramètres. Votre choix est enregistré sur cet appareil et dans votre profil.',
+      label_chart_type: 'Style de graphique', desc_chart_type: "Comment les totaux de voix s'affichent dans l'espace de travail de l'élection.",
+      chart_type_bar_h: 'Barres horizontales', chart_type_bar_v: 'Barres verticales', chart_type_dot: 'Graphique à points',
       readonly_note: "Votre nom d'utilisateur et votre portefeuille sont gérés par Usernode et affichés en lecture seule. Seul votre nom d'affichage est modifiable.",
       no_wallet_note: "Liez un portefeuille Usernode pour définir un nom d'affichage. Votre choix de langue reste enregistré sur cet appareil.",
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
@@ -820,13 +836,14 @@
     if (prefs && typeof prefs === 'object') {
       if (prefs.theme === 'dark' || prefs.theme === 'light') applyTheme(prefs.theme === 'dark');
       if (App.cfg && App.cfg.methods && App.cfg.methods.indexOf(prefs.method) !== -1) App.method = prefs.method;
+      if (CHART_TYPES.indexOf(prefs.chartType) !== -1) App.chartType = prefs.chartType;
     }
   }
   let _prefsSaveTimer = null;
   function savePrefs() {
     if (!App.wallet.connected) return; // only signed-in users have a profile to write to
     const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    const prefs = { theme, method: App.method };
+    const prefs = { theme, method: App.method, chartType: App.chartType };
     if (App.me && App.me.profile) App.me.profile.prefs = prefs;
     clearTimeout(_prefsSaveTimer);
     _prefsSaveTimer = setTimeout(() => { putProfile({ prefs }).catch(() => {}); }, 400);
@@ -1660,18 +1677,44 @@
   }
 
   // ───────────────────────── Dashboard ─────────────────────────
+  // Renders a list of { name, votesText, pct, colorClass } rows as one of the
+  // three user-selectable chart styles (App.chartType): horizontal bars
+  // (default), vertical bars, or a dot chart. Used by every static (i.e.
+  // non-live-patched) tally — the live inline tally has its own DOM-patching
+  // version below, inlineBarRowHtml(), for the same three styles.
+  function renderBars(rows, chartType) {
+    if (chartType === 'bar_v') {
+      const cols = rows.map(({ name, votesText, pct, colorClass }) => `
+        <div class="flex flex-col items-center justify-end h-full flex-1 min-w-0">
+          <span class="text-xs font-mono text-slate-700 dark:text-slate-300 mb-1">${pct}%</span>
+          <div class="w-full max-w-10 rounded-t bg-slate-200 dark:bg-slate-800 overflow-hidden flex flex-col justify-end" style="height:100%">
+            <div class="${colorClass}" style="height:${pct}%"></div>
+          </div>
+          <span class="text-xs text-slate-600 dark:text-slate-400 mt-1 truncate max-w-[4rem]" title="${esc(name)}">${esc(name)}</span>
+          <span class="text-[10px] font-mono text-slate-500 dark:text-slate-500">${votesText}</span>
+        </div>`).join('');
+      return `<div class="h-28 flex items-end gap-2 mb-3">${cols}</div>`;
+    }
+    if (chartType === 'dot') {
+      return rows.map(({ name, votesText, pct, colorClass }) => `<div class="mb-3">
+        <div class="flex justify-between text-sm mb-1"><span>${esc(name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300">${votesText} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+        <div class="h-1 rounded-full bg-slate-200 dark:bg-slate-700 relative"><div class="${colorClass} w-3 h-3 rounded-full absolute -translate-y-1/2 -translate-x-1/2" style="top:50%;left:${pct}%"></div></div>
+      </div>`).join('');
+    }
+    // bar_h (default)
+    return rows.map(({ name, votesText, pct, colorClass }) => `<div class="mb-3">
+      <div class="flex justify-between text-sm mb-1"><span>${esc(name)}</span>
+      <span class="font-mono text-slate-700 dark:text-slate-300">${votesText} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+      <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${colorClass}" style="width:${pct}%"></div></div>
+    </div>`).join('');
+  }
   function tallyBars(d) {
     const total = Object.values(d.tally).reduce((s, n) => s + n, 0) || 1;
-    return d.candidates.map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
+    const rows = d.candidates.map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
       .sort((a, b) => b.votes - a.votes)
-      .map(({ c, i, votes }) => {
-        const pct = Math.round((votes / total) * 100);
-        return `<div class="mb-3">
-          <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-          <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
-          <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
-        </div>`;
-      }).join('');
+      .map(({ c, i, votes }) => ({ name: c.name, votesText: votes.toLocaleString(), pct: Math.round((votes / total) * 100), colorClass: COLORS[i % COLORS.length] }));
+    return renderBars(rows, App.chartType);
   }
   // ── Inline TPS vote-entry (off-chain working tally) ──
   // Working tally entered straight on a station row in the election workspace.
@@ -1799,6 +1842,35 @@
   // already exist we mutate width/label in place so the CSS width transition
   // runs from the previous value; we only rebuild markup on first paint or an
   // election switch (keyed by candidate count, which is fixed at 3 here).
+  // Per-candidate live-tally row markup for the three chart styles, with
+  // data-inl-bar-fill/-total/-pct hooks that rerenderInlineSummary() patches
+  // in place on every keystroke (avoids rebuilding the whole DOM on each tick,
+  // which would interrupt the fill's CSS transition).
+  function inlineBarRowHtml(c, i, chartType) {
+    const color = COLORS[i % COLORS.length];
+    if (chartType === 'bar_v') {
+      return `<div class="flex flex-col items-center justify-end h-full flex-1 min-w-0" data-inl-bar="${c.key}">
+        <span class="text-xs font-mono text-slate-700 dark:text-slate-300 mb-1"><span data-inl-bar-pct>0</span>%</span>
+        <div class="w-full max-w-10 rounded-t bg-slate-200 dark:bg-slate-800 overflow-hidden flex flex-col justify-end" style="height:100%">
+          <div data-inl-bar-fill class="${color} transition-all duration-500 ease-out" style="height:0%"></div>
+        </div>
+        <span class="text-xs text-slate-600 dark:text-slate-400 mt-1 truncate max-w-[4rem]" title="${esc(c.name)}">${esc(c.name)}</span>
+        <span class="text-[10px] font-mono text-slate-500 dark:text-slate-500"><span data-inl-bar-total>0</span></span>
+      </div>`;
+    }
+    if (chartType === 'dot') {
+      return `<div class="mb-3" data-inl-bar="${c.key}">
+        <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
+        <div class="h-1 rounded-full bg-slate-200 dark:bg-slate-700 relative"><div data-inl-bar-fill class="${color} w-3 h-3 rounded-full absolute -translate-y-1/2 -translate-x-1/2 transition-all duration-500 ease-out" style="top:50%;left:0%"></div></div>
+      </div>`;
+    }
+    return `<div class="mb-3" data-inl-bar="${c.key}">
+      <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+      <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
+      <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${color} transition-all duration-500 ease-out" style="width:0%"></div></div>
+    </div>`;
+  }
   function rerenderInlineSummary() {
     const d = App.state && App.state.detail;
     const QC = window.QuickCountInline;
@@ -1824,13 +1896,11 @@
     }
 
     if (bars) {
-      const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length;
+      const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length || bars.dataset.chartType !== App.chartType;
       if (needBuild) {
-        bars.innerHTML = cands.map((c, i) => `<div class="mb-3" data-inl-bar="${c.key}">
-          <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-          <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
-          <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${COLORS[i % COLORS.length]} transition-all duration-500 ease-out" style="width:0%"></div></div>
-        </div>`).join('');
+        const innerHtml = cands.map((c, i) => inlineBarRowHtml(c, i, App.chartType)).join('');
+        bars.innerHTML = (App.chartType === 'bar_v') ? `<div class="h-28 flex items-end gap-2">${innerHtml}</div>` : innerHtml;
+        bars.dataset.chartType = App.chartType;
       }
       cands.forEach((c) => {
         const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
@@ -1838,7 +1908,10 @@
         const pct = shares[c.key] || 0;
         block.querySelector('[data-inl-bar-total]').textContent = (totals[c.key] || 0).toLocaleString();
         block.querySelector('[data-inl-bar-pct]').textContent = pct;
-        block.querySelector('[data-inl-bar-fill]').style.width = pct + '%';
+        const fill = block.querySelector('[data-inl-bar-fill]');
+        if (App.chartType === 'bar_v') fill.style.height = pct + '%';
+        else if (App.chartType === 'dot') fill.style.left = pct + '%';
+        else fill.style.width = pct + '%';
       });
     }
   }
@@ -1935,13 +2008,10 @@
     const shares = QC.voteShares(totals);
     const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
     if (grand <= 0) return '';
-    const bars = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
+    const barRows = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
       .sort((a, b) => b.votes - a.votes)
-      .map(({ c, i, votes, pct }) => `<div class="mb-3">
-        <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-        <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
-        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
-      </div>`).join('');
+      .map(({ c, i, votes, pct }) => ({ name: c.name, votesText: votes.toLocaleString(), pct, colorClass: COLORS[i % COLORS.length] }));
+    const bars = renderBars(barRows, App.chartType);
     const reported = t('dashboard_working_tally_reported')
       .replace('{reported}', saved.length)
       .replace('{total}', (d.stations || []).length || saved.length);
@@ -3473,17 +3543,28 @@
       </div>`;
   }
 
+  function chartTypeSelect(id) {
+    const opts = CHART_TYPES.map((c) => `<option value="${c}" ${c === App.chartType ? 'selected' : ''}>${esc(t('chart_type_' + c))}</option>`).join('');
+    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">${opts}</select>`;
+  }
   function renderSettings(v) {
     v.innerHTML = `
-      <div class="max-w-xl">
-        <h2 class="text-xl font-bold mb-5">${esc(t('title_settings'))}</h2>
+      <div class="max-w-xl space-y-4">
+        <h2 class="text-xl font-bold mb-1">${esc(t('title_settings'))}</h2>
         <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
           <label class="block text-sm font-medium mb-1">${esc(t('label_language'))}</label>
           <p class="text-xs text-slate-500 mb-3">${esc(t('desc_language'))}</p>
           ${langSelect('settings-lang')}
         </div>
+        <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+          <label class="block text-sm font-medium mb-1">${esc(t('label_chart_type'))}</label>
+          <p class="text-xs text-slate-500 mb-3">${esc(t('desc_chart_type'))}</p>
+          ${chartTypeSelect('settings-chart-type')}
+        </div>
       </div>`;
     wireLangSelect('settings-lang');
+    const ctSel = document.getElementById('settings-chart-type');
+    if (ctSel) ctSel.onchange = () => { App.chartType = ctSel.value; savePrefs(); refresh(); };
   }
 
   // ───────────────────────── Boot ─────────────────────────
