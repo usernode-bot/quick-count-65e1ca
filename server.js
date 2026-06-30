@@ -1195,12 +1195,10 @@ app.post('/api/elections/:eid/evidence-sheet', async (req, res) => {
 
     // Embed machine-readable marker in PDF metadata for client-side extraction.
     const marker = 'ESQC1.' + Buffer.from(JSON.stringify({ vid })).toString('base64url');
-    doc.setProperties({
-      title: 'Quick Count Evidence Sheet — ' + elName,
-      subject: 'Download Certificate',
-      author: 'Quick Count',
-      keywords: marker,
-    });
+    doc.info.Title = 'Quick Count Evidence Sheet — ' + elName;
+    doc.info.Subject = 'Download Certificate';
+    doc.info.Author = 'Quick Count';
+    doc.info.Keywords = marker;
 
     doc.end();
     await pdfDone;
