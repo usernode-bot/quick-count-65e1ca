@@ -40,6 +40,7 @@ test('client QC builders produce the same envelopes as lib/memo', () => {
   assert.deepStrictEqual(QC.orem('O', 'A'), memo.removeMemberMemo('O', 'A'));
   assert.deepStrictEqual(QC.ovis('O', 'private'), memo.visibilityMemo('O', 'private'));
   assert.deepStrictEqual(QC.odel('O'), memo.deleteOrgMemo('O'));
+  assert.deepStrictEqual(QC.oedit('O', 'New Name', 'NewJur'), memo.editOrgMemo('O', 'New Name', 'NewJur'));
   // unknown role coerced to 'member' on both sides
   assert.strictEqual(QC.omem('O', 'A', 'king').role, 'member');
 });
@@ -50,11 +51,15 @@ test('client validateMemo agrees with lib/memo.decode on new types', () => {
     QC.orem('O', 'A'),
     QC.ovis('O', 'public'),
     QC.odel('O'),
+    QC.oedit('O', 'New Name', 'J'),
     { app: APP, v: V, t: 'omem', org: 'O', addr: 'A', role: 'king' }, // bad role
     { app: APP, v: V, t: 'omem', org: 'O', role: 'mod' },             // missing addr
     { app: APP, v: V, t: 'orem', org: 'O' },                          // missing addr
     { app: APP, v: V, t: 'ovis', org: 'O', vis: 'secret' },           // bad vis
     { app: APP, v: V, t: 'odel' },                                    // missing org
+    { app: APP, v: V, t: 'oedit', org: 'O', name: '', jur: '' },      // empty name
+    { app: APP, v: V, t: 'oedit', org: 'O', name: '   ', jur: '' },   // whitespace name
+    { app: APP, v: V, t: 'oedit', name: 'N', jur: '' },               // missing org
   ];
   for (const m of cases) {
     const clientOk = validateMemo(m);

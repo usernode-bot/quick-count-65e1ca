@@ -77,7 +77,6 @@ const TIMER_DURATION_MS = Math.max(1000, Number(process.env.TIMER_DURATION_MS) |
 
 // Demo personas (local-dev persona switcher + admin).
 const DEMO = {
-  admin: 'ut1demoadmin000000000000000000000000000000',
   orgA: 'ut1democitizenscount0000000000000000000000',
   orgB: 'ut1demounpaidorg000000000000000000000000000',
   orgC: 'ut1demoprivateorg00000000000000000000000000', // private org
@@ -236,6 +235,30 @@ async function pollOnce() {
 const PILPRES_EID = 'demo-pilpres-2024';
 function evHash(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
 
+function c1kwkCanonical(eid, form) {
+  return JSON.stringify({
+    eid,
+    province: form.province || '',
+    regency: form.regency || '',
+    subdistrict: form.subdistrict || '',
+    village: form.village || '',
+    tps: form.tps || '',
+    candidates: (Array.isArray(form.candidates) ? form.candidates : []).map((c) => ({
+      cid: Number(c.cid) || 0, name: String(c.name || ''), votes: Number(c.votes) || 0,
+    })),
+    validVotes: Number(form.validVotes) || 0,
+    invalidVotes: Number(form.invalidVotes) || 0,
+    totalVotes: Number(form.totalVotes) || 0,
+    dpt: Number(form.dpt) || 0,
+  });
+}
+function c1kwkSign(docHash, eid, wallet, ts) {
+  if (!JWT_SECRET) return null;
+  return crypto.createHmac('sha256', JWT_SECRET)
+    .update(JSON.stringify({ doc_hash: docHash, eid, ts, wallet }))
+    .digest('hex');
+}
+
 function buildDemoTxs() {
   let t = Date.parse('2026-06-19T08:00:00.000Z');
   const at = () => new Date(t += 60000).toISOString();
@@ -346,16 +369,14 @@ function buildDemoTxs() {
     mk('demo_pilpres_r4', DEMO.obs2, DEMO.orgID, 0, memo.resultMemo(PILPRES_EID, 4, { 1: 110, 2: 400, 3: 90 }, 622, 14)),
     // Station 5 (North Sumatra): no submission → "4 of 5 stations reported".
 
-    // ── Closed election — exercises the ecl transaction type and Closed badge ──
-    // A simple two-candidate, one-station election that has been closed by its
-    // organizer after results were submitted.
-    mk('demo_closed_el', DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — Closed Election')),
-    mk('demo_closed_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo_closed_el', 1, 'Closed Candidate Alpha')),
-    mk('demo_closed_c2', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo_closed_el', 2, 'Closed Candidate Beta')),
-    mk('demo_closed_s1', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo('demo_closed_el', 1, 'Closed Station 1', 'Central')),
-    mk('demo_closed_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo('demo_closed_el', DEMO.obs1)),
-    mk('demo_closed_r1', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo('demo_closed_el', 1, { 1: 300, 2: 200 }, 510, 10)),
-    mk('demo_closed_ecl', DEMO.orgA, DEMO.orgA, 0, memo.electionCloseMemo('demo_closed_el')),
+    // ── Closed election — demonstrates the closed badge and locked workspace ──
+    mk('demo-closed-election', DEMO.orgA, DEMO.orgA, 0, memo.electionMemo('Staging demo — Closed Election')),
+    mk('demo_closed_c1', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo-closed-election', 1, 'Demo Candidate Alpha')),
+    mk('demo_closed_c2', DEMO.orgA, DEMO.orgA, 0, memo.candidateMemo('demo-closed-election', 2, 'Demo Candidate Beta')),
+    mk('demo_closed_s1', DEMO.orgA, DEMO.orgA, 0, memo.stationMemo('demo-closed-election', 1, 'Demo Station X', 'Central')),
+    mk('demo_closed_o1', DEMO.orgA, DEMO.orgA, 0, memo.observerMemo('demo-closed-election', DEMO.obs1)),
+    mk('demo_closed_r1', DEMO.obs1, DEMO.orgA, 0, memo.resultMemo('demo-closed-election', 1, { 1: 85, 2: 42 }, 132, 5)),
+    mk('demo_closed_ecl', DEMO.orgA, DEMO.orgA, 0, memo.electionCloseMemo('demo-closed-election')),
   ];
   return txs;
 }
@@ -474,7 +495,6 @@ app.get('/__quickcount/config', (_req, res) => {
     { label: 'Org Owner — Pemilu Watch (Indonesia)', addr: DEMO.orgID, username: 'pemilu_watch_id' },
     { label: 'Observer One', addr: DEMO.obs1, username: 'observer_one' },
     { label: 'Observer Three (Station B)', addr: DEMO.obs3, username: 'observer_three' },
-    { label: 'Platform Admin', addr: DEMO.admin, username: 'platform_admin' },
     { label: 'Fresh wallet', addr: null, username: null },
   ] : null;
   res.json({
@@ -646,10 +666,10 @@ app.put('/api/elections/:eid/worktally/:sid', async (req, res) => {
     if (!Number.isInteger(sid) || sid <= 0) return res.status(400).json({ error: 'bad station id' });
 
     // Authorization first (so "not allowed" wins over "unavailable"): only the
-    // election's organizing wallet — Owner, Administrator, or Moderator — or a
-    // platform admin may write. When the election isn't indexed yet (organizer
-    // saving before the chain tx lands) we can't resolve the owner — allow it,
-    // since there is nothing to overwrite.
+    // election's organizing wallet — Owner, Administrator, or Moderator — may
+    // write. When the election isn't indexed yet (organizer saving before the
+    // chain tx lands) we can't resolve the owner — allow it, since there is
+    // nothing to overwrite.
     const authorPubkey = (req.user && req.user.usernode_pubkey) || null;
     const authorUsername = (req.user && req.user.username) || null;
     const el = indexer.elections.get(eid);
@@ -714,12 +734,14 @@ app.put('/api/elections/:eid/attachments/:kind/:refId', uploadJson, async (req, 
 
     const uploaderPubkey = (req.user && req.user.usernode_pubkey) || null;
     const uploaderUsername = (req.user && req.user.username) || null;
-    // Org-operator guard: Owner, Administrator, or Moderator may write images.
-    // When the election isn't indexed yet (uploading before the on-chain `el` tx
-    // lands), allow — nothing to overwrite.
+    // Org-ownership guard: only the election's organizing wallet (Owner,
+    // Administrator, or Moderator) may write its images. When the election
+    // isn't indexed yet (an organizer uploading at create time, before the
+    // on-chain `el` tx lands), we can't resolve the owner — allow it.
+
     const el = indexer.elections.get(eid);
-    if (el && !indexer.canOperate(el.orgAddr, uploaderPubkey)) {
-      return res.status(403).json({ error: 'Only the organizing wallet can upload this election\'s images' });
+    if (el && !indexer.canOperate(el.orgAddr, uploaderPubkey) && !indexer.isAdmin(uploaderPubkey)) {
+      return res.status(403).json({ error: 'Only the organizing wallet or its operators can upload this election\'s images' });
     }
 
     const { mime, data_base64 } = req.body || {};
@@ -798,8 +820,9 @@ async function loadBallotProofMeta(eid) {
 }
 
 // May `pubkey` upload/replace a station's ballot proof? The station's assigned
-// observer (they hold the physical ballot) or the org's operators
-// (Owner/Administrator/Moderator). When the election isn't indexed yet, allow.
+// observer (broader than the worktally guard — they hold the physical ballot),
+// or the org's operators (Owner/Administrator/Moderator).
+// When the election isn't indexed yet, allow (nothing to overwrite).
 function canUploadProof(eid, sid, pubkey) {
   if (!pubkey) return false;
   const el = indexer.elections.get(eid);
@@ -870,8 +893,8 @@ app.put('/api/elections/:eid/ballot-proof/:sid', ballotJson, async (req, res) =>
 });
 
 // Authenticated: read a station's ballot-proof bytes (or ?meta=1 for status
-// only). NOT public — restricted to the uploader, org operators, or a platform
-// operator. The anonymous public only ever gets the badge on the public detail.
+// only). NOT public — restricted to the uploader or org operators.
+// The anonymous public only ever gets the badge on the public detail.
 app.get('/api/elections/:eid/ballot-proof/:sid', async (req, res) => {
   try {
     const { eid } = req.params;
@@ -905,117 +928,6 @@ app.get('/api/elections/:eid/ballot-proof/:sid', async (req, res) => {
   }
 });
 
-// ── C1-KWK ballot PDF (Indonesia quick-count form) ───────────────────────────
-// Authenticated: generate a signed C1-KWK PDF for a specific station. Records
-// the download. Returns the PDF bytes. Only org operators may download.
-app.post('/api/elections/:eid/c1kwk/download', async (req, res) => {
-  try {
-    const { eid } = req.params;
-    const sid = Number((req.body && req.body.sid) || req.query.sid);
-    if (!Number.isInteger(sid) || sid <= 0) return res.status(400).json({ error: 'sid required' });
-    if (!PDFDocument || !QRCode) return res.status(503).json({ error: 'PDF generation not available' });
-    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
-
-    const pubkey = (req.user && req.user.usernode_pubkey) || null;
-    const username = (req.user && req.user.username) || null;
-    const el = indexer.elections.get(eid);
-    if (!el) return res.status(404).json({ error: 'election not found' });
-    if (!indexer.canOperate(el.orgAddr, pubkey)) return res.status(403).json({ error: 'Operator access required' });
-
-    const detail = indexer.electionDetail(eid, 'latest');
-    if (!detail) return res.status(404).json({ error: 'election detail not found' });
-    const station = (detail.stations || []).find((s) => s.sid === sid);
-    if (!station) return res.status(404).json({ error: 'station not found' });
-
-    const ts = Date.now();
-    const payload = JSON.stringify({ eid, sid, ts });
-    const token = crypto.createHmac('sha256', C1KWK_HMAC_SECRET).update(payload).digest('hex');
-    const verifyUrl = `${req.protocol}://${req.get('host')}/api/public/c1kwk/verify?eid=${encodeURIComponent(eid)}&sid=${sid}&ts=${ts}&token=${token}`;
-
-    // Generate QR code as PNG buffer.
-    const qrBuf = await QRCode.toBuffer(verifyUrl, { type: 'png', width: 120, margin: 1 });
-
-    // Build PDF.
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    const chunks = [];
-    doc.on('data', (c) => chunks.push(c));
-    await new Promise((resolve, reject) => {
-      doc.on('end', resolve);
-      doc.on('error', reject);
-      const org = indexer.orgs.get(el.orgAddr);
-      doc.fontSize(16).font('Helvetica-Bold').text('Formulir C1-KWK', { align: 'center' });
-      doc.fontSize(10).font('Helvetica').text(`(Quick Count — ${eid})`, { align: 'center' });
-      doc.moveDown();
-      doc.fontSize(12).font('Helvetica-Bold').text(`Pemilihan: ${detail.election.name}`);
-      doc.fontSize(10).font('Helvetica').text(`Organisasi: ${org ? org.name : el.orgAddr}`);
-      doc.text(`Wilayah: ${detail.election.orgJur || '—'}`);
-      doc.text(`TPS / Station: ${station.name}${station.label ? ' — ' + station.label : ''}`);
-      doc.moveDown();
-      doc.fontSize(12).font('Helvetica-Bold').text('Perolehan Suara / Vote Counts:');
-      doc.moveDown(0.3);
-      for (const cand of detail.candidates) {
-        const votes = station.votes ? (station.votes[String(cand.cid)] || 0) : 0;
-        doc.fontSize(10).font('Helvetica').text(`  ${cand.name}: ${votes}`);
-      }
-      doc.moveDown();
-      doc.fontSize(9).font('Helvetica').fillColor('#666')
-        .text(`Total: ${station.tot != null ? station.tot : '—'}  Invalid: ${station.inv != null ? station.inv : '—'}`);
-      doc.fillColor('#000').moveDown();
-      doc.fontSize(9).font('Helvetica').text('Verifikasi / Verify QR:', { continued: false });
-      doc.image(qrBuf, { width: 100 });
-      doc.fontSize(7).font('Helvetica').fillColor('#444').text(verifyUrl, { link: verifyUrl });
-      doc.fillColor('#000').moveDown();
-      doc.fontSize(8).font('Helvetica').text(`Token: ${token.slice(0, 16)}…`, { align: 'right' });
-      doc.end();
-    });
-    const pdfBuf = Buffer.concat(chunks);
-
-    // Record the download.
-    await pool.query(
-      `INSERT INTO c1kwk_downloads (eid, sid, downloader_pubkey, downloader_username, token, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [eid, sid, pubkey, username, token]
-    );
-
-    res.set('Content-Type', 'application/pdf');
-    res.set('Content-Disposition', `attachment; filename="c1kwk-${eid}-stn${sid}.pdf"`);
-    res.send(pdfBuf);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: verify a C1-KWK QR token. Returns election/station info when the
-// token is valid, 400 when it is not.
-app.get('/api/public/c1kwk/verify', (req, res) => {
-  try {
-    const { eid, sid: sidStr, ts: tsStr, token } = req.query;
-    const sid = Number(sidStr);
-    const ts = Number(tsStr);
-    if (!eid || !Number.isInteger(sid) || !ts || !token) return res.status(400).json({ error: 'missing params' });
-    const expected = crypto.createHmac('sha256', C1KWK_HMAC_SECRET)
-      .update(JSON.stringify({ eid, sid, ts }))
-      .digest('hex');
-    if (expected !== token) return res.status(400).json({ error: 'invalid token' });
-    const el = indexer.elections.get(eid);
-    if (!el) return res.status(404).json({ error: 'election not found' });
-    const org = indexer.orgs.get(el.orgAddr);
-    const stMap = indexer.stations.get(eid) || new Map();
-    const station = stMap.get(sid);
-    res.json({
-      valid: true,
-      eid,
-      sid,
-      ts,
-      election: el.name,
-      station: station ? station.name : ('Station ' + sid),
-      organization: org ? org.name : el.orgAddr,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Public: live event stream for one election (SSE). Under /api/public/ so it is
 // ungated. Carries only { eid, kind, lastUpdated } — clients re-fetch through
 // the pay-to-unlock-aware detail endpoint, so the lock gate is unchanged.
@@ -1037,6 +949,128 @@ app.get('/api/public/elections/:eid/stream', (req, res) => {
   const unsubscribe = sseSubscribe(eid, res);
   const heartbeat = setInterval(() => { try { res.write(': heartbeat\n\n'); } catch { /* closed */ } }, 25000);
   req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
+});
+
+// Authenticated: generate and download a signed C1-KWK ballot-count PDF for an
+// Indonesia election. Signs the form's canonical JSON with HMAC-SHA256 using the
+// platform JWT_SECRET and embeds a QR code linking to the public verify endpoint.
+// Logged to c1kwk_downloads when DATABASE_URL is set.
+app.post('/api/elections/:eid/c1kwk/download', express.json(), async (req, res) => {
+  try {
+    const { eid } = req.params;
+    if (!PDFDocument || !QRCode) return res.status(503).json({ error: 'PDF generation libraries unavailable' });
+    if (!JWT_SECRET) return res.status(503).json({ error: 'Signing not available in this environment' });
+
+    const el = indexer.elections.get(eid);
+    if (!el) return res.status(404).json({ error: 'Election not found' });
+    const org = indexer.orgs.get(el.orgAddr);
+    const orgJur = org ? (org.jur || '').toLowerCase() : '';
+    if (orgJur !== 'indonesia') return res.status(400).json({ error: 'C1-KWK forms are only available for Indonesia elections' });
+
+    const pubkey = (req.user && req.user.usernode_pubkey) || null;
+    const form = req.body || {};
+    const canonical = c1kwkCanonical(eid, form);
+    const docHash = crypto.createHash('sha256').update(canonical).digest('hex');
+    const ts = new Date().toISOString();
+    const wallet = pubkey || '';
+    const sig = c1kwkSign(docHash, eid, wallet, ts);
+
+    if (pool) {
+      await pool.query(
+        'INSERT INTO c1kwk_downloads (eid, doc_hash, sig, wallet, downloaded_at) VALUES ($1,$2,$3,$4,NOW())',
+        [eid, docHash, sig, wallet || null]
+      );
+    }
+
+    const verifyPayload = Buffer.from(JSON.stringify({ doc_hash: docHash, eid, ts, wallet, sig })).toString('base64url');
+    const verifyUrl = `${req.protocol}://${req.get('host')}/#/verify?c1kwk=${encodeURIComponent(verifyPayload)}`;
+    const qrPng = await QRCode.toBuffer(verifyUrl, { type: 'png', width: 200 });
+
+    const detail = indexer.electionDetail(eid, null, 'latest');
+    const elName = (detail && detail.election && detail.election.name) || eid;
+    const cands = (detail && detail.candidates) || [];
+    const formCands = Array.isArray(form.candidates) ? form.candidates : [];
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const pdfDone = new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+    });
+
+    doc.fontSize(16).font('Helvetica-Bold').text('MODEL C1-KWK', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text('Catatan Hasil Penghitungan Perolehan Suara', { align: 'center' });
+    doc.text('Pemilihan Umum — Quick Count Platform', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica-Bold').text('Pemilihan: ', { continued: true }).font('Helvetica').text(elName);
+    doc.font('Helvetica-Bold').text('No. TPS: ', { continued: true }).font('Helvetica').text(String(form.tps || '—'));
+    doc.font('Helvetica-Bold').text('Provinsi: ', { continued: true }).font('Helvetica').text(String(form.province || '—'));
+    doc.font('Helvetica-Bold').text('Kab/Kota: ', { continued: true }).font('Helvetica').text(String(form.regency || '—'));
+    doc.font('Helvetica-Bold').text('Kecamatan: ', { continued: true }).font('Helvetica').text(String(form.subdistrict || '—'));
+    doc.font('Helvetica-Bold').text('Kel/Desa: ', { continued: true }).font('Helvetica').text(String(form.village || '—'));
+    doc.font('Helvetica-Bold').text('DPT: ', { continued: true }).font('Helvetica').text(String(Number(form.dpt) || 0));
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica-Bold').text('Perolehan Suara Sah');
+    for (const c of formCands) {
+      const name = c.name || (cands.find((x) => x.cid === c.cid) || {}).name || `No. ${c.cid}`;
+      doc.fontSize(10).font('Helvetica').text(`  Pasangan No. ${c.cid} — ${name}: ${Number(c.votes) || 0} suara`);
+    }
+    doc.moveDown(0.3);
+    doc.fontSize(11).font('Helvetica-Bold').text(`Jumlah Suara Sah: ${Number(form.validVotes) || 0}`);
+    doc.font('Helvetica-Bold').text(`Jumlah Suara Tidak Sah: ${Number(form.invalidVotes) || 0}`);
+    doc.font('Helvetica-Bold').text(`Jumlah Seluruh Suara: ${Number(form.totalVotes) || 0}`);
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica-Bold').text('Hash Dokumen (SHA-256):');
+    doc.font('Courier').fontSize(8).text(docHash);
+    doc.fontSize(9).font('Helvetica-Bold').text('Tanda Tangan Platform (HMAC-SHA256):');
+    doc.font('Courier').fontSize(8).text(sig || '—');
+    doc.fontSize(9).font('Helvetica').text(`Timestamp: ${ts}`);
+    doc.fontSize(9).font('Helvetica').text(`Dompet: ${wallet || '(tidak ada)'}`);
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica').text('Scan QR untuk verifikasi tanda tangan:');
+    doc.image(qrPng, doc.page.margins.left, doc.y, { width: 100 });
+    doc.end();
+    await pdfDone;
+
+    const pdf = Buffer.concat(chunks);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="c1kwk_${eid}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: verify a C1-KWK signed payload from a QR code. Under /api/public/ so
+// it is ungated — anyone scanning a QR code can check the signature.
+app.get('/api/public/c1kwk/verify', (req, res) => {
+  try {
+    const { payload } = req.query;
+    if (!payload || typeof payload !== 'string') return res.json({ valid: false, error: 'payload required' });
+    let parsed;
+    try {
+      const json = Buffer.from(payload, 'base64url').toString('utf-8');
+      parsed = JSON.parse(json);
+    } catch {
+      return res.json({ valid: false, error: 'invalid payload' });
+    }
+    const { doc_hash, eid, ts, wallet, sig } = parsed || {};
+    if (!doc_hash || !eid || !ts || !sig) return res.json({ valid: false, error: 'missing fields' });
+    if (!JWT_SECRET) return res.json({ valid: false, error: 'signing not configured' });
+    const expected = crypto.createHmac('sha256', JWT_SECRET)
+      .update(JSON.stringify({ doc_hash, eid, ts, wallet: wallet || '' }))
+      .digest('hex');
+    let valid = false;
+    try {
+      const sigBuf = Buffer.from(sig, 'hex');
+      const expBuf = Buffer.from(expected, 'hex');
+      valid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch { valid = false; }
+    res.json({ valid, doc_hash, eid, ts, wallet: wallet || null });
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
 });
 
 // Public: list elections with counts (backed by in-memory indexer).
@@ -1456,17 +1490,17 @@ async function migrate() {
       PRIMARY KEY (eid, sid)
     )`);
   await pool.query(`COMMENT ON TABLE ballot_proofs IS 'staging:private'`);
-  // C1-KWK ballot PDF download log (Indonesia-specific). PRIVATE — ties a
-  // wallet to a specific election+station download; not visible to the public.
+  // C1-KWK signed PDF download audit log. PRIVATE: records wallet addresses
+  // that downloaded a signed form — PII. Staging gets schema only; seedStaging()
+  // inserts obviously-fake rows so the endpoint is exercisable in previews.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS c1kwk_downloads (
       id SERIAL PRIMARY KEY,
       eid TEXT NOT NULL,
-      sid INTEGER NOT NULL,
-      downloader_pubkey TEXT,
-      downloader_username TEXT,
-      token TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      doc_hash TEXT NOT NULL,
+      sig TEXT,
+      wallet TEXT,
+      downloaded_at TIMESTAMPTZ DEFAULT NOW()
     )`);
   await pool.query(`COMMENT ON TABLE c1kwk_downloads IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
@@ -1518,9 +1552,9 @@ async function seedStaging() {
     [PILPRES_EID, 'cand_avatar', 1, RED_PNG],
     [PILPRES_EID, 'cand_avatar', 2, BLUE_PNG],
     [PILPRES_EID, 'cand_avatar', 3, GREEN_PNG],
-    // Closed election avatars.
-    ['demo_closed_el', 'cand_avatar', 1, RED_PNG],
-    ['demo_closed_el', 'cand_avatar', 2, BLUE_PNG],
+    // Closed election candidate avatars.
+    ['demo-closed-election', 'cand_avatar', 1, RED_PNG],
+    ['demo-closed-election', 'cand_avatar', 2, BLUE_PNG],
   ];
   for (const [eid, kind, refId, b64] of demoAtt) {
     const buf = Buffer.from(b64, 'base64');
@@ -1622,16 +1656,15 @@ async function seedStaging() {
     );
   }
 
-  // C1-KWK download log seed — staging:private. One obviously-fake row so the
-  // verify endpoint is testable without going through the full PDF flow.
-  const demoToken = crypto.createHmac('sha256', 'quickcount-c1kwk-dev')
-    .update(JSON.stringify({ eid: PILPRES_EID, sid: 1, ts: 1719792000000 }))
-    .digest('hex');
+  // C1-KWK download log (staging:private → seed obviously-fake rows so the
+  // audit trail is non-empty in PR previews). WHERE NOT EXISTS guards idempotency
+  // since the SERIAL PK has no natural unique key to ON CONFLICT against.
+  const demoHash = 'staging-demo-c1kwk-doc-hash-0000000000000000000000000000000000000000000000000000000000';
   await pool.query(
-    `INSERT INTO c1kwk_downloads (eid, sid, downloader_pubkey, downloader_username, token, created_at)
-     VALUES ($1, 1, $2, 'pemilu_watch_id', $3, '2026-06-01T00:00:00.000Z')
-     ON CONFLICT DO NOTHING`,
-    [PILPRES_EID, DEMO.orgID, demoToken]
+    `INSERT INTO c1kwk_downloads (eid, doc_hash, sig, wallet, downloaded_at)
+     SELECT $1, $2, $3, $4, NOW()
+     WHERE NOT EXISTS (SELECT 1 FROM c1kwk_downloads WHERE eid = $1 AND doc_hash = $2)`,
+    [PILPRES_EID, demoHash, 'staging-demo-sig', DEMO.obs1]
   );
 }
 

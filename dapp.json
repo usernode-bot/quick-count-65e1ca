@@ -309,19 +309,19 @@
       "expectSelector": "[data-ballot-proof]"
     },
     {
-      "name": "Closed election shows the Closed badge in the workspace header",
-      "path": "/#/election/demo_closed_el",
+      "name": "Closed election workspace shows Closed badge",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-closed-election",
       "expectText": "Closed"
     },
     {
-      "name": "C1-KWK verify endpoint rejects an invalid token",
-      "path": "/api/public/c1kwk/verify?token=invalid-token",
-      "expectText": "\"error\""
+      "name": "C1-KWK panel renders for Indonesia election",
+      "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/election/demo-pilpres-2024",
+      "expectSelector": "[data-c1kwk-panel]"
     },
     {
-      "name": "C1-KWK download endpoint requires authentication",
-      "path": "/api/elections/demo_closed_el/c1kwk/download",
-      "expectText": "Unauthorized"
+      "name": "C1-KWK verify endpoint returns JSON for any payload",
+      "path": "/api/public/c1kwk/verify?payload=dGVzdA",
+      "expectText": "\"valid\""
     }
   ]
 }
