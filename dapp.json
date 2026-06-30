@@ -322,6 +322,21 @@
       "name": "C1-KWK verify endpoint returns JSON for any payload",
       "path": "/api/public/c1kwk/verify?payload=dGVzdA",
       "expectText": "\"valid\""
+    },
+    {
+      "name": "Dashboard Download PDF button renders when tally has data",
+      "path": "/#/dashboard",
+      "expectSelector": "#dash-pdf-btn"
+    },
+    {
+      "name": "Public dashboard Download PDF button renders when tally has data",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectSelector": "#work-tally-pdf-btn"
+    },
+    {
+      "name": "Results PDF module script serves",
+      "path": "/results-pdf.js",
+      "expectText": "QCResultsPDF"
     }
   ]
 }
