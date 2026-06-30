@@ -36,13 +36,6 @@
       "default": "100"
     },
     {
-      "key": "ADMIN_ADDRS",
-      "description": "Comma-separated platform-admin wallet addresses (fee waivers + admin dashboard). Public identifiers.",
-      "required": false,
-      "private": false,
-      "default": ""
-    },
-    {
       "key": "UNLOCK_RECIPIENT_ADDRESS",
       "description": "Wallet address that pay-to-unlock payments are sent to. Currently a test/mock-token network — set this to the real mainnet wallet to go live. Defaults to an internal testing placeholder so the deploy never blocks.",
       "required": false,
@@ -60,16 +53,34 @@
     },
     {
       "key": "APP_PUBKEY",
-      "description": "Application public key",
-      "required": true,
-      "private": false
+      "description": "The application's own on-chain wallet PUBLIC address (ut1…). Public identifier — safe to expose. Defaults to an obviously-fake placeholder so the deploy never blocks; set the real address yourself in Settings → Secrets before relying on app-signed operations.",
+      "required": false,
+      "private": false,
+      "default": "ut1appquickcount000000000000000000000000000",
+      "staging_default": "ut1appquickcount000000000000000000000000000"
     },
     {
       "key": "APP_SECRET_KEY",
-      "description": "Application secret key",
-      "required": true,
+      "description": "The application's on-chain wallet SIGNING key (secret). Private: encrypted at rest and never propagated into staging. No server-side signing path uses it yet — it is declared so you can store the real key in Settings → Secrets now and reserve it for future app-signed operations. Staging gets an obviously-fake dummy; never commit a real key here.",
+      "required": false,
       "private": true,
-      "staging_default": ""
+      "default": "",
+      "staging_default": "staging-dummy-not-a-real-key"
+    },
+    {
+      "key": "MOCK_TX_FLOW",
+      "description": "Self-contained local-ingest ('mock ledger') switch. 'false' (production default) routes every submission through the REAL chain — the hosted bridge signs/broadcasts and the indexer reads transactions back. Staging keeps 'true' so the preview runs the seeded demo without a real chain or wallet. Non-private feature flag.",
+      "required": false,
+      "private": false,
+      "default": "false",
+      "staging_default": "true"
+    },
+    {
+      "key": "TIMER_DURATION_MS",
+      "description": "Cadence (milliseconds) for the background chain poll and the client auto-refresh. Non-private tuning value. Defaults to 6000; values below 1000 are floored to 1000.",
+      "required": false,
+      "private": false,
+      "default": "6000"
     }
   ],
   "tests": [
@@ -79,14 +90,19 @@
       "expectText": "Staging demo"
     },
     {
-      "name": "Results screen shows the Export CSV button",
+      "name": "Dashboard shows the Open workspace link",
       "path": "/#/dashboard",
-      "expectSelector": "#exp-csv"
+      "expectText": "Open election workspace"
     },
     {
       "name": "Elections list renders",
       "path": "/#/elections",
       "expectText": "Elections"
+    },
+    {
+      "name": "Local-first election queue offline pill renders (staging demo seed)",
+      "path": "/#/elections",
+      "expectText": "Saved Locally (Offline)"
     },
     {
       "name": "Evidence gallery renders",
@@ -99,9 +115,14 @@
       "expectText": "Pollwatch Alliance"
     },
     {
-      "name": "Demo election shows reporting progress",
+      "name": "Public dashboard leads with the election title (official chart removed)",
       "path": "/dashboard.html?eid=demo-election",
-      "expectText": "stations reported"
+      "expectText": "General Election"
+    },
+    {
+      "name": "Public dashboard renders the working-tally panel",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectSelector": "#work-tally"
     },
     {
       "name": "Elections list shows the Pilpres 2024 demo election",
@@ -109,14 +130,19 @@
       "expectText": "Pilpres 2024"
     },
     {
-      "name": "Pilpres 2024 demo dashboard shows a candidate pair",
+      "name": "Pilpres 2024 demo dashboard leads with the election title",
       "path": "/dashboard.html?eid=demo-pilpres-2024",
-      "expectText": "Prabowo"
+      "expectText": "Pilpres 2024"
     },
     {
-      "name": "Dashboard shows the locked pay-to-unlock overlay",
+      "name": "Public dashboard shows the organizer working-tally summary line",
       "path": "/dashboard.html?eid=demo-election",
-      "expectText": "Unlock live results"
+      "expectText": "Live count entered by the organizer"
+    },
+    {
+      "name": "Public dashboard renders working-tally bars",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectSelector": "#work-tally"
     },
     {
       "name": "Public dashboard shows the working-tally card to locked viewers",
@@ -228,6 +254,11 @@
       "expectText": "Member of"
     },
     {
+      "name": "Unpaid org owner sees the pay-fee prompt (management gated on payment)",
+      "path": "/?viewer=ut1demounpaidorg000000000000000000000000000#/orgs",
+      "expectText": "Pay registration fee"
+    },
+    {
       "name": "Orgs endpoint returns the seeded owner roster",
       "path": "/__quickcount/orgs?viewer=ut1democitizenscount0000000000000000000000",
       "expectText": "\"viewerRole\":\"owner\""
@@ -271,6 +302,51 @@
       "name": "Mock submit surface is enabled so submissions ingest locally",
       "path": "/__mock/enabled",
       "expectText": "\"enabled\":true"
+    },
+    {
+      "name": "Public election detail exposes the validated ballot-proof badge",
+      "path": "/api/public/elections/demo-election",
+      "expectText": "\"validated\":true"
+    },
+    {
+      "name": "Public dashboard shows the ballot-proof validated badge",
+      "path": "/dashboard.html?eid=demo-election",
+      "expectText": "ballot proof"
+    },
+    {
+      "name": "Election workspace renders the ballot-proof upload panel for an organizer",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-election",
+      "expectSelector": "[data-ballot-proof]"
+    },
+    {
+      "name": "Closed election workspace shows Closed badge",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-closed-election",
+      "expectText": "Closed"
+    },
+    {
+      "name": "C1-KWK panel renders for Indonesia election",
+      "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/election/demo-pilpres-2024",
+      "expectSelector": "[data-c1kwk-panel]"
+    },
+    {
+      "name": "C1-KWK verify endpoint returns JSON for any payload",
+      "path": "/api/public/c1kwk/verify?payload=dGVzdA",
+      "expectText": "\"valid\""
+    },
+    {
+      "name": "Public elections list endpoint surfaces a seeded election (ingest→index→list path)",
+      "path": "/api/public/elections",
+      "expectText": "General Election"
+    },
+    {
+      "name": "Quick-count state lists a seeded active organization (orgs render in the list)",
+      "path": "/__quickcount/state",
+      "expectText": "Citizens Count"
+    },
+    {
+      "name": "Elections list screen shows a seeded election row",
+      "path": "/#/elections",
+      "expectText": "General Election"
     }
   ]
 }

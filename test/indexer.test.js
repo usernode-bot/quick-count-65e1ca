@@ -6,7 +6,7 @@ const memo = require('../lib/memo');
 const { QuickCountIndexer, normalizeTx } = require('../lib/indexer');
 const agg = require('../lib/aggregate');
 
-const CFG = { treasury: 'TREASURY', orgFee: 100, adminAddrs: ['ADMIN'] };
+const CFG = { treasury: 'TREASURY', orgFee: 100 };
 let _t = Date.parse('2026-06-19T08:00:00.000Z');
 function mk(txId, from, to, amount, env) {
   _t += 60000;
@@ -24,7 +24,6 @@ test('memo envelopes round-trip for all types', () => {
   assert.deepStrictEqual(memo.decode(memo.encode(memo.resultMemo('e1', 3, { 1: 10, 2: 5 }, 16, 1, h))), { app: 'quickcount', v: 1, t: 'res', eid: 'e1', sid: 3, votes: { 1: 10, 2: 5 }, tot: 16, inv: 1, ev: h });
   assert.deepStrictEqual(memo.decode(memo.encode(memo.disputeMemo('e1', 'tx9', 'why'))), { app: 'quickcount', v: 1, t: 'disp', eid: 'e1', target: 'tx9', reason: 'why' });
   assert.deepStrictEqual(memo.decode(memo.encode(memo.resolveMemo('e1', 'd1', 'uphold'))), { app: 'quickcount', v: 1, t: 'dres', eid: 'e1', disp: 'd1', verdict: 'uphold' });
-  assert.deepStrictEqual(memo.decode(memo.encode(memo.adminMemo('waive', 'O'))), { app: 'quickcount', v: 1, t: 'adm', act: 'waive', org: 'O' });
 });
 
 test('decode rejects malformed / wrong app / wrong version', () => {
@@ -48,48 +47,57 @@ test('org is active only when the fee is paid to the treasury', () => {
   assert.strictEqual(ix.orgs.get('orgWrong').active, false);
 });
 
-test('elections from inactive orgs are hidden from the public but visible to owner/admin', () => {
+test('a pending (unpaid) org cannot create elections; paying first unlocks it', () => {
   const ix = new QuickCountIndexer(CFG);
+  // Election creation by a pending org is rejected by canOperate (paid gate).
   ix.rebuild([
     mk('o1', 'org', 'TREASURY', 0, memo.orgMemo('Pending')),
     mk('el1', 'org', 'org', 0, memo.electionMemo('Hidden')),
   ]);
-  assert.strictEqual(ix.visibleElections({}).length, 0);
+  assert.strictEqual(ix.elections.size, 0);
+  assert.strictEqual(ix.canOperate('org', 'org'), false);
+
+  // Same log, but the org pays the fee before creating the election → unlocked
+  // and publicly visible.
+  ix.rebuild([
+    mk('o1', 'org', 'TREASURY', 100, memo.orgMemo('Paid')),
+    mk('el1', 'org', 'org', 0, memo.electionMemo('Visible')),
+  ]);
+  assert.strictEqual(ix.canOperate('org', 'org'), true);
+  assert.strictEqual(ix.visibleElections({}).length, 1);
   assert.strictEqual(ix.visibleElections({ viewer: 'org' }).length, 1);
-  assert.strictEqual(ix.visibleElections({ admin: true }).length, 1);
 });
 
-test('admin can waive the fee to activate an org', () => {
+test('a later top-up activates a pending org and unlocks operations', () => {
   const ix = new QuickCountIndexer(CFG);
   ix.rebuild([
     mk('o1', 'org', 'TREASURY', 0, memo.orgMemo('Pending')),
-    mk('a1', 'ADMIN', 'ADMIN', 0, memo.adminMemo('waive', 'org')),
+    // Rejected while pending.
+    mk('elBad', 'org', 'org', 0, memo.electionMemo('Too early')),
+    // Top-up settles the fee → active.
+    mk('o2', 'org', 'TREASURY', 100, memo.orgMemo('Now paid')),
+    mk('elOk', 'org', 'org', 0, memo.electionMemo('After payment')),
   ]);
   assert.strictEqual(ix.orgs.get('org').active, true);
-  assert.strictEqual(ix.orgs.get('org').waived, true);
+  assert.strictEqual(ix.elections.size, 1);
+  assert.ok(ix.elections.has('elOk'));
 });
 
-test('activeOrgs lists active orgs (incl. election-less + waived), excludes pending, newest-first', () => {
+test('activeOrgs lists active orgs (incl. election-less), excludes pending, newest-first', () => {
   const ix = new QuickCountIndexer(CFG);
   ix.rebuild([
     // Paid org with NO elections — must still appear.
     mk('o1', 'orgPaid', 'TREASURY', 100, memo.orgMemo('Paid Org', 'Land')),
     // Unpaid/pending org — must be excluded.
     mk('o2', 'orgPending', 'TREASURY', 0, memo.orgMemo('Pending Org')),
-    // Org activated by an admin waiver — must appear.
-    mk('o3', 'orgWaived', 'TREASURY', 0, memo.orgMemo('Waived Org')),
-    mk('a1', 'ADMIN', 'ADMIN', 0, memo.adminMemo('waive', 'orgWaived')),
   ]);
   const active = ix.activeOrgs();
   const addrs = active.map((o) => o.addr);
   assert.ok(addrs.includes('orgPaid'));
-  assert.ok(addrs.includes('orgWaived'));
   assert.ok(!addrs.includes('orgPending'));
-  // Minimal public shape only — no fee/tx/waived leakage.
+  // Minimal public shape only — no fee/tx leakage.
   const paid = active.find((o) => o.addr === 'orgPaid');
   assert.deepStrictEqual(paid, { addr: 'orgPaid', name: 'Paid Org', jur: 'Land' });
-  // Newest-first ordering (orgWaived has the latest createdAt).
-  assert.strictEqual(active[0].addr, 'orgWaived');
 });
 
 // ── Authorization ───────────────────────────────────────────────────────────

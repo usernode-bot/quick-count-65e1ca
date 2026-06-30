@@ -78,6 +78,8 @@
        Must load AFTER the hosted bridge tag above. -->
   <script src="/usernode-bridge-classify.js"></script>
   <script src="/usernode-resilience.js"></script>
+  <!-- Local-first election-creation queue (pure helpers; DOM/timer wiring below). -->
+  <script src="/election-queue.js"></script>
   <style>
     .tab-on { background:#4f46e5; color:#fff; }
     .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
@@ -92,6 +94,13 @@
       <span id="staging-badge" class="hidden badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">demo data</span>
       <nav id="top-tabs" class="hidden sm:flex gap-1 ml-2 text-sm"></nav>
       <div class="ml-auto flex items-center gap-2">
+        <!-- Inline offline badge: shown only when the local-first election queue
+             is parked offline. Lives in the status cluster (next to the
+             identity/wallet controls) instead of floating over the nav tabs. -->
+        <span id="qc-offline-badge" class="hidden items-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500"></span>
+          <span id="qc-offline-badge-msg"></span>
+        </span>
         <button id="refresh-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Refresh">↻</button>
         <button id="theme-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 font-medium" title="Toggle theme">☀️</button>
         <select id="persona-select" class="hidden text-xs px-2 py-1.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none"></select>
@@ -114,7 +123,7 @@
   // ───────────────────────── App state ─────────────────────────
   const App = {
     cfg: null,
-    role: { addr: null, isAdmin: false, org: null, observerOf: [] },
+    role: { addr: null, org: null, observerOf: [] },
     state: null,        // last /__quickcount/state response
     eid: '',            // selected election
     method: 'latest',
@@ -132,11 +141,8 @@
     { id: 'elections', label: 'Elections', icon: '🗳️' },
     { id: 'orgs', label: 'Orgs', icon: '🏛️' },
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
-    { id: 'verify', label: 'Verify', icon: '🛡️' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
     { id: 'heatmap', label: 'Heatmap', icon: '🗺️' },
-    { id: 'profile', label: 'My Profile', icon: '👤', walletOnly: true },
-    { id: 'admin', label: 'Admin', icon: '🛠️', adminOnly: true },
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
@@ -168,7 +174,7 @@
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
-      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes', tab_admin: 'Admin',
+      tab_dashboard: 'Dashboard', tab_elections: 'Elections', tab_orgs: 'Orgs', tab_evidence: 'Evidence', tab_verify: 'Verify', tab_disputes: 'Disputes',
       evidence_pdf_download: 'Evidence PDF', evidence_pdf_generating: 'Generating…', evidence_pdf_unavailable: 'PDF tools unavailable — open this page online to enable Evidence PDFs.', evidence_pdf_ready: 'Evidence PDF downloaded ✓', evidence_pdf_ready_prompt: 'Result submitted on-chain. Download your Evidence PDF?',
       verify_heading: 'Verify evidence', verify_intro: 'Drop an Evidence PDF below to check it on your device. Nothing is uploaded — the file is parsed locally, its fingerprint is recomputed, and (when a live chain is configured) it is cross-checked against the blockchain.',
       verify_drop: 'Drop an Evidence PDF here, or click to choose a file', verify_checking: 'Checking…', verify_sample: 'Run a sample', verify_sample_hint: 'Generate and verify an Evidence PDF for the demo election.',
@@ -184,6 +190,8 @@
       org_role_owner: 'Owner', org_role_admin: 'Administrator', org_role_mod: 'Moderator', org_role_member: 'Member',
       org_vis_public: 'Public', org_vis_private: 'Private',
       org_manage: 'Manage', org_back: '← Back to organizations', org_members_heading: 'Members', org_visibility_heading: 'Visibility', org_danger_heading: 'Danger zone',
+      org_locked_heading: 'Management is locked', org_locked_desc: 'Management unlocks once your organization\'s registration fee is paid. Until then you can pay the fee or delete this registration.',
+      org_details_heading: 'Organization details', org_name_label: 'Name', org_jur_label: 'Jurisdiction', org_save_details: 'Save changes', toast_details_updated: 'Details updated ✓', loading_updating_details: 'Saving details…',
       org_add_member: 'Add member', org_member_addr_placeholder: 'Member wallet address (ut1…)', org_add_button: 'Add member',
       org_make_public: 'Make public', org_make_private: 'Make private', org_current_visibility: 'This organization is currently {vis}.',
       org_remove: 'Remove', org_change_role: 'Change role', org_delete: 'Delete organization', org_delete_confirm: 'Delete this organization? Its elections will be hidden. This is recorded on-chain and cannot be undone.',
@@ -192,11 +200,11 @@
       loading_adding_member: 'Adding member…', loading_changing_role: 'Updating role…', loading_removing_member: 'Removing member…', loading_changing_visibility: 'Updating visibility…', loading_deleting_org: 'Deleting organization…',
       evidence_heading: 'Evidence', evidence_upload_label: 'Evidence (tally sheet) — hashed locally, file never uploaded', evidence_submit: 'Verify a file against this', evidence_no_evidence: 'No evidence hashes recorded for this election.',
       disputes_heading: 'Disputes', disputes_no_disputes: 'No disputes filed for this election.', disputes_file: 'File a dispute', disputes_resolve: 'Resolve disputes', disputes_uphold: 'Uphold', disputes_reject: 'Reject',
-      admin_heading: 'Platform admin', admin_waive_fee: 'Waive fee',
       toast_election_published: 'Election published ✓', toast_submit_result: 'Result submitted ✓', toast_station_added: 'Station added ✓', toast_observer_authorized: 'Observer authorized ✓', toast_dispute_filed: 'Dispute filed ✓', toast_dispute_upheld: 'Dispute upheld ✓', toast_dispute_rejected: 'Dispute rejected ✓', toast_org_registered: 'Organization registered ✓', toast_fee_paid: 'Fee paid ✓', toast_fee_waived: 'Fee waived ✓', toast_failed: 'Failed:', toast_wallet_unavailable: 'Wallet bridge unavailable — open inside Usernode.', toast_no_wallet: 'No wallet address linked.', toast_add_candidate: 'Add a name and at least one candidate.', toast_nothing_to_import: 'Nothing to import', toast_enter_reason: 'Enter a reason', toast_enter_org_name: 'Enter an organization name', toast_enter_station_name: 'Enter a station name', toast_enter_observer_addr: 'Enter an observer address',
       notice_wallet_unreachable: "Couldn't reach the wallet service. Your entries were kept.", notice_action_failed: "That didn't go through. Your entries were kept.", notice_connecting: 'Connecting to your wallet…', action_try_again: 'Try again', partial_candidates: 'Election published; {done} of {total} candidates added.', partial_stations: '{done} of {total} stations imported.', partial_generic: '{done} of {total} steps completed.',
       loading_submitting: 'Submitting result…', loading_adding_station: 'Adding station…', loading_authorizing: 'Authorizing observer…', loading_filing: 'Filing dispute…', loading_resolving: 'Resolving…', loading_registering: 'Registering & paying fee…', loading_paying: 'Paying fee…', loading_waiving: 'Waiving fee…', loading_importing: 'Importing station',
       loading_creating_election: 'Creating election…', loading_adding_candidate: 'Adding candidate {i}/{n}…', loading_importing_station: 'Importing station {i}/{n}…',
+      queue_saved_locally: 'Saved locally — retrying…', queue_saved_locally_n: 'Saved locally — retrying… ({n})', queue_saved_offline: 'Saved Locally (Offline)', queue_demo_label: 'Staging demo — pending election',
       loading_confirming: 'Confirming on-chain…', confirming_onchain: 'Confirming on-chain…', confirming_generic: 'Confirming submission', pending_demo_label: 'Staging demo — pending submission', notice_confirm_timeout: 'Submitted — still confirming on the network. It will appear once the chain includes it.',
       timeago_s: '{n}s ago', timeago_m: '{n}m ago', timeago_h: '{n}h ago', timeago_d: '{n}d ago',
       station_awaiting: 'Awaiting result', station_col_name: 'Station', station_col_updated: 'Updated', station_badge_invalidated: 'invalidated', station_badge_disputed: 'disputed', station_badge_review: 'review', station_badge_reports: '{n} reports', inline_save_btn: 'Save result', inline_done_badge: 'Counted', inline_vote_label: 'Votes for {name}', inline_vote_suffix: 'votes',
@@ -206,14 +214,18 @@
       elections_form_name_label: 'Election name', elections_form_candidates_label: 'Candidates', elections_form_add_candidate: '+ Add', elections_form_candidate_ph: 'Candidate name', elections_form_create: 'Create & publish', elections_form_tx_note: 'Signs one transaction for the election and one per candidate.',
       election_detail_back: '← all elections', election_detail_by_org: 'by', election_detail_pending_fee: 'pending fee', election_detail_loading: 'Loading election…', election_detail_reporting: '{reported} of {total} stations reported', election_detail_connect_note: 'Connect an authorized observer or the organizing wallet to report results or manage this election.',
       election_observer_title: 'Report result', election_observer_your_station: '(your station)', election_observer_station_label: 'Polling station', election_observer_total_label: 'Total ballots', election_observer_invalid_label: 'Invalid / blank', election_observer_submit_btn: 'Submit / revise result',
+      ballot_proof_title: 'Ballot proof', ballot_proof_desc: 'Attach a photo or scan of the ballot / count form. It is imported, auto-checked, and reviewed before you submit. Shown only to your organization — the public sees a “validated” badge, not the image.', ballot_proof_choose: 'Choose a file (JPG, PNG, or PDF)', ballot_proof_replace: 'Replace / re-scan', ballot_proof_submit: 'Submit ballot proof', ballot_proof_station: 'Polling station', ballot_proof_valid: 'Looks valid ✓', ballot_proof_invalid: 'This doesn’t look like a usable ballot scan:', ballot_proof_submitted: 'Ballot proof submitted ✓', ballot_proof_attached: 'Validated proof attached ✓', ballot_proof_draft_saved: 'Draft saved — not yet submitted', ballot_proof_unavailable: 'Ballot proofs are unavailable in this environment.', ballot_proof_fingerprint: 'Fingerprint', ballot_proof_pick_first: 'Choose a file to review first.',
       election_stations_title: 'Stations', election_station_name_ph: 'Station name', election_station_label_ph: 'Label / region', election_station_add_btn: 'Add', election_station_bulk_import: 'Bulk import from CSV', election_station_csv_desc: 'One station per line: name,label', election_station_import_btn: 'Import all', election_station_count: '{n} stations:', election_station_preview: '{n} station(s) ready to import.',
       election_observers_title: 'Observers', election_observer_addr_ph: 'Observer wallet (ut1…)', election_observer_all_stations: 'All stations', election_observer_authorize_btn: 'Authorize', election_observer_count: '{n} observer(s):',
+      election_candidates_title: 'Candidates', election_candidate_name_ph: 'Candidate name', election_candidate_add_btn: 'Add', election_candidate_count: '{n} candidates:', toast_candidate_added: 'Candidate added ✓', loading_adding_candidate_post: 'Adding candidate…',
+      election_avatar_upload_btn: 'Upload photo', election_avatar_uploading: 'Uploading…', election_avatar_uploaded: 'Photo uploaded ✓', election_avatar_replace: 'Replace photo',
+      election_c1_upload_btn: 'Upload C1', election_c1_uploading: 'Uploading…', election_c1_uploaded: 'C1 form uploaded ✓', election_c1_replace: 'Replace C1 form',
+      election_closed_badge: 'Closed', election_close_btn: 'Close election', election_close_confirm: 'Close this election? Structural changes (stations, candidates, observers) will be permanently locked. Results and dispute resolution remain open. This is recorded on-chain and cannot be undone.', election_close_locked_note: 'This election is closed — structure is locked. Results and dispute resolution remain open.', toast_election_closed: 'Election closed ✓', loading_closing_election: 'Closing election…',
       election_dispute_target_label: 'Target result', election_dispute_no_results: 'No reported results to dispute yet.', election_dispute_reason_ph: 'Reason for dispute',
       toast_stations_imported: '{n} stations imported ✓',
       disputes_filed_by: 'filed by {who}', disputes_has_evidence: 'has evidence', disputes_no_open: 'No open disputes.', disputes_status_upheld: 'upheld', disputes_status_rejected: 'rejected', disputes_status_open: 'open', disputes_workspace_note: 'Authorized observers and the organizing wallet can file and resolve disputes from the election workspace.',
       orgs_no_active: 'No active organizations visible yet.',
       evidence_sha256_desc: 'Each result may carry a SHA-256 hash of its tally sheet. Drop the original file below to prove it matches what was reported on-chain — the file never leaves your device.', evidence_verifying_label: 'Verifying against:', evidence_verifying_default: 'select a result below, or any hash', evidence_pick_target: 'Pick a result to compare against.', evidence_match_yes: '✓ Match — this file is exactly what was reported.', evidence_match_no: '✗ No match — this file differs from the recorded evidence.',
-      admin_scope_required: 'Platform-admin scope required. Connect an admin wallet.', admin_stat_orgs: 'Organizations', admin_stat_active_orgs: 'Active orgs', admin_stat_elections: 'Elections', admin_stat_org_fee: 'Org fee', admin_all_orgs: 'All organizations', admin_badge_waived: 'waived', admin_paid: 'paid {amount}',
       select_election_prompt: 'Select an election.',
       tab_profile: 'My Profile',
       label_bio: 'Bio',
@@ -234,6 +246,7 @@
       action_refresh: 'Refresh',
       toast_refreshed: 'Refreshed ✓',
       tab_heatmap: 'Heatmap', heatmap_heading: 'Voter Turnout by Region', heatmap_select_election: 'Select an election to view turnout by region.', heatmap_no_regions: 'No regions are defined. Add a label to each station in the election workspace.', heatmap_col_region: 'Region', heatmap_col_stations: 'Stations', heatmap_col_ballots: 'Ballots cast', heatmap_col_valid_rate: 'Valid ballots', heatmap_col_invalid: 'Blank / invalid', heatmap_unlabeled: '(No region)', heatmap_summary: '{reported} of {total} stations reported · {regions} regions',
+      c1kwk_panel_title: 'C1-KWK — Ballot Count Certificate', c1kwk_download_btn: 'Download Signed PDF', c1kwk_generating: 'Generating…', c1kwk_wallet_required: 'A linked wallet is required to sign the form.', c1kwk_province: 'Province', c1kwk_regency: 'Regency / City', c1kwk_subdistrict: 'Subdistrict', c1kwk_village: 'Village / Kelurahan', c1kwk_tps_number: 'TPS No.', c1kwk_valid_votes: 'Valid Votes (by candidate)', c1kwk_invalid_votes: 'Invalid / Blank Votes', c1kwk_total_votes: 'Total Votes (auto)', c1kwk_dpt: 'DPT (Registered Voters)', c1kwk_verify_title: 'Verify C1-KWK Signature', c1kwk_sig_valid: '✓ Signature valid — document has not been altered.', c1kwk_sig_invalid: '✗ Signature invalid — document may have been altered.',
     },
     id: {
       loading_connecting: 'Menghubungkan ke Usernode…', loading_verifying: 'Memverifikasi sesi Anda…', loading_restoring: 'Memulihkan data Anda…',
@@ -253,7 +266,7 @@
       readonly_note: 'Nama pengguna dan dompet Anda dikelola oleh Usernode dan hanya bisa dibaca. Hanya nama tampilan yang dapat diubah.',
       no_wallet_note: 'Tautkan dompet Usernode untuk mengatur nama tampilan. Pilihan bahasa Anda tetap disimpan di perangkat ini.',
       not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
-      tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa', tab_admin: 'Admin',
+      tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa',
       method_latest: 'Laporan terbaru', method_first: 'Laporan pertama', method_consensus: 'Konsensus', method_median: 'Median', method_verified: 'Terverifikasi saja',
       dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
       dashboard_working_tally: 'Hitungan kerja', dashboard_working_tally_desc: 'Dimasukkan oleh penyelenggara di ruang kerja — terpisah dari hasil resmi.', dashboard_working_tally_reported: '{reported} dari {total} TPS dimasukkan',
@@ -261,10 +274,10 @@
       orgs_heading: 'Organisasi', orgs_active_orgs: 'Organisasi aktif', orgs_register_heading: 'Daftarkan organisasi Anda', orgs_register_desc: 'Pendaftaran membayar biaya satu kali sebesar {fee} ke perbendaharaan platform. Hingga dikonfirmasi, pemilihan Anda disembunyikan.', orgs_register_button: 'Daftar & bayar biaya', orgs_pay_fee: 'Bayar biaya pendaftaran', orgs_name_placeholder: 'Nama organisasi', orgs_jur_placeholder: 'Yurisdiksi (opsional)', orgs_active_badge: 'Aktif', orgs_pending_badge: 'Menunggu — biaya belum dibayar', orgs_connect_first: 'Hubungkan dompet Anda terlebih dahulu.', orgs_manage_elections: 'Pemilihan Anda aktif. Kelola di tab Pemilihan.',
       evidence_heading: 'Bukti', evidence_upload_label: 'Bukti (lembar penghitungan) — di-hash secara lokal, file tidak diunggah', evidence_submit: 'Verifikasi file terhadap ini', evidence_no_evidence: 'Tidak ada hash bukti yang tercatat untuk pemilihan ini.',
       disputes_heading: 'Sengketa', disputes_no_disputes: 'Tidak ada sengketa yang diajukan untuk pemilihan ini.', disputes_file: 'Ajukan sengketa', disputes_resolve: 'Selesaikan sengketa', disputes_uphold: 'Diterima', disputes_reject: 'Ditolak',
-      admin_heading: 'Admin platform', admin_waive_fee: 'Bebaskan biaya',
       toast_election_published: 'Pemilihan diterbitkan ✓', toast_submit_result: 'Hasil dikirim ✓', toast_station_added: 'TPS ditambahkan ✓', toast_observer_authorized: 'Pengamat diotorisasi ✓', toast_dispute_filed: 'Sengketa diajukan ✓', toast_dispute_upheld: 'Sengketa diterima ✓', toast_dispute_rejected: 'Sengketa ditolak ✓', toast_org_registered: 'Organisasi terdaftar ✓', toast_fee_paid: 'Biaya dibayar ✓', toast_fee_waived: 'Biaya dibebaskan ✓', toast_failed: 'Gagal:', toast_wallet_unavailable: 'Jembatan dompet tidak tersedia — buka di dalam Usernode.', toast_no_wallet: 'Tidak ada alamat dompet yang tertaut.', toast_add_candidate: 'Tambahkan nama dan setidaknya satu kandidat.', toast_nothing_to_import: 'Tidak ada yang diimpor', toast_enter_reason: 'Masukkan alasan', toast_enter_org_name: 'Masukkan nama organisasi', toast_enter_station_name: 'Masukkan nama TPS', toast_enter_observer_addr: 'Masukkan alamat pengamat',
       loading_submitting: 'Mengirim hasil…', loading_adding_station: 'Menambahkan TPS…', loading_authorizing: 'Mengotorisasi pengamat…', loading_filing: 'Mengajukan sengketa…', loading_resolving: 'Menyelesaikan…', loading_registering: 'Mendaftar & membayar biaya…', loading_paying: 'Membayar biaya…', loading_waiving: 'Membebaskan biaya…', loading_importing: 'Mengimpor TPS',
       loading_creating_election: 'Membuat pemilihan…', loading_adding_candidate: 'Menambahkan kandidat {i}/{n}…', loading_importing_station: 'Mengimpor TPS {i}/{n}…',
+      queue_saved_locally: 'Disimpan lokal — mencoba lagi…', queue_saved_locally_n: 'Disimpan lokal — mencoba lagi… ({n})', queue_saved_offline: 'Disimpan Lokal (Luring)', queue_demo_label: 'Demo staging — pemilihan tertunda',
       timeago_s: '{n}dtk lalu', timeago_m: '{n}mnt lalu', timeago_h: '{n}j lalu', timeago_d: '{n}h lalu',
       station_awaiting: 'Menunggu hasil', station_col_name: 'TPS', station_col_updated: 'Diperbarui', station_badge_invalidated: 'dibatalkan', station_badge_disputed: 'disengketakan', station_badge_review: 'ditinjau', station_badge_reports: '{n} laporan', inline_save_btn: 'Simpan Hasil', inline_done_badge: 'Selesai Dihitung', inline_vote_label: 'Jumlah Suara {name}', inline_vote_suffix: 'Suara',
       margin_needs_review: '⚠ Perlu tinjauan', margin_stable_lead: '✓ Unggul stabil', margin_lead_pct: 'unggul {lead}%', margin_uncertainty: 'ketidakpastian ±{pct}%', margin_disagreement_note: 'ketidaksepakatan atau sengketa dapat mempengaruhi hasilnya.',
@@ -275,12 +288,15 @@
       election_observer_title: 'Laporkan hasil', election_observer_your_station: '(TPS Anda)', election_observer_station_label: 'Tempat pemungutan suara', election_observer_total_label: 'Total surat suara', election_observer_invalid_label: 'Tidak sah / kosong', election_observer_submit_btn: 'Kirim / revisi hasil',
       election_stations_title: 'TPS', election_station_name_ph: 'Nama TPS', election_station_label_ph: 'Label / wilayah', election_station_add_btn: 'Tambah', election_station_bulk_import: 'Impor massal dari CSV', election_station_csv_desc: 'Satu TPS per baris: nama,label', election_station_import_btn: 'Impor semua', election_station_count: '{n} TPS:', election_station_preview: '{n} TPS siap diimpor.',
       election_observers_title: 'Pengamat', election_observer_addr_ph: 'Dompet pengamat (ut1…)', election_observer_all_stations: 'Semua TPS', election_observer_authorize_btn: 'Otorisasi', election_observer_count: '{n} pengamat:',
+      election_candidates_title: 'Kandidat', election_candidate_name_ph: 'Nama kandidat', election_candidate_add_btn: 'Tambah', election_candidate_count: '{n} kandidat:', toast_candidate_added: 'Kandidat ditambahkan ✓', loading_adding_candidate_post: 'Menambahkan kandidat…',
+      election_avatar_upload_btn: 'Unggah foto', election_avatar_uploading: 'Mengunggah…', election_avatar_uploaded: 'Foto diunggah ✓', election_avatar_replace: 'Ganti foto',
+      election_c1_upload_btn: 'Unggah C1', election_c1_uploading: 'Mengunggah…', election_c1_uploaded: 'Formulir C1 diunggah ✓', election_c1_replace: 'Ganti formulir C1',
+      election_closed_badge: 'Ditutup', election_close_btn: 'Tutup pemilihan', election_close_confirm: 'Tutup pemilihan ini? Perubahan struktural (TPS, kandidat, pengamat) akan dikunci secara permanen. Hasil dan penyelesaian sengketa tetap terbuka. Ini dicatat on-chain dan tidak dapat dibatalkan.', election_close_locked_note: 'Pemilihan ini sudah ditutup — struktur dikunci. Hasil dan penyelesaian sengketa tetap terbuka.', toast_election_closed: 'Pemilihan ditutup ✓', loading_closing_election: 'Menutup pemilihan…',
       election_dispute_target_label: 'Hasil yang ditarget', election_dispute_no_results: 'Belum ada hasil yang dilaporkan untuk disengketakan.', election_dispute_reason_ph: 'Alasan sengketa',
       toast_stations_imported: '{n} TPS diimpor ✓',
       disputes_filed_by: 'diajukan oleh {who}', disputes_has_evidence: 'ada bukti', disputes_no_open: 'Tidak ada sengketa terbuka.', disputes_status_upheld: 'diterima', disputes_status_rejected: 'ditolak', disputes_status_open: 'terbuka', disputes_workspace_note: 'Pengamat yang berwenang dan dompet penyelenggara dapat mengajukan dan menyelesaikan sengketa dari ruang kerja pemilihan.',
       orgs_no_active: 'Belum ada organisasi aktif yang terlihat.',
       evidence_sha256_desc: 'Setiap hasil mungkin memiliki hash SHA-256 dari lembar penghitungannya. Jatuhkan file asli di bawah untuk membuktikan kecocokannya dengan yang dilaporkan di blockchain — file tidak meninggalkan perangkat Anda.', evidence_verifying_label: 'Memverifikasi terhadap:', evidence_verifying_default: 'pilih hasil di bawah, atau hash apa pun', evidence_pick_target: 'Pilih hasil untuk dibandingkan.', evidence_match_yes: '✓ Cocok — file ini persis seperti yang dilaporkan.', evidence_match_no: '✗ Tidak cocok — file ini berbeda dari bukti yang tercatat.',
-      admin_scope_required: 'Diperlukan hak admin platform. Hubungkan dompet admin.', admin_stat_orgs: 'Organisasi', admin_stat_active_orgs: 'Org aktif', admin_stat_elections: 'Pemilihan', admin_stat_org_fee: 'Biaya org', admin_all_orgs: 'Semua organisasi', admin_badge_waived: 'dibebaskan', admin_paid: 'dibayar {amount}',
       select_election_prompt: 'Pilih pemilihan.',
       tab_profile: 'Profil Saya',
       label_bio: 'Bio',
@@ -301,6 +317,7 @@
       action_refresh: 'Segarkan',
       toast_refreshed: 'Disegarkan ✓',
       tab_heatmap: 'Peta Panas', heatmap_heading: 'Partisipasi Pemilih per Wilayah', heatmap_select_election: 'Pilih pemilihan untuk melihat partisipasi per wilayah.', heatmap_no_regions: 'Tidak ada wilayah yang ditentukan. Tambahkan label ke setiap TPS di ruang kerja pemilihan.', heatmap_col_region: 'Wilayah', heatmap_col_stations: 'TPS', heatmap_col_ballots: 'Surat suara masuk', heatmap_col_valid_rate: 'Surat suara sah', heatmap_col_invalid: 'Kosong / tidak sah', heatmap_unlabeled: '(Tanpa wilayah)', heatmap_summary: '{reported} dari {total} TPS dilaporkan · {regions} wilayah',
+      c1kwk_panel_title: 'C1-KWK — Catatan Hasil Penghitungan Suara', c1kwk_download_btn: 'Unduh PDF Tertandatangan', c1kwk_generating: 'Membuat dokumen…', c1kwk_wallet_required: 'Dompet tertaut diperlukan untuk menandatangani formulir.', c1kwk_province: 'Provinsi', c1kwk_regency: 'Kabupaten / Kota', c1kwk_subdistrict: 'Kecamatan', c1kwk_village: 'Kelurahan / Desa', c1kwk_tps_number: 'No. TPS', c1kwk_valid_votes: 'Suara Sah (per pasangan)', c1kwk_invalid_votes: 'Suara Tidak Sah / Kosong', c1kwk_total_votes: 'Jumlah Suara (otomatis)', c1kwk_dpt: 'DPT (Pemilih Terdaftar)', c1kwk_verify_title: 'Verifikasi Tanda Tangan C1-KWK', c1kwk_sig_valid: '✓ Tanda tangan valid — dokumen belum diubah.', c1kwk_sig_invalid: '✗ Tanda tangan tidak valid — dokumen mungkin telah diubah.',
     },
     'zh-Hans': {
       loading_connecting: '正在连接 Usernode…', loading_verifying: '正在验证您的会话…', loading_restoring: '正在恢复您的数据…',
@@ -320,17 +337,17 @@
       readonly_note: '您的用户名和钱包由 Usernode 管理，此处仅供查看。只有显示名称可以修改。',
       no_wallet_note: '关联 Usernode 钱包以设置显示名称。您的语言选择仍会保存在本设备。',
       not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
-      tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议', tab_admin: '管理',
+      tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议',
       method_latest: '最新提交', method_first: '首次提交', method_consensus: '共识', method_median: '中位数', method_verified: '仅已验证',
       dashboard_heading: '仪表盘', dashboard_select_election: '选择一场选举以查看实时结果。', dashboard_export_csv: '导出 CSV', dashboard_export_json: '导出 JSON', dashboard_by_station: '按投票站', dashboard_no_stations: '暂无候选人。', dashboard_last_submission: '最后提交', dashboard_auto_refreshing: '自动刷新', dashboard_no_submissions: '暂无提交', dashboard_stations_reported: '个投票站已上报', dashboard_votes: '票',
       elections_heading: '选举', elections_new: '+ 新建选举', elections_no_elections: '暂无选举。', elections_open_workspace: '打开选举工作区 →',
       orgs_heading: '机构', orgs_active_orgs: '活跃机构', orgs_register_heading: '注册您的机构', orgs_register_desc: '注册需向平台财库缴纳一次性费用 {fee}。在确认之前，您的选举将保持隐藏。', orgs_register_button: '注册并缴费', orgs_pay_fee: '缴纳注册费', orgs_name_placeholder: '机构名称', orgs_jur_placeholder: '管辖区（可选）', orgs_active_badge: '活跃', orgs_pending_badge: '待审 — 费用未缴纳', orgs_connect_first: '请先连接钱包。', orgs_manage_elections: '您的选举已上线，请在"选举"标签页进行管理。',
       evidence_heading: '证据', evidence_upload_label: '证据（计票表）— 在本地哈希，文件不上传', evidence_submit: '验证文件是否匹配', evidence_no_evidence: '此次选举没有记录任何证据哈希。',
       disputes_heading: '争议', disputes_no_disputes: '此次选举尚无争议。', disputes_file: '提交争议', disputes_resolve: '处理争议', disputes_uphold: '支持', disputes_reject: '驳回',
-      admin_heading: '平台管理', admin_waive_fee: '免除费用',
       toast_election_published: '选举已发布 ✓', toast_submit_result: '结果已提交 ✓', toast_station_added: '投票站已添加 ✓', toast_observer_authorized: '观察员已授权 ✓', toast_dispute_filed: '争议已提交 ✓', toast_dispute_upheld: '争议已支持 ✓', toast_dispute_rejected: '争议已驳回 ✓', toast_org_registered: '机构已注册 ✓', toast_fee_paid: '费用已缴纳 ✓', toast_fee_waived: '费用已免除 ✓', toast_failed: '失败：', toast_wallet_unavailable: '钱包桥接不可用 — 请在 Usernode 内打开。', toast_no_wallet: '未关联钱包地址。', toast_add_candidate: '请添加名称和至少一位候选人。', toast_nothing_to_import: '无可导入内容', toast_enter_reason: '请输入原因', toast_enter_org_name: '请输入机构名称', toast_enter_station_name: '请输入投票站名称', toast_enter_observer_addr: '请输入观察员地址',
       loading_submitting: '正在提交结果…', loading_adding_station: '正在添加投票站…', loading_authorizing: '正在授权观察员…', loading_filing: '正在提交争议…', loading_resolving: '正在处理…', loading_registering: '正在注册并缴费…', loading_paying: '正在缴费…', loading_waiving: '正在免除费用…', loading_importing: '正在导入投票站',
       loading_creating_election: '正在创建选举…', loading_adding_candidate: '正在添加候选人 {i}/{n}…', loading_importing_station: '正在导入投票站 {i}/{n}…',
+      queue_saved_locally: '已本地保存 — 正在重试…', queue_saved_locally_n: '已本地保存 — 正在重试…（{n}）', queue_saved_offline: '已本地保存（离线）', queue_demo_label: '预发布演示 — 待处理选举',
       timeago_s: '{n}秒前', timeago_m: '{n}分钟前', timeago_h: '{n}小时前', timeago_d: '{n}天前',
       station_awaiting: '等待结果', station_col_name: '投票站', station_col_updated: '更新时间', station_badge_invalidated: '已作废', station_badge_disputed: '有争议', station_badge_review: '待审核', station_badge_reports: '{n} 份报告', inline_save_btn: '保存结果', inline_done_badge: '已统计', inline_vote_label: '{name} 得票数', inline_vote_suffix: '票',
       margin_needs_review: '⚠ 需要审核', margin_stable_lead: '✓ 领先稳定', margin_lead_pct: '领先 {lead}%', margin_uncertainty: '不确定性 ±{pct}%', margin_disagreement_note: '分歧或争议可能影响结果。',
@@ -341,12 +358,15 @@
       election_observer_title: '上报结果', election_observer_your_station: '（您的投票站）', election_observer_station_label: '投票站', election_observer_total_label: '总票数', election_observer_invalid_label: '无效/空白', election_observer_submit_btn: '提交/修改结果',
       election_stations_title: '投票站', election_station_name_ph: '投票站名称', election_station_label_ph: '标签/地区', election_station_add_btn: '添加', election_station_bulk_import: '从 CSV 批量导入', election_station_csv_desc: '每行一个投票站：名称,标签', election_station_import_btn: '全部导入', election_station_count: '{n} 个投票站：', election_station_preview: '{n} 个投票站待导入。',
       election_observers_title: '观察员', election_observer_addr_ph: '观察员钱包 (ut1…)', election_observer_all_stations: '所有投票站', election_observer_authorize_btn: '授权', election_observer_count: '{n} 位观察员：',
+      election_candidates_title: '候选人', election_candidate_name_ph: '候选人姓名', election_candidate_add_btn: '添加', election_candidate_count: '{n} 位候选人：', toast_candidate_added: '候选人已添加 ✓', loading_adding_candidate_post: '正在添加候选人…',
+      election_avatar_upload_btn: '上传照片', election_avatar_uploading: '上传中…', election_avatar_uploaded: '照片已上传 ✓', election_avatar_replace: '更换照片',
+      election_c1_upload_btn: '上传C1表', election_c1_uploading: '上传中…', election_c1_uploaded: 'C1表已上传 ✓', election_c1_replace: '更换C1表',
+      election_closed_badge: '已结束', election_close_btn: '结束选举', election_close_confirm: '结束此次选举？结构性更改（投票站、候选人、观察员）将被永久锁定。结果提交和争议解决仍可进行。此操作记录在链上，无法撤销。', election_close_locked_note: '此次选举已结束——结构已锁定。结果提交和争议解决仍可进行。', toast_election_closed: '选举已结束 ✓', loading_closing_election: '正在结束选举…',
       election_dispute_target_label: '争议目标', election_dispute_no_results: '暂无可争议的已上报结果。', election_dispute_reason_ph: '争议原因',
       toast_stations_imported: '{n} 个投票站已导入 ✓',
       disputes_filed_by: '由 {who} 提交', disputes_has_evidence: '有证据', disputes_no_open: '无待处理争议。', disputes_status_upheld: '已支持', disputes_status_rejected: '已驳回', disputes_status_open: '处理中', disputes_workspace_note: '授权观察员和组织钱包可在选举工作区提交和处理争议。',
       orgs_no_active: '暂无可见的活跃机构。',
       evidence_sha256_desc: '每条结果可能附带其计票表的 SHA-256 哈希值。将原始文件拖放到下方，以证明其与链上报告的内容一致——文件不会离开您的设备。', evidence_verifying_label: '验证对象：', evidence_verifying_default: '在下方选择一条结果，或输入任意哈希值', evidence_pick_target: '请选择要对比的结果。', evidence_match_yes: '✓ 匹配 — 此文件与上报内容完全一致。', evidence_match_no: '✗ 不匹配 — 此文件与记录的证据不符。',
-      admin_scope_required: '需要平台管理员权限。请连接管理员钱包。', admin_stat_orgs: '机构', admin_stat_active_orgs: '活跃机构', admin_stat_elections: '选举', admin_stat_org_fee: '注册费', admin_all_orgs: '所有机构', admin_badge_waived: '已豁免', admin_paid: '已缴 {amount}',
       select_election_prompt: '请选择一场选举。',
       tab_profile: '我的资料',
       label_bio: '简介',
@@ -367,6 +387,7 @@
       action_refresh: '刷新',
       toast_refreshed: '已刷新 ✓',
       tab_heatmap: '热力图', heatmap_heading: '各地区选民参与率', heatmap_select_election: '选择一场选举以查看各地区的参与率。', heatmap_no_regions: '未定义地区。请在选举工作区中为每个投票站添加标签。', heatmap_col_region: '地区', heatmap_col_stations: '投票站', heatmap_col_ballots: '投票数', heatmap_col_valid_rate: '有效票', heatmap_col_invalid: '空白/无效', heatmap_unlabeled: '（无地区）', heatmap_summary: '{reported}/{total} 个投票站已上报 · {regions} 个地区',
+      c1kwk_panel_title: 'C1-KWK — 选票计数证书', c1kwk_download_btn: '下载已签署 PDF', c1kwk_generating: '生成中…', c1kwk_wallet_required: '需要绑定钱包才能签署表格。', c1kwk_province: '省份', c1kwk_regency: '县 / 市', c1kwk_subdistrict: '乡镇', c1kwk_village: '村 / 街道', c1kwk_tps_number: 'TPS 编号', c1kwk_valid_votes: '有效票数（按候选人）', c1kwk_invalid_votes: '无效 / 空白票', c1kwk_total_votes: '总票数（自动）', c1kwk_dpt: 'DPT（注册选民）', c1kwk_verify_title: '验证 C1-KWK 签名', c1kwk_sig_valid: '✓ 签名有效 — 文件未被篡改。', c1kwk_sig_invalid: '✗ 签名无效 — 文件可能已被篡改。',
     },
     es: {
       loading_connecting: 'Conectando con Usernode…', loading_verifying: 'Verificando tu sesión…', loading_restoring: 'Restaurando tus datos…',
@@ -386,17 +407,17 @@
       readonly_note: 'Tu nombre de usuario y tu billetera los gestiona Usernode y aquí son de solo lectura. Solo puedes cambiar tu nombre visible.',
       no_wallet_note: 'Vincula una billetera de Usernode para definir un nombre visible. Tu idioma se guarda igualmente en este dispositivo.',
       not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
-      tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas', tab_admin: 'Admin',
+      tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas',
       method_latest: 'Último envío', method_first: 'Primer envío', method_consensus: 'Consenso', method_median: 'Mediana', method_verified: 'Solo verificados',
       dashboard_heading: 'Panel', dashboard_select_election: 'Selecciona una elección para ver los resultados en vivo.', dashboard_export_csv: 'Exportar CSV', dashboard_export_json: 'Exportar JSON', dashboard_by_station: 'Por mesa', dashboard_no_stations: 'Sin candidatos.', dashboard_last_submission: 'Último envío', dashboard_auto_refreshing: 'actualización automática', dashboard_no_submissions: 'Sin envíos aún', dashboard_stations_reported: 'mesas reportadas', dashboard_votes: 'votos',
       elections_heading: 'Elecciones', elections_new: '+ Nueva elección', elections_no_elections: 'Sin elecciones aún.', elections_open_workspace: 'Abrir espacio de trabajo →',
       orgs_heading: 'Organizaciones', orgs_active_orgs: 'Organizaciones activas', orgs_register_heading: 'Registra tu organización', orgs_register_desc: 'El registro paga una cuota única de {fee} al tesoro de la plataforma. Hasta que se confirme, tus elecciones permanecerán ocultas.', orgs_register_button: 'Registrar y pagar', orgs_pay_fee: 'Pagar cuota de registro', orgs_name_placeholder: 'Nombre de la organización', orgs_jur_placeholder: 'Jurisdicción (opcional)', orgs_active_badge: 'Activa', orgs_pending_badge: 'Pendiente — cuota no pagada', orgs_connect_first: 'Conecta tu billetera primero.', orgs_manage_elections: 'Tus elecciones están activas. Gestiónelas en Elecciones.',
       evidence_heading: 'Evidencia', evidence_upload_label: 'Evidencia (acta de escrutinio) — hash local, el archivo no se sube', evidence_submit: 'Verificar un archivo contra esto', evidence_no_evidence: 'No hay hashes de evidencia registrados para esta elección.',
       disputes_heading: 'Disputas', disputes_no_disputes: 'No se han presentado disputas para esta elección.', disputes_file: 'Presentar disputa', disputes_resolve: 'Resolver disputas', disputes_uphold: 'Aceptar', disputes_reject: 'Rechazar',
-      admin_heading: 'Admin de plataforma', admin_waive_fee: 'Eximir cuota',
       toast_election_published: 'Elección publicada ✓', toast_submit_result: 'Resultado enviado ✓', toast_station_added: 'Mesa añadida ✓', toast_observer_authorized: 'Observador autorizado ✓', toast_dispute_filed: 'Disputa presentada ✓', toast_dispute_upheld: 'Disputa aceptada ✓', toast_dispute_rejected: 'Disputa rechazada ✓', toast_org_registered: 'Organización registrada ✓', toast_fee_paid: 'Cuota pagada ✓', toast_fee_waived: 'Cuota eximida ✓', toast_failed: 'Error:', toast_wallet_unavailable: 'Puente de billetera no disponible — ábrelo dentro de Usernode.', toast_no_wallet: 'No hay dirección de billetera vinculada.', toast_add_candidate: 'Añade un nombre y al menos un candidato.', toast_nothing_to_import: 'Nada para importar', toast_enter_reason: 'Introduce un motivo', toast_enter_org_name: 'Introduce el nombre de la organización', toast_enter_station_name: 'Introduce el nombre de la mesa', toast_enter_observer_addr: 'Introduce la dirección del observador',
       loading_submitting: 'Enviando resultado…', loading_adding_station: 'Añadiendo mesa…', loading_authorizing: 'Autorizando observador…', loading_filing: 'Presentando disputa…', loading_resolving: 'Resolviendo…', loading_registering: 'Registrando y pagando cuota…', loading_paying: 'Pagando cuota…', loading_waiving: 'Eximiendo cuota…', loading_importing: 'Importando mesa',
       loading_creating_election: 'Creando elección…', loading_adding_candidate: 'Añadiendo candidato {i}/{n}…', loading_importing_station: 'Importando mesa {i}/{n}…',
+      queue_saved_locally: 'Guardado localmente — reintentando…', queue_saved_locally_n: 'Guardado localmente — reintentando… ({n})', queue_saved_offline: 'Guardado localmente (sin conexión)', queue_demo_label: 'Demo de staging — elección pendiente',
       loading_confirming: 'Confirmando en la cadena…', confirming_onchain: 'Confirmando en la cadena…', confirming_generic: 'Confirmando envío', pending_demo_label: 'Demo de staging — envío pendiente', notice_confirm_timeout: 'Enviado — aún confirmando en la red. Aparecerá cuando la cadena lo incluya.',
       timeago_s: 'hace {n}s', timeago_m: 'hace {n}min', timeago_h: 'hace {n}h', timeago_d: 'hace {n}d',
       station_awaiting: 'Esperando resultado', station_col_name: 'Mesa', station_col_updated: 'Actualizado', station_badge_invalidated: 'invalidada', station_badge_disputed: 'disputada', station_badge_review: 'revisión', station_badge_reports: '{n} informes', inline_save_btn: 'Guardar resultado', inline_done_badge: 'Conteo completo', inline_vote_label: 'Votos de {name}', inline_vote_suffix: 'votos',
@@ -408,12 +429,15 @@
       election_observer_title: 'Reportar resultado', election_observer_your_station: '(tu mesa)', election_observer_station_label: 'Mesa electoral', election_observer_total_label: 'Total de votos emitidos', election_observer_invalid_label: 'Nulos / en blanco', election_observer_submit_btn: 'Enviar / revisar resultado',
       election_stations_title: 'Mesas', election_station_name_ph: 'Nombre de la mesa', election_station_label_ph: 'Etiqueta / zona', election_station_add_btn: 'Agregar', election_station_bulk_import: 'Importar en lote desde CSV', election_station_csv_desc: 'Una mesa por línea: nombre,etiqueta', election_station_import_btn: 'Importar todo', election_station_count: '{n} mesas:', election_station_preview: '{n} mesa(s) lista(s) para importar.',
       election_observers_title: 'Observadores', election_observer_addr_ph: 'Monedero del observador (ut1…)', election_observer_all_stations: 'Todas las mesas', election_observer_authorize_btn: 'Autorizar', election_observer_count: '{n} observador(es):',
+      election_candidates_title: 'Candidatos', election_candidate_name_ph: 'Nombre del candidato', election_candidate_add_btn: 'Agregar', election_candidate_count: '{n} candidato(s):', toast_candidate_added: 'Candidato agregado ✓', loading_adding_candidate_post: 'Agregando candidato…',
+      election_avatar_upload_btn: 'Subir foto', election_avatar_uploading: 'Subiendo…', election_avatar_uploaded: 'Foto subida ✓', election_avatar_replace: 'Reemplazar foto',
+      election_c1_upload_btn: 'Subir C1', election_c1_uploading: 'Subiendo…', election_c1_uploaded: 'Formulario C1 subido ✓', election_c1_replace: 'Reemplazar formulario C1',
+      election_closed_badge: 'Cerrada', election_close_btn: 'Cerrar elección', election_close_confirm: '¿Cerrar esta elección? Los cambios estructurales (mesas, candidatos, observadores) quedarán bloqueados permanentemente. El envío de resultados y la resolución de disputas permanecen abiertos. Esto se registra en la cadena y no se puede deshacer.', election_close_locked_note: 'Esta elección está cerrada — la estructura está bloqueada. El envío de resultados y la resolución de disputas permanecen abiertos.', toast_election_closed: 'Elección cerrada ✓', loading_closing_election: 'Cerrando elección…',
       election_dispute_target_label: 'Resultado en disputa', election_dispute_no_results: 'No hay resultados reportados para disputar aún.', election_dispute_reason_ph: 'Motivo de la disputa',
       toast_stations_imported: '{n} mesas importadas ✓',
       disputes_filed_by: 'presentado por {who}', disputes_has_evidence: 'tiene evidencia', disputes_no_open: 'No hay disputas abiertas.', disputes_status_upheld: 'aceptada', disputes_status_rejected: 'rechazada', disputes_status_open: 'abierta', disputes_workspace_note: 'Los observadores autorizados y el monedero organizador pueden presentar y resolver disputas desde el espacio de trabajo de la elección.',
       orgs_no_active: 'No hay organizaciones activas visibles aún.',
       evidence_sha256_desc: 'Cada resultado puede incluir un hash SHA-256 de su acta de escrutinio. Arrastra el archivo original aquí abajo para comprobar que coincide con lo reportado en la cadena — el archivo nunca sale de tu dispositivo.', evidence_verifying_label: 'Verificando contra:', evidence_verifying_default: 'selecciona un resultado abajo, o cualquier hash', evidence_pick_target: 'Selecciona un resultado para comparar.', evidence_match_yes: '✓ Coincide — este archivo es exactamente lo que fue reportado.', evidence_match_no: '✗ No coincide — este archivo difiere de la evidencia registrada.',
-      admin_scope_required: 'Se requiere acceso de admin de plataforma. Conecta un monedero admin.', admin_stat_orgs: 'Organizaciones', admin_stat_active_orgs: 'Orgs activas', admin_stat_elections: 'Elecciones', admin_stat_org_fee: 'Cuota org', admin_all_orgs: 'Todas las organizaciones', admin_badge_waived: 'eximida', admin_paid: 'pagado {amount}',
       select_election_prompt: 'Selecciona una elección.',
       tab_profile: 'Mi perfil',
       label_bio: 'Biografía',
@@ -434,6 +458,7 @@
       action_refresh: 'Actualizar',
       toast_refreshed: 'Actualizado ✓',
       tab_heatmap: 'Mapa de calor', heatmap_heading: 'Participación por región', heatmap_select_election: 'Selecciona una elección para ver la participación por región.', heatmap_no_regions: 'No hay regiones definidas. Añade una etiqueta a cada mesa en el espacio de trabajo de la elección.', heatmap_col_region: 'Región', heatmap_col_stations: 'Mesas', heatmap_col_ballots: 'Votos emitidos', heatmap_col_valid_rate: 'Votos válidos', heatmap_col_invalid: 'En blanco / nulos', heatmap_unlabeled: '(Sin región)', heatmap_summary: '{reported} de {total} mesas reportadas · {regions} regiones',
+      c1kwk_panel_title: 'C1-KWK — Certificado de Recuento de Votos', c1kwk_download_btn: 'Descargar PDF firmado', c1kwk_generating: 'Generando…', c1kwk_wallet_required: 'Se requiere una billetera vinculada para firmar el formulario.', c1kwk_province: 'Provincia', c1kwk_regency: 'Regencia / Ciudad', c1kwk_subdistrict: 'Subdistrito', c1kwk_village: 'Pueblo / Kelurahan', c1kwk_tps_number: 'N.° de TPS', c1kwk_valid_votes: 'Votos válidos (por candidato)', c1kwk_invalid_votes: 'Votos inválidos / en blanco', c1kwk_total_votes: 'Total de votos (automático)', c1kwk_dpt: 'DPT (Votantes registrados)', c1kwk_verify_title: 'Verificar firma C1-KWK', c1kwk_sig_valid: '✓ Firma válida — el documento no ha sido alterado.', c1kwk_sig_invalid: '✗ Firma inválida — el documento puede haber sido alterado.',
     },
     hi: {
       loading_connecting: 'Usernode से कनेक्ट हो रहा है…', loading_verifying: 'आपका सत्र सत्यापित किया जा रहा है…', loading_restoring: 'आपका डेटा पुनर्स्थापित किया जा रहा है…',
@@ -453,17 +478,17 @@
       readonly_note: 'आपका उपयोगकर्ता नाम और वॉलेट Usernode द्वारा प्रबंधित हैं और यहाँ केवल पढ़े जा सकते हैं। केवल प्रदर्शित नाम बदला जा सकता है।',
       no_wallet_note: 'प्रदर्शित नाम सेट करने के लिए Usernode वॉलेट लिंक करें। आपकी भाषा का चयन फिर भी इस डिवाइस पर सहेजा जाता है।',
       not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
-      tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद', tab_admin: 'प्रशासन',
+      tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद',
       method_latest: 'नवीनतम सबमिशन', method_first: 'पहला सबमिशन', method_consensus: 'सहमति', method_median: 'माध्यिका', method_verified: 'केवल सत्यापित',
       dashboard_heading: 'डैशबोर्ड', dashboard_select_election: 'लाइव परिणाम देखने के लिए चुनाव चुनें।', dashboard_export_csv: 'CSV निर्यात करें', dashboard_export_json: 'JSON निर्यात करें', dashboard_by_station: 'बूथ के अनुसार', dashboard_no_stations: 'कोई उम्मीदवार नहीं।', dashboard_last_submission: 'अंतिम सबमिशन', dashboard_auto_refreshing: 'स्वतः ताज़ा हो रहा है', dashboard_no_submissions: 'अभी तक कोई सबमिशन नहीं', dashboard_stations_reported: 'बूथों ने रिपोर्ट किया', dashboard_votes: 'वोट',
       elections_heading: 'चुनाव', elections_new: '+ नया चुनाव', elections_no_elections: 'अभी तक कोई चुनाव नहीं।', elections_open_workspace: 'चुनाव कार्यक्षेत्र खोलें →',
       orgs_heading: 'संगठन', orgs_active_orgs: 'सक्रिय संगठन', orgs_register_heading: 'अपना संगठन पंजीकृत करें', orgs_register_desc: 'पंजीकरण के लिए प्लेटफ़ॉर्म कोषागार को {fee} का एकमुश्त शुल्क देना होगा। पुष्टि होने तक आपके चुनाव छिपे रहेंगे।', orgs_register_button: 'पंजीकरण करें और शुल्क दें', orgs_pay_fee: 'पंजीकरण शुल्क दें', orgs_name_placeholder: 'संगठन का नाम', orgs_jur_placeholder: 'क्षेत्राधिकार (वैकल्पिक)', orgs_active_badge: 'सक्रिय', orgs_pending_badge: 'लंबित — शुल्क नहीं दिया गया', orgs_connect_first: 'पहले अपना वॉलेट कनेक्ट करें।', orgs_manage_elections: 'आपके चुनाव सक्रिय हैं। चुनाव टैब में उन्हें प्रबंधित करें।',
       evidence_heading: 'साक्ष्य', evidence_upload_label: 'साक्ष्य (मतगणना पत्र) — स्थानीय रूप से हैश किया गया, फ़ाइल अपलोड नहीं होती', evidence_submit: 'इसके विरुद्ध फ़ाइल सत्यापित करें', evidence_no_evidence: 'इस चुनाव के लिए कोई साक्ष्य हैश दर्ज नहीं है।',
       disputes_heading: 'विवाद', disputes_no_disputes: 'इस चुनाव के लिए कोई विवाद दायर नहीं है।', disputes_file: 'विवाद दायर करें', disputes_resolve: 'विवाद हल करें', disputes_uphold: 'स्वीकार करें', disputes_reject: 'अस्वीकार करें',
-      admin_heading: 'प्लेटफ़ॉर्म प्रशासन', admin_waive_fee: 'शुल्क माफ़ करें',
       toast_election_published: 'चुनाव प्रकाशित ✓', toast_submit_result: 'परिणाम सबमिट हुआ ✓', toast_station_added: 'बूथ जोड़ा गया ✓', toast_observer_authorized: 'पर्यवेक्षक अधिकृत ✓', toast_dispute_filed: 'विवाद दायर ✓', toast_dispute_upheld: 'विवाद स्वीकृत ✓', toast_dispute_rejected: 'विवाद अस्वीकृत ✓', toast_org_registered: 'संगठन पंजीकृत ✓', toast_fee_paid: 'शुल्क दिया गया ✓', toast_fee_waived: 'शुल्क माफ़ ✓', toast_failed: 'विफल:', toast_wallet_unavailable: 'वॉलेट ब्रिज उपलब्ध नहीं — Usernode के अंदर खोलें।', toast_no_wallet: 'कोई वॉलेट पता लिंक नहीं है।', toast_add_candidate: 'कम से कम एक उम्मीदवार के साथ नाम जोड़ें।', toast_nothing_to_import: 'आयात करने के लिए कुछ नहीं', toast_enter_reason: 'कारण दर्ज करें', toast_enter_org_name: 'संगठन का नाम दर्ज करें', toast_enter_station_name: 'बूथ का नाम दर्ज करें', toast_enter_observer_addr: 'पर्यवेक्षक का पता दर्ज करें',
       loading_submitting: 'परिणाम सबमिट हो रहा है…', loading_adding_station: 'बूथ जोड़ा जा रहा है…', loading_authorizing: 'पर्यवेक्षक अधिकृत हो रहा है…', loading_filing: 'विवाद दायर हो रहा है…', loading_resolving: 'हल किया जा रहा है…', loading_registering: 'पंजीकरण और शुल्क भुगतान हो रहा है…', loading_paying: 'शुल्क दिया जा रहा है…', loading_waiving: 'शुल्क माफ़ हो रहा है…', loading_importing: 'बूथ आयात हो रहा है',
       loading_creating_election: 'चुनाव बनाया जा रहा है…', loading_adding_candidate: 'उम्मीदवार {i}/{n} जोड़ा जा रहा है…', loading_importing_station: 'बूथ {i}/{n} आयात हो रहा है…',
+      queue_saved_locally: 'स्थानीय रूप से सहेजा गया — पुनः प्रयास…', queue_saved_locally_n: 'स्थानीय रूप से सहेजा गया — पुनः प्रयास… ({n})', queue_saved_offline: 'स्थानीय रूप से सहेजा गया (ऑफ़लाइन)', queue_demo_label: 'स्टेजिंग डेमो — लंबित चुनाव',
       timeago_s: '{n}से. पहले', timeago_m: '{n}मि. पहले', timeago_h: '{n}घ. पहले', timeago_d: '{n}दि. पहले',
       station_awaiting: 'परिणाम की प्रतीक्षा', station_col_name: 'बूथ', station_col_updated: 'अपडेट', station_badge_invalidated: 'अमान्य', station_badge_disputed: 'विवादित', station_badge_review: 'समीक्षा', station_badge_reports: '{n} रिपोर्ट', inline_save_btn: 'परिणाम सहेजें', inline_done_badge: 'गणना पूर्ण', inline_vote_label: '{name} के वोट', inline_vote_suffix: 'वोट',
       margin_needs_review: '⚠ समीक्षा आवश्यक', margin_stable_lead: '✓ स्थिर बढ़त', margin_lead_pct: 'बढ़त {lead}%', margin_uncertainty: 'अनिश्चितता ±{pct}%', margin_disagreement_note: 'असहमति या विवाद परिणाम को प्रभावित कर सकते हैं।',
@@ -474,12 +499,15 @@
       election_observer_title: 'परिणाम रिपोर्ट करें', election_observer_your_station: '(आपका बूथ)', election_observer_station_label: 'मतदान केंद्र', election_observer_total_label: 'कुल मतपत्र', election_observer_invalid_label: 'अमान्य / रिक्त', election_observer_submit_btn: 'परिणाम सबमिट/संशोधित करें',
       election_stations_title: 'बूथ', election_station_name_ph: 'बूथ का नाम', election_station_label_ph: 'लेबल / क्षेत्र', election_station_add_btn: 'जोड़ें', election_station_bulk_import: 'CSV से बल्क आयात', election_station_csv_desc: 'प्रति पंक्ति एक बूथ: नाम,लेबल', election_station_import_btn: 'सभी आयात करें', election_station_count: '{n} बूथ:', election_station_preview: '{n} बूथ आयात के लिए तैयार।',
       election_observers_title: 'पर्यवेक्षक', election_observer_addr_ph: 'पर्यवेक्षक वॉलेट (ut1…)', election_observer_all_stations: 'सभी बूथ', election_observer_authorize_btn: 'अधिकृत करें', election_observer_count: '{n} पर्यवेक्षक:',
+      election_candidates_title: 'उम्मीदवार', election_candidate_name_ph: 'उम्मीदवार का नाम', election_candidate_add_btn: 'जोड़ें', election_candidate_count: '{n} उम्मीदवार:', toast_candidate_added: 'उम्मीदवार जोड़ा गया ✓', loading_adding_candidate_post: 'उम्मीदवार जोड़ रहे हैं…',
+      election_avatar_upload_btn: 'फोटो अपलोड करें', election_avatar_uploading: 'अपलोड हो रहा है…', election_avatar_uploaded: 'फोटो अपलोड हुई ✓', election_avatar_replace: 'फोटो बदलें',
+      election_c1_upload_btn: 'C1 अपलोड करें', election_c1_uploading: 'अपलोड हो रहा है…', election_c1_uploaded: 'C1 फॉर्म अपलोड हुआ ✓', election_c1_replace: 'C1 फॉर्म बदलें',
+      election_closed_badge: 'बंद', election_close_btn: 'चुनाव बंद करें', election_close_confirm: 'यह चुनाव बंद करें? संरचनात्मक परिवर्तन (बूथ, उम्मीदवार, पर्यवेक्षक) स्थायी रूप से लॉक हो जाएंगे। परिणाम सबमिशन और विवाद समाधान खुले रहेंगे। यह on-chain दर्ज होता है और पूर्ववत नहीं किया जा सकता।', election_close_locked_note: 'यह चुनाव बंद हो गया है — संरचना लॉक है। परिणाम सबमिशन और विवाद समाधान खुले रहेंगे।', toast_election_closed: 'चुनाव बंद हुआ ✓', loading_closing_election: 'चुनाव बंद कर रहे हैं…',
       election_dispute_target_label: 'लक्षित परिणाम', election_dispute_no_results: 'अभी तक विवाद करने के लिए कोई रिपोर्ट नहीं।', election_dispute_reason_ph: 'विवाद का कारण',
       toast_stations_imported: '{n} बूथ आयात हुए ✓',
       disputes_filed_by: '{who} द्वारा दायर', disputes_has_evidence: 'साक्ष्य है', disputes_no_open: 'कोई खुला विवाद नहीं।', disputes_status_upheld: 'स्वीकृत', disputes_status_rejected: 'अस्वीकृत', disputes_status_open: 'खुला', disputes_workspace_note: 'अधिकृत पर्यवेक्षक और आयोजन वॉलेट चुनाव कार्यक्षेत्र से विवाद दायर और हल कर सकते हैं।',
       orgs_no_active: 'अभी तक कोई सक्रिय संगठन दिखाई नहीं दे रहा।',
       evidence_sha256_desc: 'प्रत्येक परिणाम में उसकी मतगणना पत्र का SHA-256 हैश हो सकता है। मूल फ़ाइल नीचे डालें यह साबित करने के लिए कि यह श्रृंखला पर रिपोर्ट किए गए से मेल खाती है — फ़ाइल आपके डिवाइस से नहीं जाती।', evidence_verifying_label: 'सत्यापन:', evidence_verifying_default: 'नीचे एक परिणाम चुनें, या कोई भी हैश', evidence_pick_target: 'तुलना के लिए एक परिणाम चुनें।', evidence_match_yes: '✓ मेल खाता है — यह फ़ाइल बिल्कुल वैसी है जो रिपोर्ट की गई थी।', evidence_match_no: '✗ मेल नहीं खाता — यह फ़ाइल दर्ज साक्ष्य से भिन्न है।',
-      admin_scope_required: 'प्लेटफ़ॉर्म एडमिन स्कोप आवश्यक। एडमिन वॉलेट कनेक्ट करें।', admin_stat_orgs: 'संगठन', admin_stat_active_orgs: 'सक्रिय संगठन', admin_stat_elections: 'चुनाव', admin_stat_org_fee: 'संगठन शुल्क', admin_all_orgs: 'सभी संगठन', admin_badge_waived: 'माफ़', admin_paid: 'दिया {amount}',
       select_election_prompt: 'चुनाव चुनें।',
       tab_profile: 'मेरी प्रोफ़ाइल',
       label_bio: 'परिचय',
@@ -500,6 +528,7 @@
       action_refresh: 'ताज़ा करें',
       toast_refreshed: 'ताज़ा किया गया ✓',
       tab_heatmap: 'हीटमैप', heatmap_heading: 'क्षेत्रवार मतदाता भागीदारी', heatmap_select_election: 'क्षेत्र के अनुसार भागीदारी देखने के लिए चुनाव चुनें।', heatmap_no_regions: 'कोई क्षेत्र परिभाषित नहीं है। चुनाव कार्यक्षेत्र में प्रत्येक बूथ में लेबल जोड़ें।', heatmap_col_region: 'क्षेत्र', heatmap_col_stations: 'बूथ', heatmap_col_ballots: 'डाले गए मत', heatmap_col_valid_rate: 'वैध मत', heatmap_col_invalid: 'रिक्त / अमान्य', heatmap_unlabeled: '(कोई क्षेत्र नहीं)', heatmap_summary: '{total} में से {reported} बूथों ने रिपोर्ट किया · {regions} क्षेत्र',
+      c1kwk_panel_title: 'C1-KWK — मतपत्र गणना प्रमाणपत्र', c1kwk_download_btn: 'हस्ताक्षरित PDF डाउनलोड करें', c1kwk_generating: 'तैयार हो रहा है…', c1kwk_wallet_required: 'फ़ॉर्म पर हस्ताक्षर करने के लिए एक लिंक्ड वॉलेट आवश्यक है।', c1kwk_province: 'प्रांत', c1kwk_regency: 'जिला / शहर', c1kwk_subdistrict: 'उपखंड', c1kwk_village: 'गाँव / केलुराहान', c1kwk_tps_number: 'TPS नं.', c1kwk_valid_votes: 'वैध मत (उम्मीदवार अनुसार)', c1kwk_invalid_votes: 'अमान्य / रिक्त मत', c1kwk_total_votes: 'कुल मत (स्वचालित)', c1kwk_dpt: 'DPT (पंजीकृत मतदाता)', c1kwk_verify_title: 'C1-KWK हस्ताक्षर सत्यापित करें', c1kwk_sig_valid: '✓ हस्ताक्षर मान्य — दस्तावेज़ अपरिवर्तित है।', c1kwk_sig_invalid: '✗ हस्ताक्षर अमान्य — दस्तावेज़ बदला गया हो सकता है।',
     },
     ar: {
       loading_connecting: 'جارٍ الاتصال بـ Usernode…', loading_verifying: 'جارٍ التحقق من جلستك…', loading_restoring: 'جارٍ استعادة بياناتك…',
@@ -519,17 +548,17 @@
       readonly_note: 'اسم المستخدم والمحفظة يُداران بواسطة Usernode ويظهران للقراءة فقط. يمكنك تغيير الاسم المعروض فقط.',
       no_wallet_note: 'اربط محفظة Usernode لتعيين اسم معروض. سيظل اختيار اللغة محفوظًا على هذا الجهاز.',
       not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
-      tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات', tab_admin: 'الإدارة',
+      tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات',
       method_latest: 'آخر تقرير', method_first: 'أول تقرير', method_consensus: 'إجماع', method_median: 'الوسيط', method_verified: 'الموثّق فقط',
       dashboard_heading: 'لوحة التحكم', dashboard_select_election: 'اختر انتخابات لعرض النتائج الحية.', dashboard_export_csv: 'تصدير CSV', dashboard_export_json: 'تصدير JSON', dashboard_by_station: 'حسب مركز الاقتراع', dashboard_no_stations: 'لا يوجد مرشحون.', dashboard_last_submission: 'آخر تقرير', dashboard_auto_refreshing: 'تحديث تلقائي', dashboard_no_submissions: 'لا توجد تقارير بعد', dashboard_stations_reported: 'مراكز أبلغت', dashboard_votes: 'أصوات',
       elections_heading: 'الانتخابات', elections_new: '+ انتخابات جديدة', elections_no_elections: 'لا توجد انتخابات بعد.', elections_open_workspace: 'فتح مساحة العمل →',
       orgs_heading: 'المنظمات', orgs_active_orgs: 'المنظمات النشطة', orgs_register_heading: 'سجّل منظمتك', orgs_register_desc: 'يتطلب التسجيل دفع رسوم لمرة واحدة قدرها {fee} إلى خزينة المنصة. حتى التأكيد، ستبقى انتخاباتك مخفية.', orgs_register_button: 'التسجيل ودفع الرسوم', orgs_pay_fee: 'دفع رسوم التسجيل', orgs_name_placeholder: 'اسم المنظمة', orgs_jur_placeholder: 'نطاق الاختصاص (اختياري)', orgs_active_badge: 'نشطة', orgs_pending_badge: 'قيد الانتظار — لم تُدفع الرسوم', orgs_connect_first: 'وصّل محفظتك أولاً.', orgs_manage_elections: 'انتخاباتك نشطة. أدِرها من تبويب الانتخابات.',
       evidence_heading: 'الأدلة', evidence_upload_label: 'دليل (ورقة الفرز) — يُحسب الهاش محلياً، لا يُرفع الملف', evidence_submit: 'تحقق من ملف مقابل هذا', evidence_no_evidence: 'لم يُسجَّل أي هاش دليل لهذه الانتخابات.',
       disputes_heading: 'النزاعات', disputes_no_disputes: 'لم تُقدَّم أي نزاعات لهذه الانتخابات.', disputes_file: 'تقديم نزاع', disputes_resolve: 'حل النزاعات', disputes_uphold: 'قبول', disputes_reject: 'رفض',
-      admin_heading: 'إدارة المنصة', admin_waive_fee: 'الإعفاء من الرسوم',
       toast_election_published: 'تم نشر الانتخابات ✓', toast_submit_result: 'تم تقديم النتيجة ✓', toast_station_added: 'تمت إضافة مركز الاقتراع ✓', toast_observer_authorized: 'تم توثيق المراقب ✓', toast_dispute_filed: 'تم تقديم النزاع ✓', toast_dispute_upheld: 'تم قبول النزاع ✓', toast_dispute_rejected: 'تم رفض النزاع ✓', toast_org_registered: 'تم تسجيل المنظمة ✓', toast_fee_paid: 'تم دفع الرسوم ✓', toast_fee_waived: 'تم الإعفاء من الرسوم ✓', toast_failed: 'فشل:', toast_wallet_unavailable: 'جسر المحفظة غير متاح — افتحه داخل Usernode.', toast_no_wallet: 'لا يوجد عنوان محفظة مرتبط.', toast_add_candidate: 'أضف اسماً ومرشحاً واحداً على الأقل.', toast_nothing_to_import: 'لا شيء للاستيراد', toast_enter_reason: 'أدخل سبباً', toast_enter_org_name: 'أدخل اسم المنظمة', toast_enter_station_name: 'أدخل اسم مركز الاقتراع', toast_enter_observer_addr: 'أدخل عنوان المراقب',
       loading_submitting: 'جارٍ تقديم النتيجة…', loading_adding_station: 'جارٍ إضافة مركز الاقتراع…', loading_authorizing: 'جارٍ توثيق المراقب…', loading_filing: 'جارٍ تقديم النزاع…', loading_resolving: 'جارٍ الحل…', loading_registering: 'جارٍ التسجيل ودفع الرسوم…', loading_paying: 'جارٍ دفع الرسوم…', loading_waiving: 'جارٍ الإعفاء من الرسوم…', loading_importing: 'جارٍ استيراد مركز الاقتراع',
       loading_creating_election: 'جارٍ إنشاء الانتخابات…', loading_adding_candidate: 'جارٍ إضافة المرشح {i}/{n}…', loading_importing_station: 'جارٍ استيراد المركز {i}/{n}…',
+      queue_saved_locally: 'تم الحفظ محليًا — إعادة المحاولة…', queue_saved_locally_n: 'تم الحفظ محليًا — إعادة المحاولة… ({n})', queue_saved_offline: 'تم الحفظ محليًا (غير متصل)', queue_demo_label: 'عرض تجريبي — انتخابات معلّقة',
       timeago_s: 'منذ {n} ث', timeago_m: 'منذ {n} د', timeago_h: 'منذ {n} س', timeago_d: 'منذ {n} ي',
       station_awaiting: 'في انتظار النتيجة', station_col_name: 'المركز', station_col_updated: 'تم التحديث', station_badge_invalidated: 'ملغى', station_badge_disputed: 'متنازع عليه', station_badge_review: 'قيد المراجعة', station_badge_reports: '{n} تقارير', inline_save_btn: 'حفظ النتيجة', inline_done_badge: 'تم العد', inline_vote_label: 'أصوات {name}', inline_vote_suffix: 'صوت',
       margin_needs_review: '⚠ يحتاج مراجعة', margin_stable_lead: '✓ تقدم مستقر', margin_lead_pct: 'هامش التقدم {lead}%', margin_uncertainty: 'حالة عدم اليقين ±{pct}%', margin_disagreement_note: 'الخلافات أو النزاعات قد تؤثر على النتيجة.',
@@ -540,12 +569,15 @@
       election_observer_title: 'تسجيل النتيجة', election_observer_your_station: '(مركزك)', election_observer_station_label: 'مركز الاقتراع', election_observer_total_label: 'إجمالي الأوراق', election_observer_invalid_label: 'غير صالحة / فارغة', election_observer_submit_btn: 'إرسال / تعديل النتيجة',
       election_stations_title: 'المراكز', election_station_name_ph: 'اسم المركز', election_station_label_ph: 'التسمية / المنطقة', election_station_add_btn: 'إضافة', election_station_bulk_import: 'استيراد مجمّع من CSV', election_station_csv_desc: 'مركز واحد في كل سطر: الاسم، التسمية', election_station_import_btn: 'استيراد الكل', election_station_count: '{n} مراكز:', election_station_preview: '{n} مركز جاهز للاستيراد.',
       election_observers_title: 'المراقبون', election_observer_addr_ph: 'محفظة المراقب (ut1…)', election_observer_all_stations: 'جميع المراكز', election_observer_authorize_btn: 'تفويض', election_observer_count: '{n} مراقب(ون):',
+      election_candidates_title: 'المرشحون', election_candidate_name_ph: 'اسم المرشح', election_candidate_add_btn: 'إضافة', election_candidate_count: '{n} مرشح(ون):', toast_candidate_added: 'تمت إضافة المرشح ✓', loading_adding_candidate_post: 'جارٍ إضافة المرشح…',
+      election_avatar_upload_btn: 'رفع صورة', election_avatar_uploading: 'جارٍ الرفع…', election_avatar_uploaded: 'تم رفع الصورة ✓', election_avatar_replace: 'تغيير الصورة',
+      election_c1_upload_btn: 'رفع نموذج C1', election_c1_uploading: 'جارٍ الرفع…', election_c1_uploaded: 'تم رفع نموذج C1 ✓', election_c1_replace: 'تغيير نموذج C1',
+      election_closed_badge: 'مغلقة', election_close_btn: 'إغلاق الانتخاب', election_close_confirm: 'إغلاق هذا الانتخاب؟ سيتم قفل التغييرات الهيكلية (المراكز، المرشحون، المراقبون) بشكل دائم. يبقى تقديم النتائج وحل النزاعات مفتوحاً. يُسجَّل هذا على السلسلة ولا يمكن التراجع عنه.', election_close_locked_note: 'هذا الانتخاب مغلق — الهيكل مقفل. يبقى تقديم النتائج وحل النزاعات مفتوحاً.', toast_election_closed: 'تم إغلاق الانتخاب ✓', loading_closing_election: 'جارٍ إغلاق الانتخاب…',
       election_dispute_target_label: 'النتيجة المستهدفة', election_dispute_no_results: 'لا توجد نتائج مُبلَّغ عنها للطعن بها بعد.', election_dispute_reason_ph: 'سبب النزاع',
       toast_stations_imported: '{n} مراكز مستوردة ✓',
       disputes_filed_by: 'قدّمه {who}', disputes_has_evidence: 'يوجد دليل', disputes_no_open: 'لا توجد نزاعات مفتوحة.', disputes_status_upheld: 'مقبول', disputes_status_rejected: 'مرفوض', disputes_status_open: 'مفتوح', disputes_workspace_note: 'يمكن للمراقبين المفوضين ومحفظة المنظمة تقديم النزاعات وحلها من مساحة عمل الانتخابات.',
       orgs_no_active: 'لا توجد منظمات نشطة مرئية بعد.',
       evidence_sha256_desc: 'كل نتيجة قد تحمل هاش SHA-256 لورقة الفرز الخاصة بها. أسقط الملف الأصلي أدناه لإثبات مطابقته لما أُبلغ عنه على السلسلة — الملف لا يغادر جهازك.', evidence_verifying_label: 'جارٍ التحقق من:', evidence_verifying_default: 'حدد نتيجة أدناه، أو أي هاش', evidence_pick_target: 'اختر نتيجة للمقارنة.', evidence_match_yes: '✓ مطابق — هذا الملف هو بالضبط ما أُبلغ عنه.', evidence_match_no: '✗ غير مطابق — هذا الملف يختلف عن الدليل المسجل.',
-      admin_scope_required: 'يلزم صلاحية مشرف المنصة. وصّل محفظة مشرف.', admin_stat_orgs: 'المنظمات', admin_stat_active_orgs: 'المنظمات النشطة', admin_stat_elections: 'الانتخابات', admin_stat_org_fee: 'رسوم المنظمة', admin_all_orgs: 'جميع المنظمات', admin_badge_waived: 'معفى', admin_paid: 'دفع {amount}',
       select_election_prompt: 'اختر انتخابات.',
       tab_profile: 'ملفي الشخصي',
       label_bio: 'نبذة',
@@ -566,6 +598,7 @@
       action_refresh: 'تحديث',
       toast_refreshed: 'تم التحديث ✓',
       tab_heatmap: 'خريطة حرارية', heatmap_heading: 'مشاركة الناخبين حسب المنطقة', heatmap_select_election: 'اختر انتخابات لعرض المشاركة حسب المنطقة.', heatmap_no_regions: 'لا توجد مناطق محددة. أضف تسميات للمراكز في مساحة عمل الانتخابات.', heatmap_col_region: 'المنطقة', heatmap_col_stations: 'المراكز', heatmap_col_ballots: 'الأوراق المُدلى بها', heatmap_col_valid_rate: 'الأوراق الصالحة', heatmap_col_invalid: 'فارغة / غير صالحة', heatmap_unlabeled: '(بدون منطقة)', heatmap_summary: '{reported} من {total} مركز أبلغ · {regions} منطقة',
+      c1kwk_panel_title: 'C1-KWK — شهادة فرز الأصوات', c1kwk_download_btn: 'تنزيل PDF الموقَّع', c1kwk_generating: 'جارٍ الإنشاء…', c1kwk_wallet_required: 'يلزم وجود محفظة مرتبطة لتوقيع النموذج.', c1kwk_province: 'المحافظة', c1kwk_regency: 'الريجنسي / المدينة', c1kwk_subdistrict: 'الحي الفرعي', c1kwk_village: 'القرية / كيلوراهان', c1kwk_tps_number: 'رقم TPS', c1kwk_valid_votes: 'الأصوات الصالحة (حسب المرشح)', c1kwk_invalid_votes: 'الأصوات غير الصالحة / الفارغة', c1kwk_total_votes: 'مجموع الأصوات (تلقائي)', c1kwk_dpt: 'DPT (الناخبون المسجّلون)', c1kwk_verify_title: 'التحقق من توقيع C1-KWK', c1kwk_sig_valid: '✓ التوقيع صالح — لم يُعدَّل المستند.', c1kwk_sig_invalid: '✗ التوقيع غير صالح — ربما تم تعديل المستند.',
     },
     fr: {
       loading_connecting: 'Connexion à Usernode…', loading_verifying: 'Vérification de votre session…', loading_restoring: 'Restauration de vos données…',
@@ -585,17 +618,17 @@
       readonly_note: "Votre nom d'utilisateur et votre portefeuille sont gérés par Usernode et affichés en lecture seule. Seul votre nom d'affichage est modifiable.",
       no_wallet_note: "Liez un portefeuille Usernode pour définir un nom d'affichage. Votre choix de langue reste enregistré sur cet appareil.",
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
-      tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations', tab_admin: 'Admin',
+      tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations',
       method_latest: 'Dernier envoi', method_first: 'Premier envoi', method_consensus: 'Consensus', method_median: 'Médiane', method_verified: 'Vérifiés seulement',
       dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
       elections_heading: 'Élections', elections_new: '+ Nouvelle élection', elections_no_elections: "Pas encore d'élections.", elections_open_workspace: "Ouvrir l'espace de travail →",
       orgs_heading: 'Organisations', orgs_active_orgs: 'Organisations actives', orgs_register_heading: 'Enregistrez votre organisation', orgs_register_desc: "L'enregistrement nécessite le paiement d'une cotisation unique de {fee} à la trésorerie de la plateforme. Jusqu'à confirmation, vos élections restent masquées.", orgs_register_button: "S'inscrire et payer", orgs_pay_fee: "Payer la cotisation d'inscription", orgs_name_placeholder: "Nom de l'organisation", orgs_jur_placeholder: 'Juridiction (facultatif)', orgs_active_badge: 'Active', orgs_pending_badge: 'En attente — cotisation non payée', orgs_connect_first: 'Connectez votre portefeuille en premier.', orgs_manage_elections: 'Vos élections sont en ligne. Gérez-les dans Élections.',
       evidence_heading: 'Preuves', evidence_upload_label: "Preuve (feuille de dépouillement) — hachée localement, le fichier n'est pas envoyé", evidence_submit: 'Vérifier un fichier contre ceci', evidence_no_evidence: 'Aucune empreinte de preuve enregistrée pour cette élection.',
       disputes_heading: 'Contestations', disputes_no_disputes: 'Aucune contestation déposée pour cette élection.', disputes_file: 'Déposer une contestation', disputes_resolve: 'Résoudre les contestations', disputes_uphold: 'Accepter', disputes_reject: 'Rejeter',
-      admin_heading: 'Administration de la plateforme', admin_waive_fee: 'Dispenser de cotisation',
       toast_election_published: 'Élection publiée ✓', toast_submit_result: 'Résultat soumis ✓', toast_station_added: 'Bureau ajouté ✓', toast_observer_authorized: 'Observateur autorisé ✓', toast_dispute_filed: 'Contestation déposée ✓', toast_dispute_upheld: 'Contestation acceptée ✓', toast_dispute_rejected: 'Contestation rejetée ✓', toast_org_registered: 'Organisation enregistrée ✓', toast_fee_paid: 'Cotisation payée ✓', toast_fee_waived: 'Cotisation dispensée ✓', toast_failed: 'Échec :', toast_wallet_unavailable: 'Pont de portefeuille indisponible — ouvrez dans Usernode.', toast_no_wallet: 'Aucune adresse de portefeuille liée.', toast_add_candidate: 'Ajoutez un nom et au moins un candidat.', toast_nothing_to_import: 'Rien à importer', toast_enter_reason: 'Saisissez une raison', toast_enter_org_name: "Saisissez le nom de l'organisation", toast_enter_station_name: 'Saisissez le nom du bureau', toast_enter_observer_addr: "Saisissez l'adresse de l'observateur",
       loading_submitting: 'Envoi du résultat…', loading_adding_station: 'Ajout du bureau…', loading_authorizing: "Autorisation de l'observateur…", loading_filing: 'Dépôt de la contestation…', loading_resolving: 'Résolution en cours…', loading_registering: "Inscription et paiement de la cotisation…", loading_paying: 'Paiement de la cotisation…', loading_waiving: 'Dispense de cotisation…', loading_importing: 'Importation du bureau',
       loading_creating_election: "Création de l'élection…", loading_adding_candidate: 'Ajout du candidat {i}/{n}…', loading_importing_station: 'Importation du bureau {i}/{n}…',
+      queue_saved_locally: 'Enregistré localement — nouvelle tentative…', queue_saved_locally_n: 'Enregistré localement — nouvelle tentative… ({n})', queue_saved_offline: 'Enregistré localement (hors ligne)', queue_demo_label: 'Démo de préproduction — élection en attente',
       loading_confirming: 'Confirmation sur la chaîne…', confirming_onchain: 'Confirmation sur la chaîne…', confirming_generic: "Confirmation de l'envoi", pending_demo_label: 'Démo de préproduction — envoi en attente', notice_confirm_timeout: "Envoyé — confirmation en cours sur le réseau. Apparaîtra une fois inclus dans la chaîne.",
       timeago_s: 'il y a {n}s', timeago_m: 'il y a {n}min', timeago_h: 'il y a {n}h', timeago_d: 'il y a {n}j',
       station_awaiting: 'En attente du résultat', station_col_name: 'Bureau', station_col_updated: 'Mis à jour', station_badge_invalidated: 'invalidé', station_badge_disputed: 'contesté', station_badge_review: 'révision', station_badge_reports: '{n} rapports', inline_save_btn: 'Enregistrer le résultat', inline_done_badge: 'Décompté', inline_vote_label: 'Voix pour {name}', inline_vote_suffix: 'voix',
@@ -607,12 +640,15 @@
       election_observer_title: 'Soumettre un résultat', election_observer_your_station: '(votre bureau)', election_observer_station_label: 'Bureau de vote', election_observer_total_label: 'Total bulletins', election_observer_invalid_label: 'Nuls / blancs', election_observer_submit_btn: 'Soumettre / réviser le résultat',
       election_stations_title: 'Bureaux', election_station_name_ph: 'Nom du bureau', election_station_label_ph: 'Étiquette / région', election_station_add_btn: 'Ajouter', election_station_bulk_import: 'Import groupé depuis CSV', election_station_csv_desc: 'Un bureau par ligne : nom,étiquette', election_station_import_btn: 'Tout importer', election_station_count: '{n} bureaux :', election_station_preview: '{n} bureau(x) prêt(s) à importer.',
       election_observers_title: 'Observateurs', election_observer_addr_ph: 'Portefeuille observateur (ut1…)', election_observer_all_stations: 'Tous les bureaux', election_observer_authorize_btn: 'Autoriser', election_observer_count: '{n} observateur(s) :',
+      election_candidates_title: 'Candidats', election_candidate_name_ph: 'Nom du candidat', election_candidate_add_btn: 'Ajouter', election_candidate_count: '{n} candidat(s) :', toast_candidate_added: 'Candidat ajouté ✓', loading_adding_candidate_post: 'Ajout du candidat…',
+      election_avatar_upload_btn: 'Téléverser photo', election_avatar_uploading: 'Téléversement…', election_avatar_uploaded: 'Photo téléversée ✓', election_avatar_replace: 'Remplacer la photo',
+      election_c1_upload_btn: 'Téléverser C1', election_c1_uploading: 'Téléversement…', election_c1_uploaded: 'Formulaire C1 téléversé ✓', election_c1_replace: 'Remplacer le formulaire C1',
+      election_closed_badge: 'Clôturée', election_close_btn: "Clôturer l'élection", election_close_confirm: "Clôturer cette élection ? Les modifications structurelles (bureaux, candidats, observateurs) seront définitivement verrouillées. La soumission des résultats et la résolution des litiges restent ouvertes. Cette action est enregistrée sur la chaîne et ne peut être annulée.", election_close_locked_note: 'Cette élection est clôturée — la structure est verrouillée. La soumission des résultats et la résolution des litiges restent ouvertes.', toast_election_closed: 'Élection clôturée ✓', loading_closing_election: "Clôture de l'élection…",
       election_dispute_target_label: 'Résultat ciblé', election_dispute_no_results: "Aucun résultat déclaré à contester pour l'instant.", election_dispute_reason_ph: 'Raison de la contestation',
       toast_stations_imported: '{n} bureaux importés ✓',
       disputes_filed_by: 'déposé par {who}', disputes_has_evidence: 'avec preuve', disputes_no_open: 'Aucune contestation ouverte.', disputes_status_upheld: 'accepté', disputes_status_rejected: 'rejeté', disputes_status_open: 'ouvert', disputes_workspace_note: "Les observateurs autorisés et le portefeuille organisateur peuvent déposer et résoudre des contestations depuis l'espace de travail de l'élection.",
       orgs_no_active: "Aucune organisation active visible pour l'instant.",
       evidence_sha256_desc: "Chaque résultat peut porter un hachage SHA-256 de sa feuille de dépouillement. Déposez le fichier original ci-dessous pour prouver qu'il correspond à ce qui a été déclaré sur la chaîne — le fichier ne quitte pas votre appareil.", evidence_verifying_label: 'Vérification de :', evidence_verifying_default: 'sélectionnez un résultat ci-dessous ou entrez un hachage', evidence_pick_target: 'Choisissez un résultat à comparer.', evidence_match_yes: '✓ Correspondance — ce fichier est exactement ce qui a été déclaré.', evidence_match_no: '✗ Non-correspondance — ce fichier diffère de la preuve enregistrée.',
-      admin_scope_required: "Portée admin de la plateforme requise. Connectez un portefeuille admin.", admin_stat_orgs: 'Organisations', admin_stat_active_orgs: 'Orgs actives', admin_stat_elections: 'Élections', admin_stat_org_fee: 'Cotisation org', admin_all_orgs: 'Toutes les organisations', admin_badge_waived: 'dispensé', admin_paid: 'payé {amount}',
       select_election_prompt: 'Sélectionnez une élection.',
       tab_profile: 'Mon profil',
       label_bio: 'Biographie',
@@ -633,6 +669,7 @@
       action_refresh: 'Actualiser',
       toast_refreshed: 'Actualisé ✓',
       tab_heatmap: 'Carte thermique', heatmap_heading: 'Participation par région', heatmap_select_election: 'Sélectionnez une élection pour voir la participation par région.', heatmap_no_regions: "Aucune région définie. Ajoutez une étiquette à chaque bureau dans l'espace de travail de l'élection.", heatmap_col_region: 'Région', heatmap_col_stations: 'Bureaux', heatmap_col_ballots: 'Bulletins exprimés', heatmap_col_valid_rate: 'Bulletins valides', heatmap_col_invalid: 'Blancs / nuls', heatmap_unlabeled: '(Sans région)', heatmap_summary: '{reported} sur {total} bureaux déclarés · {regions} régions',
+      c1kwk_panel_title: 'C1-KWK — Certificat de dépouillement des votes', c1kwk_download_btn: 'Télécharger le PDF signé', c1kwk_generating: 'Génération en cours…', c1kwk_wallet_required: 'Un portefeuille lié est requis pour signer le formulaire.', c1kwk_province: 'Province', c1kwk_regency: 'Régence / Ville', c1kwk_subdistrict: 'Sous-district', c1kwk_village: 'Village / Kelurahan', c1kwk_tps_number: 'N° TPS', c1kwk_valid_votes: 'Votes valides (par candidat)', c1kwk_invalid_votes: 'Votes invalides / blancs', c1kwk_total_votes: 'Total des votes (automatique)', c1kwk_dpt: 'DPT (Électeurs inscrits)', c1kwk_verify_title: 'Vérifier la signature C1-KWK', c1kwk_sig_valid: "✓ Signature valide — le document n'a pas été altéré.", c1kwk_sig_invalid: '✗ Signature invalide — le document a peut-être été altéré.',
     },
   };
 
@@ -833,12 +870,13 @@
     res: (eid, sid, votes, tot, inv, ev) => { const m = { app: APP, v: V, t: 'res', eid, sid: Number(sid), votes: {} }; for (const k of Object.keys(votes || {})) { const n = pint(votes[k]); if (n != null) m.votes[String(Number(k))] = n; } const t = pint(tot), i = pint(inv); if (t != null) m.tot = t; if (i != null) m.inv = i; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
     disp: (eid, target, reason, ev) => { const m = { app: APP, v: V, t: 'disp', eid, target, reason: clamp(reason, 200) }; if (isHash64(ev)) m.ev = ev.toLowerCase(); return m; },
     dres: (eid, disp, verdict) => ({ app: APP, v: V, t: 'dres', eid, disp, verdict }),
-    adm: (act, org) => ({ app: APP, v: V, t: 'adm', act, org }),
     // Organization management (mirror lib/memo.js).
     omem: (org, addr, role) => ({ app: APP, v: V, t: 'omem', org, addr, role: ['admin', 'mod', 'member'].indexOf(role) !== -1 ? role : 'member' }),
     orem: (org, addr) => ({ app: APP, v: V, t: 'orem', org, addr }),
     ovis: (org, vis) => ({ app: APP, v: V, t: 'ovis', org, vis: vis === 'private' ? 'private' : 'public' }),
     odel: (org) => ({ app: APP, v: V, t: 'odel', org }),
+    ecl: (eid) => ({ app: APP, v: V, t: 'ecl', eid: String(eid) }),
+    oedit: (org, name, jur) => ({ app: APP, v: V, t: 'oedit', org, name: String(name == null ? '' : name).slice(0, 120), jur: String(jur == null ? '' : jur).slice(0, 80) }),
   };
 
   // ───────────────────────── Helpers ─────────────────────────
@@ -965,8 +1003,6 @@
         return m.eid && typeof m.target === 'string' && m.target.length > 0;
       case 'dres':
         return m.eid && m.disp && (m.verdict === 'uphold' || m.verdict === 'reject');
-      case 'adm':
-        return typeof m.act === 'string' && m.act.length > 0;
       case 'omem':
         return typeof m.org === 'string' && m.org.length > 0 && typeof m.addr === 'string' && m.addr.length > 0
           && (m.role === 'admin' || m.role === 'mod' || m.role === 'member');
@@ -976,6 +1012,10 @@
         return typeof m.org === 'string' && m.org.length > 0 && (m.vis === 'public' || m.vis === 'private');
       case 'odel':
         return typeof m.org === 'string' && m.org.length > 0;
+      case 'ecl':
+        return typeof m.eid === 'string' && m.eid.length > 0;
+      case 'oedit':
+        return typeof m.org === 'string' && m.org.length > 0 && typeof m.name === 'string' && m.name.trim().length > 0;
       default:
         return false;
     }
@@ -1052,6 +1092,232 @@
     const n = App.pending.length;
     el.querySelector('#qc-pending-msg').textContent = t('confirming_onchain') + (n > 1 ? ' (' + n + ')' : '');
     el.style.display = 'flex';
+  }
+
+  // ── Local-first election-creation queue ─────────────────────────────────────
+  // A failed-or-unconfirmed "+ New election" creation is held in localStorage
+  // and retried automatically while the backend is reachable. It is reported as
+  // a real success ONLY when the server confirms the election exists (its eid in
+  // /__quickcount/state). Pure helpers (entry shape, isConfirmed, backoff,
+  // (de)serialization) live in window.QCElectionQueue (public/election-queue.js);
+  // the DOM / timer / fetch wiring is here.
+  const ELQ = window.QCElectionQueue;
+  App.elq = App.elq || [];
+  let _elqRunning = false;
+
+  function elqKey() {
+    const id = (App.user && App.user.username) || App.wallet.address || 'anon';
+    return 'qc_elections_queue::' + id;
+  }
+  function persistElq() {
+    try { localStorage.setItem(elqKey(), ELQ.serialize(App.elq || [])); } catch (_) {}
+  }
+  function renderElq() {
+    let el = document.getElementById('qc-localq');
+    const badge = document.getElementById('qc-offline-badge');
+    const hideBadge = () => { if (badge) { badge.classList.remove('flex'); badge.classList.add('hidden'); } };
+    if (!App.elq || !App.elq.length) { if (el) el.style.display = 'none'; hideBadge(); return; }
+    // Offline (every queued entry has exhausted its retries) is a persistent
+    // state, so it renders as a small inline badge in the header status cluster
+    // rather than a floating pill that overlaps the navigation tabs. The active
+    // "Saved locally — retrying…" state keeps the transient floating pill.
+    if (ELQ.allExhausted(App.elq)) {
+      if (el) el.style.display = 'none';
+      if (badge) {
+        const m = badge.querySelector('#qc-offline-badge-msg');
+        if (m) m.textContent = ELQ.summaryLabel(App.elq, t);
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+      }
+      return;
+    }
+    hideBadge();
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'qc-localq';
+      // Sits just below the muted "Confirming on-chain…" pill, with a distinct
+      // indigo accent so "Saved locally — retrying…" reads differently.
+      el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:3rem;z-index:54;display:flex;'
+        + 'align-items:center;gap:.5rem;padding:.45rem .8rem;border-radius:999px;font-family:system-ui;'
+        + 'font-size:.8rem;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.18)';
+      const dot = document.createElement('span');
+      dot.id = 'qc-localq-dot';
+      dot.style.cssText = 'width:.6rem;height:.6rem;border-radius:50%;background:#6366f1;animation:qcspin 1s linear infinite';
+      const msg = document.createElement('span'); msg.id = 'qc-localq-msg';
+      el.appendChild(dot); el.appendChild(msg);
+      document.body.appendChild(el);
+    }
+    // This floating pill now renders ONLY the active "Saved locally — retrying…"
+    // state (the offline/exhausted state returned early above as an inline header
+    // badge), so the dot always spins.
+    const dot = el.querySelector('#qc-localq-dot');
+    if (dot) {
+      dot.style.background = '#6366f1';
+      dot.style.animation = 'qcspin 1s linear infinite';
+    }
+    const dark = document.documentElement.classList.contains('dark');
+    el.style.background = dark ? '#1e293b' : '#eef2ff';
+    el.style.color = dark ? '#c7d2fe' : '#3730a3';
+    el.style.border = '1px solid ' + (dark ? '#334155' : '#c7d2fe');
+    el.querySelector('#qc-localq-msg').textContent = ELQ.summaryLabel(App.elq, t);
+    el.style.display = 'flex';
+  }
+  function enqueueElection(entry) {
+    App.elq.push(entry);
+    persistElq();
+    renderElq();
+    kickElq();
+  }
+  function removeElq(id) {
+    App.elq = App.elq.filter((e) => e.id !== id);
+    persistElq();
+    renderElq();
+  }
+  function elqClassify(e) {
+    return (window.QCBridgeClassify && window.QCBridgeClassify.classifyBridgeError)
+      ? (e && e.qcKind ? e.qcKind : window.QCBridgeClassify.classifyBridgeError(e)) : 'unknown';
+  }
+  // The tx-step list for an entry — mirrors createElection's old steps. Step 0
+  // publishes the election; each later step adds one candidate keyed off the
+  // election id (entry.eid === the create tx id once broadcast).
+  function elqSteps(entry) {
+    const me = App.wallet.address;
+    const steps = [{ loading: t('loading_creating_election'), build: () => ({ to: me, amount: 0, memo: QC.el(entry.name), require: 'No election tx id' }) }];
+    (entry.candidates || []).forEach((c, idx) => steps.push({
+      loading: () => t('loading_adding_candidate').replace('{i}', idx + 1).replace('{n}', entry.candidates.length),
+      build: (results) => ({ to: me, amount: 0, memo: QC.cand(results[0] || entry.eid, idx + 1, c) }),
+    }));
+    return steps;
+  }
+  // Run an entry's steps, RESUMING from entry.sent so a step that already landed
+  // is never re-sent (the create step is non-idempotent — this is the
+  // no-double-publish guarantee). Records the eid the moment step 0 broadcasts.
+  // Throws on a send/confirm failure so attemptElq can classify and re-schedule.
+  async function runQueuedSteps(entry) {
+    const steps = elqSteps(entry);
+    const results = Array.isArray(entry.sent) ? entry.sent.slice() : [];
+    for (let i = results.length; i < steps.length; i++) {
+      const spec = steps[i].build(results);
+      const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+      if (spec.require && !r) throw new Error(spec.require);
+      results[i] = r;
+      entry.sent = results.slice();
+      if (i === 0 && r) { ELQ.markBroadcast(entry, r); }
+      persistElq();
+      if (r) {
+        const pid = addPending(typeof steps[i].loading === 'string' ? steps[i].loading : null, { txId: r, to: spec.to });
+        try { await confirmTx(r, { to: spec.to }); } finally { removePending(pid); }
+      }
+    }
+    return results;
+  }
+  // One persistence attempt for a single entry. Returns the verdict that drives
+  // the queue: 'confirmed' (server has the election), 'terminal' (unrecoverable —
+  // drop it), or 'pending' (recoverable — keep and retry). The authoritative
+  // gate is ALWAYS the post-refresh isConfirmed check, never confirmTx's return.
+  async function attemptElq(entry) {
+    entry.attempts = (entry.attempts || 0) + 1;
+    persistElq();
+    let terminal = false;
+    try {
+      await runQueuedSteps(entry);
+    } catch (e) {
+      entry.lastError = (e && e.message) || String(e);
+      persistElq();
+      terminal = (elqClassify(e) === 'terminal');
+    }
+    // A 5xx from refresh/state is NOT success — treat it as "not confirmed yet".
+    try { await triggerRefresh(); } catch (_) { return terminal ? 'terminal' : 'pending'; }
+    if (ELQ.isConfirmed(entry, (App.state && App.state.elections) || [])) return 'confirmed';
+    return terminal ? 'terminal' : 'pending';
+  }
+  // Single recursive driver: process the head drivable entry to a verdict, then
+  // either remove it (confirmed/terminal) or back off and retry. Self-stops when
+  // the drivable queue empties or the device goes offline (an 'online' listener
+  // re-kicks). Demo entries are display-only and never driven; entries that have
+  // exhausted MAX_ATTEMPTS failures are parked offline and skipped too.
+  async function driveElq() {
+    if (_elqRunning) return;
+    _elqRunning = true;
+    try {
+      while (true) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) break;
+        const entry = (App.elq || []).find((e) => !e.demo && !e.offline);
+        if (!entry) break;
+        const verdict = await attemptElq(entry);
+        if (verdict === 'confirmed') {
+          removeElq(entry.id);
+          toast(t('toast_election_published'));
+          App.eid = entry.eid;
+          // Jump to the now-loadable workspace only when the organizer is still
+          // in the elections context (the just-created case). A background /
+          // reload-resumed confirmation must not yank them off another screen —
+          // just refresh in place so the new election shows up where relevant.
+          const route = currentRoute();
+          if (route.tab === 'elections') {
+            location.hash = '#/election/' + entry.eid;
+          } else {
+            await refresh();
+          }
+        } else if (verdict === 'terminal') {
+          removeElq(entry.id);
+          toast(t('toast_failed') + ' ' + (entry.lastError || ''), 'error');
+        } else if (ELQ.isExhausted(entry)) {
+          // Hit the retry cap (3 failed attempts) — park it offline and stop
+          // driving it. The pill settles to a static "Saved Locally (Offline)"
+          // badge with a non-spinning dot; the entry is kept (still saved
+          // locally) and re-armed on the next `online` event or reload.
+          entry.offline = true;
+          persistElq();
+          renderElq();
+          continue; // the find() above now skips this entry → next drivable / break
+        } else {
+          renderElq();
+          await new Promise((res) => setTimeout(res, ELQ.nextBackoff(entry.attempts)));
+        }
+      }
+    } finally {
+      _elqRunning = false;
+    }
+  }
+  function kickElq() {
+    if (!App.elq || !App.elq.some((e) => !e.demo && !e.offline)) return;
+    if (_elqRunning) return;
+    driveElq();
+  }
+  // Resume the queue on boot/connect: rehydrate from localStorage, render the
+  // pill, and (in staging) seed one obviously-fake display-only entry so the
+  // pill is reviewable on load without broadcasting anything. The seeded entry
+  // is parked offline (attempts at the cap) so reviewers see the static
+  // "Saved Locally (Offline)" badge — the state this change introduces. Demo
+  // entries are never driven, so it broadcasts nothing.
+  async function restoreElectionQueue() {
+    let saved = [];
+    try { saved = ELQ.deserialize(localStorage.getItem(elqKey()) || '[]'); } catch (_) { saved = []; }
+    App.elq = Array.isArray(saved) ? saved : [];
+    if (App.cfg && App.cfg.staging && !App.elq.some((e) => e.id === 'staging-demo-offline')) {
+      App.elq.push(ELQ.makeEntry(
+        { name: t('queue_demo_label'), candidates: ['Staging demo A', 'Staging demo B'] },
+        { id: 'staging-demo-offline', status: 'queued', demo: true, offline: true, attempts: ELQ.MAX_ATTEMPTS }
+      ));
+      persistElq();
+    }
+    renderElq();
+    kickElq();
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    // Regaining connectivity is the natural reset point: clear the offline cap
+    // and attempt counter on real (non-demo) parked entries so the queue retries
+    // a clean run, then re-kick. (A pure server 5xx while navigator stays online
+    // does NOT trip this — that's intended, so the spinner can't run forever.)
+    window.addEventListener('online', function () {
+      let changed = false;
+      (App.elq || []).forEach(function (e) {
+        if (!e.demo && (e.offline || e.attempts)) { e.offline = false; e.attempts = 0; changed = true; }
+      });
+      if (changed) { persistElq(); renderElq(); }
+      kickElq();
+    });
   }
 
   // Poll the public explorer proxy until `txId` appears on the ledger, or a
@@ -1240,6 +1506,7 @@
     if (LANGS.indexOf(pref) !== -1 && pref !== App.lang) { await setLang(pref, { skipPersist: true }); }
     restorePrefs();
     await restorePending();
+    await restoreElectionQueue();
     await refresh();
     renderChrome();
   }
@@ -1309,7 +1576,6 @@
   function renderChrome() {
     const route = currentRoute();
     const tabs = TABS.filter((tab) => {
-      if (tab.adminOnly && !App.role.isAdmin) return false;
       if (tab.walletOnly && !App.wallet.connected) return false;
       return true;
     });
@@ -1365,10 +1631,9 @@
       case 'elections': return renderElections(v);
       case 'orgs': return renderOrgs(v);
       case 'evidence': return renderEvidence(v);
-      case 'verify': return renderVerify(v);
+      case 'verify': return renderEvidence(v);
       case 'disputes': return renderDisputes(v);
       case 'heatmap': return renderHeatmap(v);
-      case 'admin': return renderAdmin(v);
       case 'profile': return renderProfile(v);
       case 'settings': return renderSettings(v);
       case 'user': return renderUserProfile(v, route.arg);
@@ -1419,14 +1684,14 @@
   const inlineEntry = {};
   function inlineKey(sid) { return App.eid + ':' + sid; }
   // Whether the current viewer may enter/edit the working tally for an election
-  // owned by `orgAddr`: the org's owner, administrator, or moderator, or a
-  // platform admin. Mirrors the server-side canOperate/isAdmin guard.
+  // owned by `orgAddr`: the org's owner, administrator, or moderator.
   let workEditable = false;
   function canEditWorkTally(orgAddr) {
     if (!orgAddr || !App.role) return false;
-    if (App.role.isAdmin) return true;
-    if (App.role.org && App.role.org.addr === orgAddr) return true; // owner
-    return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod'));
+    // Editing the working tally is an operating power → requires the org to be
+    // paid (active), matching the indexer's canOperate gate.
+    if (App.role.org && App.role.org.addr === orgAddr) return App.role.org.active === true; // owner
+    return (App.role.orgsMember || []).some((o) => o.addr === orgAddr && (o.role === 'admin' || o.role === 'mod') && o.active);
   }
   // Hydrate the inlineEntry map from the persisted working tally returned in the
   // election detail. Each saved station becomes a saved (collapsed) entry. Never
@@ -1683,8 +1948,7 @@
     const reported = t('dashboard_working_tally_reported')
       .replace('{reported}', saved.length)
       .replace('{total}', (d.stations || []).length || saved.length);
-    return `<div class="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">
-      <h3 class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-0.5">${t('dashboard_working_tally')}</h3>
+    return `<div class="mt-2 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-500/30 dark:bg-purple-500/5">
       <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">${esc(t('dashboard_working_tally_desc'))} · ${esc(reported)} · ${grand.toLocaleString()} ${t('dashboard_votes')}</p>
       ${bars}</div>`;
   }
@@ -1692,6 +1956,7 @@
     v.innerHTML = electionPicker() + '<div id="dash-body"></div>';
     wirePickers();
     const d = App.state && App.state.detail;
+    if (d && d.election) subscribeLive(d.election.eid); // live-update the dashboard
     const body = document.getElementById('dash-body');
     if (!d) {
       const myOrg = App.role && App.role.org;
@@ -1700,7 +1965,7 @@
       // bare "select an election" that makes their just-registered org feel lost.
       const ownerCard = (myOrg && myOrg.active)
         ? `<div class="p-4 mb-4 rounded-xl bg-indigo-50 border border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30">
-            <p class="text-sm text-slate-700 dark:text-slate-200 mb-3">${t('dashboard_owner_no_election').replace('{org}', '<strong>' + esc(myOrg.name) + '</strong>')}</p>
+            <p class="text-sm text-slate-700 dark:text-slate-200 mb-3">${t('dashboard_owner_no_election').replace('{org}', '<button class="org-manage font-semibold text-indigo-600 dark:text-indigo-400 hover:underline" data-addr="' + esc(myOrg.addr) + '">' + esc(myOrg.name) + '</button>')}</p>
             <a href="#/elections" class="inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">${t('elections_new')}</a>
           </div>`
         : '';
@@ -1708,27 +1973,18 @@
         ? `<p class="text-xs text-slate-500 dark:text-slate-500 mt-3">${esc(t('orgs_active_orgs'))}: ${activeCount}</p>`
         : '';
       body.innerHTML = ownerCard + `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_select_election')}</p>` + activeLine;
+      body.querySelectorAll('.org-manage').forEach((b) => { b.onclick = () => { App.orgView = b.dataset.addr; location.hash = '#/orgs'; }; });
       return;
     }
-    const totalVotes = Object.values(d.tally).reduce((s, n) => s + n, 0);
+    // The Dashboard is now a focused view of the off-chain working tally,
+    // headed by the active election's name. Official results, the lead-margin
+    // box, and the per-station table live on the election workspace instead.
+    const workTally = workTallySection(d);
     body.innerHTML =
-      `<div class="flex items-start justify-between flex-wrap gap-2 mb-1">
-        <h2 class="text-lg font-semibold">${esc(d.election.name)}</h2>
-        <div class="flex gap-2">
-          <button id="exp-csv" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_csv')}</button>
-          <button id="exp-json" class="text-sm px-3 py-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('dashboard_export_json')}</button>
-        </div>
-      </div>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')} · ${t('election_detail_reporting').replace('{reported}', d.reporting.reported).replace('{total}', d.reporting.total)} · ${totalVotes.toLocaleString()} ${t('dashboard_votes')} · method: ${t('method_' + d.method) || METHOD_LABELS[d.method]}</p>
-      ${marginBanner(d)}
-      <div class="mb-6">${tallyBars(d) || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_stations')}</p>`}</div>
-      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('dashboard_by_station')}</h3>
-      ${stationTable(d)}
-      ${workTallySection(d)}
+      `<h2 class="text-lg font-semibold mb-1">${esc(d.election.name)}</h2>
+      ${workTally || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_submissions')}</p>`}
       <p class="mt-4 text-xs text-slate-700 dark:text-slate-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
       <a class="mt-3 inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>`;
-    document.getElementById('exp-csv').onclick = () => exportCsv(d);
-    document.getElementById('exp-json').onclick = () => download((d.election.name || 'election') + '.json', JSON.stringify(d, null, 2), 'application/json');
     wireEvidencePdf();
   }
   // One row per candidate (Rank, Candidate, Votes, Share %), sorted by votes
@@ -1754,19 +2010,28 @@
     else if (!App.role.org.active) html += `<p class="text-sm text-amber-600 dark:text-amber-300 mb-4">${t('elections_pending_org').replace('{orgs_link}', '<a href="#/orgs" class="text-indigo-400 hover:underline">' + t('tab_orgs') + '</a>')}</p>`;
 
     html += '<div id="new-el-form"></div>';
-    html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => `
+    html += els.length ? '<div class="grid sm:grid-cols-2 gap-3">' + els.map((e) => {
+      const isOrgMember = (App.role.org && App.role.org.addr === e.orgAddr) || (App.role.orgsMember || []).some((o) => o.addr === e.orgAddr);
+      const orgNameHtml = isOrgMember
+        ? `<button class="el-org-manage text-xs text-indigo-400 hover:underline" data-addr="${esc(e.orgAddr)}">${esc(e.orgName || '—')}</button>`
+        : `<span>${esc(e.orgName || '—')}</span>`;
+      return `
       <a href="#/election/${e.eid}" class="block p-4 rounded-xl bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800">
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold">${esc(e.name)}</h3>
           ${e.orgActive ? '' : `<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('badge_pending')}</span>`}
         </div>
-        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${esc(e.orgName || '—')}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mt-1">${orgNameHtml}</p>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">${e.reportedCount}/${e.stationCount} ${t('elections_card_stations')} · ${e.candidateCount} ${t('elections_card_candidates')} · ${e.disputeCount} ${t('elections_card_disputes')}</p>
-      </a>`).join('') + '</div>'
+      </a>`;
+    }).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm">${canCreate ? t('elections_active_no_elections') : t('elections_no_elections')}</p>`;
     v.innerHTML = html;
 
     if (canCreate) document.getElementById('new-el').onclick = () => showNewElectionForm();
+    v.querySelectorAll('.el-org-manage').forEach((b) => {
+      b.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); App.orgView = b.dataset.addr; location.hash = '#/orgs'; };
+    });
   }
   function showNewElectionForm() {
     const f = document.getElementById('new-el-form');
@@ -1789,24 +2054,22 @@
     document.getElementById('nel-add').onclick = () => add('');
     document.getElementById('nel-create').onclick = createElection;
   }
-  async function createElection() {
-    // Capture the typed values up front so Try-again can resume without
-    // re-reading inputs (which may have been cleared by a re-render).
+  function createElection() {
+    // Capture the typed values, then hand the whole creation to the local-first
+    // queue. The optimistic "published" toast is GONE: success is now driven
+    // solely by the queue's server-confirmed `isConfirmed` gate (the election's
+    // eid appearing in /__quickcount/state), never by the bridge accepting the
+    // broadcast or confirmTx's mode-faked return value.
     const name = document.getElementById('nel-name').value.trim();
     const cands = Array.from(document.querySelectorAll('.nel-c')).map((i) => i.value.trim()).filter(Boolean);
     if (!name || !cands.length) return toast(t('toast_add_candidate'), 'warn');
-    const me = App.wallet.address;
-    // Step 0 publishes the election (NOT idempotent — never auto-resend); each
-    // later step adds one candidate, keyed off the election id from step 0.
-    const steps = [{ loading: t('loading_creating_election'), build: () => ({ to: me, amount: 0, memo: QC.el(name), require: 'No election tx id' }) }];
-    cands.forEach((c, idx) => steps.push({
-      loading: () => t('loading_adding_candidate').replace('{i}', idx + 1).replace('{n}', cands.length),
-      build: (results) => ({ to: me, amount: 0, memo: QC.cand(results[0], idx + 1, c) }),
-    }));
-    await runTxSteps(steps, {
-      partial: (done) => done >= 1 ? t('partial_candidates').replace('{done}', done - 1).replace('{total}', cands.length) : null,
-      success: (results) => { toast(t('toast_election_published')); App.eid = results[0]; location.hash = '#/election/' + results[0]; refresh(); },
-    });
+    const entry = window.QCElectionQueue.makeEntry({ name: name, candidates: cands });
+    enqueueElection(entry);
+    // Collapse the form so the organizer can keep working; the "Saved locally —
+    // retrying…" pill now tracks this creation until the server confirms it.
+    const f = document.getElementById('new-el-form');
+    if (f) f.innerHTML = '';
+    toast(t('queue_saved_locally'));
   }
 
   // ───────────────────────── Election detail / workspace ─────────────────────────
@@ -1814,18 +2077,31 @@
     const d = App.state && App.state.detail;
     if (!d) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('election_detail_loading')} <a href="#/elections" class="text-indigo-400 hover:underline">${t('election_detail_back')}</a></p>`; return; }
     const isOrgOwner = App.role.org && App.role.org.addr === d.election.orgAddr;
+    // Operating powers require the org to be PAID (active), mirroring the
+    // indexer's canOperate gate. A platform admin (break-glass) bypasses it.
+    const orgActive = !!(d.election && d.election.orgActive);
+    const canOperate = (orgActive && (isOrgOwner
+      || (App.role.orgsMember || []).some((o) => o.addr === d.election.orgAddr && (o.role === 'admin' || o.role === 'mod'))))
+      || App.role.isAdmin;
+    const isClosed = !!(d.election && d.election.closed);
     const myObs = App.role.observerOf.find((o) => o.eid === d.election.eid);
+    // Surface the viewer's org role in the header: Owner badge for the creator,
+    // the org role for Administrators/Moderators.
+    const myOrgRole = isOrgOwner ? 'owner'
+      : (((App.role.orgsMember || []).find((o) => o.addr === d.election.orgAddr) || {}).role || null);
+    const roleBadgeHtml = myOrgRole ? orgRoleBadge(myOrgRole) : '';
     // Hydrate the inline working tally from the persisted detail.workTally and
-    // decide whether this viewer may edit it (owner/admin/mod or platform admin).
+    // decide whether this viewer may edit it (owner/admin/mod).
     workEditable = canEditWorkTally(d.election.orgAddr);
     hydrateInlineFromWorkTally(d);
+    subscribeLive(d.election.eid); // live-update this election's screen
     const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
 
     v.innerHTML = `
       <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
       <div class="flex items-start justify-between flex-wrap gap-2 mt-1 mb-3">
-        <div><h2 class="text-xl font-semibold">${esc(d.election.name)}</h2>
-        <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
+        <div><h2 class="text-xl font-semibold flex items-center gap-2 flex-wrap">${esc(d.election.name)}${roleBadgeHtml}${isClosed ? `<span class="badge bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${esc(t('election_closed_badge'))}</span>` : ''}</h2>
+        <p class="text-xs text-slate-600 dark:text-slate-500">${t('election_detail_by_org')} ${myOrgRole ? `<button id="ws-org-manage" class="text-indigo-400 hover:underline" data-addr="${esc(d.election.orgAddr)}">${esc(d.election.orgName || '—')}</button>` : esc(d.election.orgName || '—')}${d.election.orgActive ? '' : ' · ' + t('election_detail_pending_fee')}</p></div>
         ${methodSel}
       </div>
       ${marginBanner(d)}
@@ -1834,16 +2110,36 @@
       <div id="station-table-wrap">${stationTable(d, { inlineEntry: true, editable: workEditable })}</div>
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
+    const wsOrgBtn = document.getElementById('ws-org-manage');
+    if (wsOrgBtn) wsOrgBtn.onclick = () => { App.orgView = wsOrgBtn.dataset.addr; location.hash = '#/orgs'; };
 
     const ws = document.getElementById('ws');
     if (myObs) ws.appendChild(observerPanel(d, myObs));
-    if (myObs || isOrgOwner) ws.appendChild(disputeFilePanel(d));
-    if (isOrgOwner) { ws.appendChild(stationsPanel(d)); ws.appendChild(observersPanel(d)); ws.appendChild(resolvePanel(d)); }
-    if (!myObs && !isOrgOwner) {
+    // Ballot-proof upload — observers attach their own station's proof; operators
+    // (Owner/Administrator/Moderator) can attach for any station via the picker.
+    if (myObs) ws.appendChild(ballotProofPanel(d, myObs.sid != null ? myObs.sid : null));
+    else if (canOperate && (d.stations || []).length) ws.appendChild(ballotProofPanel(d, null));
+    if (myObs || canOperate) ws.appendChild(disputeFilePanel(d));
+    if (canOperate) {
+      if (isClosed) {
+        const lockedEl = document.createElement('div');
+        lockedEl.className = 'p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800';
+        lockedEl.innerHTML = `<p class="text-sm text-slate-600 dark:text-slate-500">${esc(t('election_close_locked_note'))}</p>`;
+        ws.appendChild(lockedEl);
+      } else {
+        ws.appendChild(stationsPanel(d));
+        ws.appendChild(candidatesPanel(d));
+        ws.appendChild(observersPanel(d));
+      }
+      ws.appendChild(resolvePanel(d));
+      if (isOrgOwner && !isClosed) ws.appendChild(closeElectionPanel(d));
+    }
+    if (!myObs && !canOperate) {
       const p = document.createElement('p'); p.className = 'text-sm text-slate-600 dark:text-slate-500';
       p.textContent = t('election_detail_connect_note');
       ws.appendChild(p);
     }
+    if ((d.election.orgJur || '').toLowerCase() === 'indonesia') ws.appendChild(c1kwkPanel(d));
     // rerenderStations rebuilds the table from inlineEntry (picking up any
     // hydrated/saved rows) and wires the row handlers, so no separate
     // wireStationRows call is needed here.
@@ -1856,6 +2152,82 @@
     const el = document.createElement('div');
     el.className = 'p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800';
     el.innerHTML = `<h3 class="font-semibold mb-3">${title}</h3>` + inner;
+    return el;
+  }
+
+  function c1kwkPanel(d) {
+    const el = document.createElement('div');
+    el.setAttribute('data-c1kwk-panel', '1');
+    el.className = 'p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800';
+    const eid = d.election.eid;
+    const cands = d.candidates || [];
+    const candInputs = cands.map((c) => `
+      <div class="flex items-center gap-2 mt-1">
+        <span class="text-sm text-slate-700 dark:text-slate-300 flex-1">${t('c1kwk_valid_votes').replace(' (by candidate)', '')} — No. ${c.cid} ${esc(c.name)}</span>
+        <input type="number" min="0" value="0" data-cid="${c.cid}" data-cname="${esc(c.name)}" class="c1kwk-vote w-24 text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800">
+      </div>`).join('');
+    el.innerHTML = `
+      <h3 class="font-semibold mb-3">${t('c1kwk_panel_title')}</h3>
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <div><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_province')}</label><input id="c1k-province" type="text" class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 mt-0.5"></div>
+        <div><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_regency')}</label><input id="c1k-regency" type="text" class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 mt-0.5"></div>
+        <div><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_subdistrict')}</label><input id="c1k-subdistrict" type="text" class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 mt-0.5"></div>
+        <div><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_village')}</label><input id="c1k-village" type="text" class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 mt-0.5"></div>
+        <div><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_tps_number')}</label><input id="c1k-tps" type="text" class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 mt-0.5"></div>
+        <div><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_dpt')}</label><input id="c1k-dpt" type="number" min="0" value="0" class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 mt-0.5"></div>
+      </div>
+      <div class="mb-3">${candInputs}</div>
+      <div class="flex gap-4 mb-3">
+        <div class="flex-1"><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_invalid_votes')}</label><input id="c1k-invalid" type="number" min="0" value="0" class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 mt-0.5"></div>
+        <div class="flex-1"><label class="text-xs text-slate-500 dark:text-slate-400">${t('c1kwk_total_votes')}</label><input id="c1k-total" type="number" value="0" readonly class="block w-full text-sm border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-slate-200 dark:bg-slate-700 mt-0.5"></div>
+      </div>
+      <div id="c1k-msg" class="text-sm text-rose-600 dark:text-rose-400 mb-2 hidden"></div>
+      <button id="c1k-dl" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">${t('c1kwk_download_btn')}</button>`;
+    const updateTotal = () => {
+      let sum = 0;
+      el.querySelectorAll('.c1kwk-vote').forEach((inp) => { sum += parseInt(inp.value || '0', 10) || 0; });
+      const inv = parseInt((el.querySelector('#c1k-invalid') || {}).value || '0', 10) || 0;
+      const tot = el.querySelector('#c1k-total'); if (tot) tot.value = sum + inv;
+    };
+    el.querySelectorAll('.c1kwk-vote').forEach((inp) => inp.addEventListener('input', updateTotal));
+    const invInp = el.querySelector('#c1k-invalid'); if (invInp) invInp.addEventListener('input', updateTotal);
+    const dlBtn = el.querySelector('#c1k-dl');
+    if (dlBtn) dlBtn.addEventListener('click', async () => {
+      const msg = el.querySelector('#c1k-msg');
+      dlBtn.textContent = t('c1kwk_generating'); dlBtn.disabled = true;
+      if (msg) msg.classList.add('hidden');
+      try {
+        const votesArr = [];
+        el.querySelectorAll('.c1kwk-vote').forEach((inp) => {
+          votesArr.push({ cid: Number(inp.dataset.cid), name: inp.dataset.cname || '', votes: parseInt(inp.value || '0', 10) || 0 });
+        });
+        const validVotes = votesArr.reduce((s, c) => s + c.votes, 0);
+        const invalidVotes = parseInt((el.querySelector('#c1k-invalid') || {}).value || '0', 10) || 0;
+        const body = {
+          province: (el.querySelector('#c1k-province') || {}).value || '',
+          regency: (el.querySelector('#c1k-regency') || {}).value || '',
+          subdistrict: (el.querySelector('#c1k-subdistrict') || {}).value || '',
+          village: (el.querySelector('#c1k-village') || {}).value || '',
+          tps: (el.querySelector('#c1k-tps') || {}).value || '',
+          dpt: parseInt((el.querySelector('#c1k-dpt') || {}).value || '0', 10) || 0,
+          candidates: votesArr, validVotes, invalidVotes, totalVotes: validVotes + invalidVotes,
+        };
+        const r = await fetch('/api/elections/' + encodeURIComponent(eid) + '/c1kwk/download', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || r.statusText); }
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'c1kwk_' + eid + '.pdf';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      } catch (err) {
+        if (msg) { msg.textContent = err.message || 'Download failed'; msg.classList.remove('hidden'); }
+      } finally {
+        dlBtn.textContent = t('c1kwk_download_btn'); dlBtn.disabled = false;
+      }
+    });
     return el;
   }
 
@@ -1898,6 +2270,157 @@
     return p;
   }
 
+  // ───────────────────────── Ballot proof (import → validate → review → submit) ──
+  // Client-side document-sanity mirror of lib/attach.validateBallotProof. The
+  // server re-validates on submit (authoritative), so this only drives the
+  // review UI + gates the Submit button. Honest about scope: this checks the
+  // file is a real, legible image/PDF — it does NOT confirm the contents are a
+  // genuine ballot.
+  const BALLOT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  function imageNaturalSize(file) {
+    return new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url); };
+        img.onerror = () => { resolve(null); URL.revokeObjectURL(url); };
+        img.src = url;
+      } catch (_) { resolve(null); }
+    });
+  }
+  async function validateBallotFile(file) {
+    const reasons = [];
+    const isPdf = file.type === 'application/pdf';
+    if (!BALLOT_TYPES.includes(file.type)) reasons.push('Unsupported file type — use JPG, PNG, WebP, or PDF');
+    if (file.size < 8 * 1024) reasons.push('File looks too small to be a real ballot scan');
+    if (isPdf && file.size > 8 * 1024 * 1024) reasons.push('PDF too large (max 8 MB)');
+    if (!isPdf && file.type.startsWith('image/') && file.size > 2 * 1024 * 1024) reasons.push('Image too large (max 2 MB)');
+    const info = { kind: isPdf ? 'pdf' : 'image', bytes: file.size };
+    if (!isPdf && file.type.startsWith('image/') && !reasons.length) {
+      const dim = await imageNaturalSize(file);
+      if (dim && dim.w && dim.h) {
+        info.width = dim.w; info.height = dim.h;
+        if (Math.max(dim.w, dim.h) < 600) reasons.push('Scan resolution too low (needs a clearer photo)');
+      }
+    }
+    if (isPdf && !reasons.length) {
+      try {
+        const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+        if (!(head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46)) {
+          reasons.push('File contents do not match the declared type — is this a renamed file?');
+        }
+      } catch (_) { /* let the server be the authority */ }
+    }
+    return { ok: !reasons.length, reasons, info };
+  }
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => { try { resolve(String(r.result).split(',')[1] || ''); } catch (e) { reject(e); } };
+      r.onerror = () => reject(new Error('read failed'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  // A self-contained ballot-proof sub-panel for one station. `fixedSid` pins the
+  // station (observer's own); otherwise a station picker is shown (operators).
+  function ballotProofPanel(d, fixedSid) {
+    const proofs = (App.state && App.state.detail && App.state.detail.proofs) || {};
+    const stations = d.stations || [];
+    const pick = fixedSid != null
+      ? `<input type="hidden" id="bp-station" value="${fixedSid}">`
+      : `<label class="block text-xs mb-1 text-slate-500 dark:text-slate-400">${t('ballot_proof_station')}</label>
+         <select id="bp-station" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">
+           ${stations.map((s) => `<option value="${s.sid}">${esc(s.name)}</option>`).join('')}
+         </select>`;
+    const inner = `
+      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">${t('ballot_proof_desc')}</p>
+      ${pick}
+      <input id="bp-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="w-full mb-2 text-xs text-slate-600 dark:text-slate-400" data-ballot-proof="1">
+      <div id="bp-preview" class="mb-2"></div>
+      <p id="bp-status" class="text-xs mb-2" role="status"></p>
+      <p id="bp-fp" class="text-[0.65rem] text-slate-500 dark:text-slate-600 break-all font-mono mb-3"></p>
+      <div class="flex gap-2">
+        <button id="bp-replace" type="button" class="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-medium hidden">${t('ballot_proof_replace')}</button>
+        <button id="bp-submit" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed" disabled>${t('ballot_proof_submit')}</button>
+      </div>`;
+    const p = panel(t('ballot_proof_title'), inner);
+    setTimeout(() => {
+      const fileEl = p.querySelector('#bp-file');
+      const previewEl = p.querySelector('#bp-preview');
+      const statusEl = p.querySelector('#bp-status');
+      const fpEl = p.querySelector('#bp-fp');
+      const submitBtn = p.querySelector('#bp-submit');
+      const replaceBtn = p.querySelector('#bp-replace');
+      let current = null; // { file, mime, valid }
+
+      function showExisting() {
+        const sid = Number(p.querySelector('#bp-station').value);
+        const meta = proofs[sid] || proofs[String(sid)];
+        if (meta && meta.validated) { statusEl.className = 'text-xs mb-2 text-emerald-600 dark:text-emerald-300'; statusEl.textContent = t('ballot_proof_attached'); }
+        else if (meta && meta.present) { statusEl.className = 'text-xs mb-2 text-amber-600 dark:text-amber-300'; statusEl.textContent = t('ballot_proof_draft_saved'); }
+        else { statusEl.className = 'text-xs mb-2'; statusEl.textContent = ''; }
+      }
+      showExisting();
+      const stationSel = p.querySelector('#bp-station');
+      if (stationSel && stationSel.tagName === 'SELECT') stationSel.onchange = () => { current = null; previewEl.innerHTML = ''; fpEl.textContent = ''; submitBtn.disabled = true; showExisting(); };
+
+      fileEl.onchange = async (e) => {
+        const f = e.target.files[0];
+        previewEl.innerHTML = ''; fpEl.textContent = ''; submitBtn.disabled = true; current = null;
+        if (!f) { statusEl.textContent = ''; replaceBtn.classList.add('hidden'); return; }
+        replaceBtn.classList.remove('hidden');
+        // Preview
+        try {
+          const url = URL.createObjectURL(f);
+          if (f.type === 'application/pdf') {
+            previewEl.innerHTML = `<embed src="${url}" type="application/pdf" class="w-full h-48 rounded border border-slate-200 dark:border-slate-800">`;
+          } else {
+            previewEl.innerHTML = `<img src="${url}" alt="ballot preview" class="max-h-48 rounded border border-slate-200 dark:border-slate-800">`;
+          }
+        } catch (_) {}
+        // Fingerprint (same local SHA-256 as the on-chain evidence hash)
+        try { fpEl.textContent = t('ballot_proof_fingerprint') + ': ' + (await sha256File(f)); } catch (_) {}
+        // Validate
+        const res = await validateBallotFile(f);
+        current = { file: f, mime: f.type, valid: res.ok };
+        if (res.ok) {
+          statusEl.className = 'text-xs mb-2 text-emerald-600 dark:text-emerald-300';
+          statusEl.textContent = t('ballot_proof_valid');
+          submitBtn.disabled = false;
+        } else {
+          statusEl.className = 'text-xs mb-2 text-rose-600 dark:text-rose-300';
+          statusEl.textContent = t('ballot_proof_invalid') + ' ' + res.reasons.join('; ');
+          submitBtn.disabled = true;
+        }
+      };
+
+      replaceBtn.onclick = () => { fileEl.value = ''; fileEl.click(); };
+
+      submitBtn.onclick = async () => {
+        if (!current || !current.valid) return toast(t('ballot_proof_pick_first'), 'warn');
+        const sid = Number(p.querySelector('#bp-station').value);
+        submitBtn.disabled = true;
+        try {
+          const data_base64 = await fileToBase64(current.file);
+          const r = await fetch('/api/elections/' + encodeURIComponent(d.election.eid) + '/ballot-proof/' + encodeURIComponent(sid), {
+            method: 'PUT',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ mime: current.mime, data_base64: data_base64, status: 'submitted' }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('ballot_proof_submitted'));
+          refreshSoon();
+        } catch (err) {
+          submitBtn.disabled = false;
+          handleTxFailure(err, { onRetry: () => submitBtn.onclick() });
+        }
+      };
+    });
+    return p;
+  }
+
   function stationsPanel(d) {
     const inner = `
       <div class="flex gap-2 mb-3">
@@ -1913,7 +2436,19 @@
         <div id="st-csv-preview" class="text-xs text-slate-500 dark:text-slate-400 mb-2"></div>
         <button id="st-csv-import" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_station_import_btn')}</button>
       </details>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mt-3">${t('election_station_count').replace('{n}', d.stations.length)} ${d.stations.map((s) => esc(s.name)).join(', ') || '—'}</p>`;
+      <div class="mt-3">
+        <p class="text-xs text-slate-600 dark:text-slate-500 mb-1.5">${t('election_station_count').replace('{n}', d.stations.length)}</p>
+        <input id="st-c1-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden">
+        <div id="st-c1-upload-area" class="hidden mb-2 p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800">
+          <p id="st-c1-upload-name" class="text-xs text-slate-600 dark:text-slate-500 mb-1"></p>
+          <img id="st-c1-preview" src="" alt="" class="max-h-20 rounded border border-slate-200 dark:border-slate-800 mb-2 hidden">
+          <div class="flex gap-2">
+            <button id="st-c1-cancel" class="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('election_c1_replace')}</button>
+            <button id="st-c1-submit" class="text-xs px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-40" disabled>${t('election_c1_upload_btn')}</button>
+          </div>
+        </div>
+        ${d.stations.length ? '<div class="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">' + d.stations.map((s) => `<div class="flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-slate-950"><span class="text-xs text-slate-700 dark:text-slate-300">${esc(s.name)}${s.label ? ' <span class="text-slate-500 dark:text-slate-500">· ' + esc(s.label) + '</span>' : ''}</span><button data-c1sid="${s.sid}" class="c1-upload-btn text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 shrink-0">${t('election_c1_upload_btn')}</button></div>`).join('') + '</div>' : '<span class="text-xs text-slate-500 dark:text-slate-400">—</span>'}
+      </div>`;
     const p = panel(t('election_stations_title'), inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
@@ -1939,6 +2474,115 @@
           partial: (done, total) => t('partial_stations').replace('{done}', done).replace('{total}', total),
           success: () => { toast(t('toast_stations_imported').replace('{n}', rows.length)); refreshSoon(); },
         });
+      };
+      // C1 upload per station
+      const c1FileEl = p.querySelector('#st-c1-file');
+      const c1AreaEl = p.querySelector('#st-c1-upload-area');
+      const c1NameEl = p.querySelector('#st-c1-upload-name');
+      const c1PreviewEl = p.querySelector('#st-c1-preview');
+      const c1SubmitBtn = p.querySelector('#st-c1-submit');
+      const c1CancelBtn = p.querySelector('#st-c1-cancel');
+      let c1ActiveSid = null; let c1CurrentFile = null;
+      p.querySelectorAll('.c1-upload-btn').forEach((btn) => {
+        btn.onclick = () => { c1ActiveSid = Number(btn.dataset.c1sid); c1FileEl.value = ''; c1FileEl.click(); };
+      });
+      c1FileEl.onchange = (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { toast(t('toast_failed') + ' max 2 MB', 'warn'); return; }
+        c1CurrentFile = f;
+        const url = URL.createObjectURL(f); c1PreviewEl.src = url; c1PreviewEl.classList.remove('hidden');
+        c1AreaEl.classList.remove('hidden'); c1NameEl.textContent = f.name; c1SubmitBtn.disabled = false;
+      };
+      c1CancelBtn.onclick = () => { c1FileEl.value = ''; c1CurrentFile = null; c1AreaEl.classList.add('hidden'); c1PreviewEl.classList.add('hidden'); c1SubmitBtn.disabled = true; };
+      c1SubmitBtn.onclick = async () => {
+        if (!c1CurrentFile || !c1ActiveSid) return;
+        c1SubmitBtn.disabled = true;
+        try {
+          const data_base64 = await fileToBase64(c1CurrentFile);
+          const r = await fetch('/api/elections/' + encodeURIComponent(d.election.eid) + '/attachments/station_c1/' + encodeURIComponent(c1ActiveSid),
+            { method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ mime: c1CurrentFile.type, data_base64 }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('election_c1_uploaded')); c1AreaEl.classList.add('hidden'); c1PreviewEl.classList.add('hidden');
+        } catch (err) { c1SubmitBtn.disabled = false; handleTxFailure(err, { onRetry: () => c1SubmitBtn.onclick() }); }
+      };
+    });
+    return p;
+  }
+
+  function candidatesPanel(d) {
+    const cands = d.candidates || [];
+    const nextCid = cands.length > 0 ? Math.max(...cands.map((c) => c.cid)) + 1 : 1;
+    const candRows = cands.map((c) => `<div class="flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-slate-950"><span class="text-xs text-slate-700 dark:text-slate-300"><span class="text-slate-400 mr-1">#${c.cid}</span>${esc(c.name)}</span><button data-cvcid="${c.cid}" class="cv-upload-btn text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 shrink-0">${t('election_avatar_upload_btn')}</button></div>`).join('');
+    const inner = `
+      ${cands.length ? '<div class="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden mb-3">' + candRows + '</div>' : ''}
+      <input id="cv-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden">
+      <div id="cv-upload-area" class="hidden mb-3 p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800">
+        <p id="cv-upload-name" class="text-xs text-slate-600 dark:text-slate-500 mb-1"></p>
+        <img id="cv-preview" src="" alt="" class="max-h-24 rounded border border-slate-200 dark:border-slate-800 mb-2 hidden">
+        <div class="flex gap-2">
+          <button id="cv-cancel" class="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('election_avatar_replace')}</button>
+          <button id="cv-submit" class="text-xs px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-40" disabled>${t('election_avatar_upload_btn')}</button>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <input id="cv-name" placeholder="${t('election_candidate_name_ph')}" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
+        <button id="cv-add" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_candidate_add_btn')}</button>
+      </div>
+      <p class="text-xs text-slate-600 dark:text-slate-500 mt-2">${t('election_candidate_count').replace('{n}', cands.length)}</p>`;
+    const p = panel(t('election_candidates_title'), inner);
+    setTimeout(() => {
+      const cvFileEl = p.querySelector('#cv-file');
+      const cvAreaEl = p.querySelector('#cv-upload-area');
+      const cvNameEl = p.querySelector('#cv-upload-name');
+      const cvPreviewEl = p.querySelector('#cv-preview');
+      const cvSubmitBtn = p.querySelector('#cv-submit');
+      const cvCancelBtn = p.querySelector('#cv-cancel');
+      let cvActiveCid = null; let cvCurrentFile = null;
+      p.querySelectorAll('.cv-upload-btn').forEach((btn) => {
+        btn.onclick = () => { cvActiveCid = Number(btn.dataset.cvcid); cvFileEl.value = ''; cvFileEl.click(); };
+      });
+      cvFileEl.onchange = (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { toast(t('toast_failed') + ' max 2 MB', 'warn'); return; }
+        cvCurrentFile = f;
+        const url = URL.createObjectURL(f); cvPreviewEl.src = url; cvPreviewEl.classList.remove('hidden');
+        cvAreaEl.classList.remove('hidden'); cvNameEl.textContent = f.name; cvSubmitBtn.disabled = false;
+      };
+      cvCancelBtn.onclick = () => { cvFileEl.value = ''; cvCurrentFile = null; cvAreaEl.classList.add('hidden'); cvPreviewEl.classList.add('hidden'); cvSubmitBtn.disabled = true; };
+      cvSubmitBtn.onclick = async () => {
+        if (!cvCurrentFile || !cvActiveCid) return;
+        cvSubmitBtn.disabled = true;
+        try {
+          const data_base64 = await fileToBase64(cvCurrentFile);
+          const r = await fetch('/api/elections/' + encodeURIComponent(d.election.eid) + '/attachments/cand_avatar/' + encodeURIComponent(cvActiveCid),
+            { method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ mime: cvCurrentFile.type, data_base64 }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('election_avatar_uploaded')); cvAreaEl.classList.add('hidden'); cvPreviewEl.classList.add('hidden');
+        } catch (err) { cvSubmitBtn.disabled = false; handleTxFailure(err, { onRetry: () => cvSubmitBtn.onclick() }); }
+      };
+      p.querySelector('#cv-add').onclick = () => {
+        const name = p.querySelector('#cv-name').value.trim();
+        if (!name) return toast(t('toast_add_candidate'), 'warn');
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.cand(d.election.eid, nextCid, name) },
+          { loading: t('loading_adding_candidate_post'), success: () => { toast(t('toast_candidate_added')); refreshSoon(); } });
+      };
+    });
+    return p;
+  }
+
+  function closeElectionPanel(d) {
+    const inner = `
+      <p class="text-sm text-slate-600 dark:text-slate-500 mb-3">${esc(t('election_close_confirm'))}</p>
+      <button id="el-close-btn" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 font-semibold text-sm text-white">${esc(t('election_close_btn'))}</button>`;
+    const p = panel(t('org_danger_heading'), inner);
+    p.classList.add('border-rose-300', 'dark:border-rose-800');
+    setTimeout(() => {
+      p.querySelector('#el-close-btn').onclick = () => {
+        if (!confirm(t('election_close_confirm'))) return;
+        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.ecl(d.election.eid) },
+          { loading: t('loading_closing_election'), success: () => { toast(t('toast_election_closed')); refreshSoon(); } });
       };
     });
     return p;
@@ -2108,7 +2752,12 @@
     // Authoritative list of active orgs from the indexer — independent of whether
     // an org has published elections, so a just-registered org shows instantly.
     const orgList = (App.state.activeOrgs || []);
-    html += orgList.length ? '<div class="space-y-2">' + orgList.map((o) => `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between"><span>${esc(o.name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(o.addr)}</span></div>`).join('') + '</div>'
+    html += orgList.length ? '<div class="space-y-2">' + orgList.map((o) => {
+      const isMember = (App.role.org && App.role.org.addr === o.addr) || (App.role.orgsMember || []).some((m) => m.addr === o.addr);
+      return isMember
+        ? `<button class="org-manage w-full text-left p-3 rounded-lg bg-slate-100 border border-slate-200 hover:border-indigo-600/60 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between" data-addr="${esc(o.addr)}"><span>${esc(o.name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(o.addr)}</span></button>`
+        : `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex justify-between"><span>${esc(o.name)}</span><span class="text-xs text-slate-600 dark:text-slate-500 font-mono">${shortAddr(o.addr)}</span></div>`;
+    }).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('orgs_no_active')}</p>`;
     v.innerHTML = html;
 
@@ -2122,6 +2771,37 @@
   // Org management workspace: roster + role-gated controls.
   function renderOrgWorkspace(v, org) {
     const vr = org.viewerRole;
+
+    // Paid gate: management unlocks only for owners/founders (and their
+    // delegates) once the org has paid its fee (org.active). A pending org's
+    // owner gets a locked workspace exposing only Pay fee + Delete (abandon) —
+    // mirroring the indexer, which rejects every management mutation until paid.
+    if (!org.active) {
+      let lockedHtml = `<button id="org-back" class="text-sm text-indigo-500 hover:underline mb-3">${t('org_back')}</button>
+        <div class="flex items-center gap-2 flex-wrap mb-1"><h2 class="text-lg font-semibold">${esc(org.name)}</h2>${orgRoleBadge(vr)}<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('orgs_pending_badge')}</span></div>
+        <p class="text-xs text-slate-600 dark:text-slate-500 mb-5 font-mono">${esc(org.addr)}</p>
+        <div class="p-4 mb-4 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30">
+          <h3 class="font-semibold mb-2 text-amber-800 dark:text-amber-200">${t('org_locked_heading')}</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-300 mb-3">${t('org_locked_desc')}</p>
+          ${vr === 'owner' ? `<button id="pay-fee" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold">${t('orgs_pay_fee')} (${App.cfg.orgFee})</button>` : ''}
+        </div>`;
+      // Danger zone — delete/abandon (Owner only). Deletion stays available on a
+      // pending org so an unwanted registration can be cleaned up.
+      if (vr === 'owner') {
+        lockedHtml += `<div class="p-4 mb-4 rounded-xl border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10">
+          <h3 class="font-semibold mb-2 text-rose-700 dark:text-rose-300">${t('org_danger_heading')}</h3>
+          <button id="org-del" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">${t('org_delete')}</button>
+        </div>`;
+      }
+      v.innerHTML = lockedHtml;
+      document.getElementById('org-back').onclick = () => { App.orgView = null; render(); };
+      const payBtn = document.getElementById('pay-fee');
+      if (payBtn) payBtn.onclick = payOrgFee;
+      const delBtnL = document.getElementById('org-del');
+      if (delBtnL) delBtnL.onclick = () => deleteOrg(org.addr);
+      return;
+    }
+
     const canManageMembers = vr === 'owner' || vr === 'admin';
     const canSetVisibility = vr === 'owner' || vr === 'admin';
     const canDelete = vr === 'owner';
@@ -2130,6 +2810,18 @@
     let html = `<button id="org-back" class="text-sm text-indigo-500 hover:underline mb-3">${t('org_back')}</button>
       <div class="flex items-center gap-2 flex-wrap mb-1"><h2 class="text-lg font-semibold">${esc(org.name)}</h2>${orgRoleBadge(vr)}${orgVisBadge(org.visibility || 'public')}</div>
       <p class="text-xs text-slate-600 dark:text-slate-500 mb-5 font-mono">${esc(org.addr)}</p>`;
+
+    // Organization details (owner only) — edit name and jurisdiction.
+    if (canDelete) {
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <h3 class="font-semibold mb-3">${t('org_details_heading')}</h3>
+        <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">${t('org_name_label')}</label>
+        <input id="org-edit-name" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none" value="${esc(org.name)}" maxlength="120">
+        <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">${t('org_jur_label')}</label>
+        <input id="org-edit-jur" class="w-full mb-3 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none" value="${esc(org.jur || '')}" maxlength="80">
+        <button id="org-details-save" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">${t('org_save_details')}</button>
+      </div>`;
+    }
 
     // Members roster.
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('org_members_heading')} (${org.members.length})</h3>
@@ -2182,6 +2874,8 @@
     v.innerHTML = html;
 
     document.getElementById('org-back').onclick = () => { App.orgView = null; render(); };
+    const detailsBtn = document.getElementById('org-details-save');
+    if (detailsBtn) detailsBtn.onclick = () => editOrgDetails(org.addr);
     const addBtn = document.getElementById('org-mem-add');
     if (addBtn) addBtn.onclick = () => addOrgMember(org.addr);
     v.querySelectorAll('.org-role-sel').forEach((sel) => {
@@ -2218,6 +2912,13 @@
     if (!window.confirm(t('org_delete_confirm'))) return;
     runTx({ to: orgAddr, amount: 0, memo: QC.odel(orgAddr), idempotent: true },
       { loading: t('loading_deleting_org'), success: () => { App.orgView = null; toast(t('toast_org_deleted')); refreshSoon(); } });
+  }
+  function editOrgDetails(orgAddr) {
+    const name = (document.getElementById('org-edit-name').value || '').trim();
+    const jur = (document.getElementById('org-edit-jur').value || '').trim();
+    if (!name) return toast(t('toast_enter_org_name'), 'warn');
+    runTx({ to: orgAddr, amount: 0, memo: QC.oedit(orgAddr, name, jur), idempotent: true },
+      { loading: t('loading_updating_details'), success: () => { toast(t('toast_details_updated')); refreshSoon(); } });
   }
   async function registerOrg() {
     if (!App.wallet.connected) { await connectWallet(); if (!App.wallet.connected) return; }
@@ -2296,50 +2997,7 @@
     });
   }
 
-  // ───────────────────────── Verify (upload verifier) ─────────────────────────
-  function renderVerify(v) {
-    const hash = location.hash || '';
-    const qi = hash.indexOf('?');
-    const params = {};
-    if (qi !== -1) new URLSearchParams(hash.slice(qi + 1)).forEach((val, key) => { params[key] = val; });
-    const isStagingLike = App.cfg && (App.cfg.demo || App.cfg.staging || App.cfg.localDev);
-    const pdfOk = window.QCEvidencePDF && window.QCEvidencePDF.available();
-
-    v.innerHTML = `
-      <h2 class="text-lg font-semibold mb-1">${t('verify_heading')}</h2>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('verify_intro')}</p>
-      <label id="vr-drop" class="block cursor-pointer p-8 text-center rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 text-slate-600 dark:text-slate-400">
-        <input id="vr-file" type="file" accept="application/pdf,.pdf" class="hidden">
-        <div class="text-3xl mb-2">🛡️</div>${t('verify_drop')}
-      </label>
-      ${isStagingLike && pdfOk ? `<div class="mt-3 flex items-center gap-2 flex-wrap"><button id="vr-sample" class="text-sm px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('verify_sample')}</button><span class="text-xs text-slate-500">${t('verify_sample_hint')}</span></div>` : ''}
-      <div id="vr-result" class="mt-5"></div>`;
-
-    const fileInput = document.getElementById('vr-file');
-    const drop = document.getElementById('vr-drop');
-    const out = document.getElementById('vr-result');
-
-    function run(promise) {
-      out.innerHTML = `<p class="text-sm text-slate-500">${t('verify_checking')}</p>`;
-      Promise.resolve(promise).then((res) => renderVerifyResult(out, res)).catch((e) => {
-        out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc(e && e.message || '')}</p>`;
-      });
-    }
-
-    fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg)); };
-    ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('border-indigo-500'); }));
-    ['dragleave'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('border-indigo-500'); }));
-    drop.addEventListener('drop', (e) => {
-      e.preventDefault(); drop.classList.remove('border-indigo-500');
-      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg));
-    });
-
-    if (params.fp && params.tx) run(window.QCEvidenceVerify.verifyFromQuery(params, App.cfg));
-
-    const sample = document.getElementById('vr-sample');
-    if (sample) sample.onclick = () => run(runSampleVerify());
-  }
-
+  // ───────────────────────── Verify result renderer (shared) ─────────────────────────
   function renderVerifyResult(out, res) {
     if (!res || res.error) {
       out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc((res && res.message) || '')}</p>`;
@@ -2391,52 +3049,126 @@
     return window.QCEvidenceVerify.verifyRecord(prep.record, prep.fingerprint, App.cfg);
   }
 
-  // ───────────────────────── Evidence gallery ─────────────────────────
+  // ───────────────────────── Evidence gallery + PDF verifier (combined) ─────────────────────────
   function renderEvidence(v) {
+    // Parse deep-link params from the hash (e.g. #/verify?fp=…&tx=… from QR codes on Evidence PDFs).
+    const hash = location.hash || '';
+    const qi = hash.indexOf('?');
+    const deepParams = {};
+    if (qi !== -1) new URLSearchParams(hash.slice(qi + 1)).forEach((val, key) => { deepParams[key] = val; });
+
     v.innerHTML = electionPicker() + '<div id="ev-body"></div>';
     wirePickers();
     const d = App.state && App.state.detail;
     const body = document.getElementById('ev-body');
-    if (!d) { body.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`; return; }
-    const stationName = (sid) => { const s = d.stations.find((x) => x.sid === sid); return s ? s.name : ('Station ' + sid); };
-    const gallery = d.evidence.length ? d.evidence.map((e) => `
-      <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
-        <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
-        ${e.invalid ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
-        <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
-        <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
-        <div class="flex gap-2 flex-wrap mt-2">
-          <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
-          <button data-sid="${e.sid}" class="ev-pdf text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">📄 ${t('evidence_pdf_download')}</button>
+
+    // ── Evidence gallery section ──
+    const galleryHtml = (() => {
+      if (!d) return `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('select_election_prompt')}</p>`;
+      const stationName = (sid) => { const s = d.stations.find((x) => x.sid === sid); return s ? s.name : ('Station ' + sid); };
+      const cards = d.evidence.length ? d.evidence.map((e) => `
+        <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+          <div class="flex items-center justify-between"><span class="font-medium text-sm">${esc(stationName(e.sid))}</span>
+          ${e.invalid ? `<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>` : ''}</div>
+          <p class="text-xs text-slate-600 dark:text-slate-500">${userLink(e.observer)} · ${timeAgo(e.at)}</p>
+          <p class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono mt-1">${esc(e.ev)}</p>
+          <div class="flex gap-2 flex-wrap mt-2">
+            <button data-hash="${e.ev}" data-name="${esc(stationName(e.sid))}" class="ev-verify text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('evidence_submit')}</button>
+            <button data-sid="${e.sid}" class="ev-pdf text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white">📄 ${t('evidence_pdf_download')}</button>
+          </div>
+        </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('evidence_no_evidence')}</p>`;
+      return `<h2 class="text-lg font-semibold mb-1">${t('evidence_heading')} — ${esc(d.election.name)}</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('evidence_sha256_desc')}</p>
+        <div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+          <p class="text-sm text-slate-600 dark:text-slate-500 mb-2" id="vf-target">${t('evidence_verifying_label')} <span class="text-slate-600 dark:text-slate-500">${t('evidence_verifying_default')}</span></p>
+          <input id="vf-file" type="file" class="text-xs text-slate-600 dark:text-slate-400 mb-2 block">
+          <p id="vf-result" class="text-sm"></p>
+          <p id="vf-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono"></p>
         </div>
-      </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('evidence_no_evidence')}</p>`;
+        <div class="grid sm:grid-cols-2 gap-3">${cards}</div>`;
+    })();
 
-    body.innerHTML = `<h2 class="text-lg font-semibold mb-1">${t('evidence_heading')} — ${esc(d.election.name)}</h2>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('evidence_sha256_desc')}</p>
-      <div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
-        <p class="text-sm text-slate-600 dark:text-slate-500 mb-2" id="vf-target">${t('evidence_verifying_label')} <span class="text-slate-600 dark:text-slate-500">${t('evidence_verifying_default')}</span></p>
-        <input id="vf-file" type="file" class="text-xs text-slate-600 dark:text-slate-400 mb-2 block">
-        <p id="vf-result" class="text-sm"></p>
-        <p id="vf-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all font-mono"></p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-3">${gallery}</div>`;
+    // ── PDF verifier section ──
+    const isStagingLike = App.cfg && (App.cfg.demo || App.cfg.staging || App.cfg.localDev);
+    const pdfOk = window.QCEvidencePDF && window.QCEvidencePDF.available();
+    const verifyHtml = `
+      <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+        <h2 class="text-lg font-semibold mb-1">${t('verify_heading')}</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('verify_intro')}</p>
+        <label id="vr-drop" class="block cursor-pointer p-8 text-center rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 text-slate-600 dark:text-slate-400">
+          <input id="vr-file" type="file" accept="application/pdf,.pdf" class="hidden">
+          <div class="text-3xl mb-2">🛡️</div>${t('verify_drop')}
+        </label>
+        ${isStagingLike && pdfOk ? `<div class="mt-3 flex items-center gap-2 flex-wrap"><button id="vr-sample" class="text-sm px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700">${t('verify_sample')}</button><span class="text-xs text-slate-500">${t('verify_sample_hint')}</span></div>` : ''}
+        <div id="vr-result" class="mt-5"></div>
+      </div>`;
 
-    let target = '';
-    body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
-      target = b.dataset.hash;
-      document.getElementById('vf-target').innerHTML = t('evidence_verifying_label') + ' <span class="text-slate-700 dark:text-slate-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-slate-600 dark:text-slate-500">' + esc(target.slice(0, 16)) + '…</span>';
-      document.getElementById('vf-result').textContent = '';
+    body.innerHTML = galleryHtml + verifyHtml;
+
+    // Wire up evidence gallery interactions (when an election is loaded).
+    if (d) {
+      let target = '';
+      body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
+        target = b.dataset.hash;
+        document.getElementById('vf-target').innerHTML = t('evidence_verifying_label') + ' <span class="text-slate-700 dark:text-slate-300">' + esc(b.dataset.name) + '</span> <span class="text-[0.6rem] font-mono text-slate-600 dark:text-slate-500">' + esc(target.slice(0, 16)) + '…</span>';
+        document.getElementById('vf-result').textContent = '';
+      });
+      document.getElementById('vf-file').onchange = async (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        const h = await sha256File(f);
+        document.getElementById('vf-hash').textContent = 'sha256: ' + h;
+        const r = document.getElementById('vf-result');
+        if (!target) { r.innerHTML = `<span class="text-slate-500 dark:text-slate-400">${t('evidence_pick_target')}</span>`; return; }
+        if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = `<span class="text-emerald-400 font-semibold">${t('evidence_match_yes')}</span>`;
+        else r.innerHTML = `<span class="text-rose-400 font-semibold">${t('evidence_match_no')}</span>`;
+      };
+      wireEvidencePdf();
+    }
+
+    // Wire up PDF verifier interactions.
+    const fileInput = document.getElementById('vr-file');
+    const drop = document.getElementById('vr-drop');
+    const out = document.getElementById('vr-result');
+
+    function run(promise) {
+      out.innerHTML = `<p class="text-sm text-slate-500">${t('verify_checking')}</p>`;
+      Promise.resolve(promise).then((res) => renderVerifyResult(out, res)).catch((e) => {
+        out.innerHTML = `<p class="text-sm text-rose-500">${esc(t('verify_error'))}: ${esc(e && e.message || '')}</p>`;
+      });
+    }
+
+    fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg)); };
+    ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('border-indigo-500'); }));
+    ['dragleave'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('border-indigo-500'); }));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault(); drop.classList.remove('border-indigo-500');
+      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg));
     });
-    document.getElementById('vf-file').onchange = async (e) => {
-      const f = e.target.files[0]; if (!f) return;
-      const h = await sha256File(f);
-      document.getElementById('vf-hash').textContent = 'sha256: ' + h;
-      const r = document.getElementById('vf-result');
-      if (!target) { r.innerHTML = `<span class="text-slate-500 dark:text-slate-400">${t('evidence_pick_target')}</span>`; return; }
-      if (h.toLowerCase() === target.toLowerCase()) r.innerHTML = `<span class="text-emerald-400 font-semibold">${t('evidence_match_yes')}</span>`;
-      else r.innerHTML = `<span class="text-rose-400 font-semibold">${t('evidence_match_no')}</span>`;
-    };
-    wireEvidencePdf();
+
+    // Auto-verify when arriving via a deep link from an Evidence PDF QR code.
+    if (deepParams.fp && deepParams.tx) run(window.QCEvidenceVerify.verifyFromQuery(deepParams, App.cfg));
+
+    // Auto-verify a C1-KWK signed form when arriving via its QR code deep link.
+    if (deepParams.c1kwk) {
+      const section = document.createElement('div');
+      section.className = 'mt-6 p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800';
+      section.innerHTML = `<h3 class="font-semibold mb-2">${t('c1kwk_verify_title')}</h3><p id="c1kwk-vr-result" class="text-sm text-slate-500 dark:text-slate-400">…</p>`;
+      body.appendChild(section);
+      fetch('/api/public/c1kwk/verify?payload=' + encodeURIComponent(deepParams.c1kwk))
+        .then((r) => r.json())
+        .then((data) => {
+          const el = document.getElementById('c1kwk-vr-result'); if (!el) return;
+          if (data.valid) { el.textContent = t('c1kwk_sig_valid'); el.className = 'text-sm text-green-600 dark:text-green-400'; }
+          else { el.textContent = t('c1kwk_sig_invalid'); el.className = 'text-sm text-rose-600 dark:text-rose-400'; }
+        })
+        .catch(() => {
+          const el = document.getElementById('c1kwk-vr-result'); if (!el) return;
+          el.textContent = t('c1kwk_sig_invalid'); el.className = 'text-sm text-rose-600 dark:text-rose-400';
+        });
+    }
+
+    const sample = document.getElementById('vr-sample');
+    if (sample) sample.onclick = () => run(runSampleVerify());
   }
 
   // ───────────────────────── Disputes ─────────────────────────
@@ -2548,35 +3280,6 @@
       </div>
       ${noRegionNote}
       <p class="text-xs text-slate-500 mt-3">${summary} · ${t('dashboard_auto_refreshing')}</p>`;
-  }
-
-  // ───────────────────────── Admin ─────────────────────────
-  async function renderAdmin(v) {
-    if (!App.role.isAdmin) { v.innerHTML = `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('admin_scope_required')}</p>`; return; }
-    let data;
-    try { data = await api('/__quickcount/admin?viewer=' + encodeURIComponent(App.wallet.address)); }
-    catch (e) { v.innerHTML = '<p class="text-rose-400 text-sm">' + esc(e.message) + '</p>'; return; }
-    const s = data.stats;
-    v.innerHTML = `<h2 class="text-lg font-semibold mb-3">${t('admin_heading')}</h2>
-      ${chainSyncBanner()}
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        ${[[t('admin_stat_orgs'), s.orgs], [t('admin_stat_active_orgs'), s.activeOrgs], [t('admin_stat_elections'), s.elections], [t('admin_stat_org_fee'), s.orgFee]].map(([k, val]) =>
-          `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800"><div class="text-xl font-bold">${val}</div><div class="text-xs text-slate-600 dark:text-slate-500">${k}</div></div>`).join('')}
-      </div>
-      <p class="text-xs text-slate-600 dark:text-slate-500 mb-3">Treasury: <span class="font-mono">${esc(s.treasury)}</span></p>
-      <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('admin_all_orgs')}</h3>
-      <div class="space-y-2">${data.orgs.map((o) => `
-        <div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex items-center justify-between gap-2">
-          <div><div class="font-medium text-sm">${esc(o.name)}${o.waived ? ` <span class="badge bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">${t('admin_badge_waived')}</span>` : ''}</div>
-          <div class="text-xs text-slate-600 dark:text-slate-500 font-mono">${esc(o.addr)} · ${t('admin_paid').replace('{amount}', o.feeAmount)}</div></div>
-          ${o.active ? `<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('orgs_active_badge')}</span>`
-            : `<button data-org="${o.addr}" class="waive-btn text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium">${t('admin_waive_fee')}</button>`}
-        </div>`).join('')}</div>`;
-    v.querySelectorAll('.waive-btn').forEach((b) => b.onclick = () => {
-      const org = b.dataset.org;
-      runTx({ to: org, amount: 0, memo: QC.adm('waive', org) },
-        { loading: t('loading_waiving'), success: () => { txSuccessToast('toast_fee_waived'); refreshSoon(); } });
-    });
   }
 
   // ───────────────────────── Profile & Settings ─────────────────────────
@@ -2841,14 +3544,37 @@
     if (App.refreshTimer) clearInterval(App.refreshTimer);
     // refresh() updates global state (role + activeOrgs) AND re-renders the
     // current tab; for tabs whose render() fetches its own data (orgs, profile,
-    // admin, user) the re-render re-runs those fetches, so a still-syncing
+    // user) the re-render re-runs those fetches, so a still-syncing
     // registration appears without a manual reload.
-    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'admin', 'user'];
+    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'user'];
+    // Cadence comes from server config (TIMER_DURATION_MS), floored at 1000ms so
+    // a stray small value can't spin the refresh loop; falls back to 6000ms.
+    const cadence = Math.max(1000, Number(App.cfg && App.cfg.timerDurationMs) || 6000);
     App.refreshTimer = setInterval(() => {
       if (isEditingField()) return; // don't yank focus out of a field mid-type
       const r = currentRoute();
       if (tabs.includes(r.tab)) refresh();
-    }, 6000);
+    }, cadence);
+  }
+
+  // ───────────────────────── Live updates (SSE) ─────────────────────────
+  // Push-based companion to the timed refresh above: subscribe to the active
+  // election's public stream and refresh() the instant the server signals a
+  // change (a new count, a vote-resolved dispute, a saved tally, a finalized
+  // ballot proof). The 6s timer stays as the fallback for no-EventSource /
+  // dropped-stream cases; isEditingField() still guards against focus theft.
+  let liveEs = null, liveEid = null;
+  function subscribeLive(eid) {
+    if (typeof EventSource === 'undefined') return;
+    if (eid === liveEid && liveEs) return;
+    if (liveEs) { try { liveEs.close(); } catch (_) {} liveEs = null; }
+    liveEid = eid || null;
+    if (!eid) return;
+    try {
+      liveEs = new EventSource('/api/public/elections/' + encodeURIComponent(eid) + '/stream');
+      liveEs.addEventListener('update', () => { if (!isEditingField()) refresh(); });
+      liveEs.onerror = () => { /* browser auto-reconnects; the timer covers gaps */ };
+    } catch (_) { liveEs = null; }
   }
 
   // ───────────────────────── Theme toggle ─────────────────────────
@@ -2947,6 +3673,7 @@
       QCLoading.show(t('loading_restoring'));
       restorePrefs();
       await restorePending();
+      await restoreElectionQueue();
 
       // Staging-only reviewable "pending" pill (no DB; strict no-op elsewhere).
       if (App.cfg.staging && new URLSearchParams(location.search).get('demo') === '1') {

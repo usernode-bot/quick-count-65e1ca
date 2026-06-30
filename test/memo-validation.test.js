@@ -95,15 +95,6 @@ test('dispute resolve memo: requires eid, disp, and valid verdict', () => {
   assert.strictEqual(memo.decode(JSON.stringify(invalidDisp)), null);
 });
 
-test('admin memo: requires act', () => {
-  const valid = memo.adminMemo('waive', 'org-123');
-  assert.ok(valid.app === 'quickcount' && valid.t === 'adm' && valid.act === 'waive');
-
-  // Invalid: missing act
-  const invalidAct = { app: 'quickcount', v: 1, t: 'adm', org: 'org-123' };
-  assert.strictEqual(memo.decode(JSON.stringify(invalidAct)), null);
-});
-
 test('cleanVotes: filters invalid vote entries', () => {
   const votes = { '1': 100, '2': 50.5, '3': -10, '4': 'invalid', '5': 0 };
   const clean = memo.cleanVotes(votes);

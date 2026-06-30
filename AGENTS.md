@@ -19,6 +19,9 @@ is no server-side login.
   org-registration is fee-gated; structural changes (`cand`/`stn`/`obs`/`dres`)
   require the organizing wallet; results require an authorized observer;
   disputes require an observer or the org; `adm` requires an admin wallet.
+  The org **creator is the Owner** (`org.addr`, the implicit top role) with full
+  authority over that org's data; `ADMIN_ADDRS` is a **platform operator** —
+  platform support with a narrow break-glass override, **not** org ownership.
 - **Memo schema** (`lib/memo.js`) is mirrored inline in `public/index.html`
   (`QC.*`). Change both together. Keep keys short — memos have a length budget.
 
