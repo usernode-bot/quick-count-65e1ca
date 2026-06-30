@@ -147,7 +147,22 @@
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
-  const CHART_TYPES = ['bar_h', 'bar_v', 'dot'];
+  // Same palette as COLORS, as hex — conic-gradient() can't consume Tailwind
+  // utility classes, so the pie chart needs literal color values alongside
+  // the bg-* class used everywhere else (legend swatches, other chart types).
+  const COLOR_HEX = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#d946ef', '#14b8a6'];
+  const CHART_TYPES = ['bar_h', 'bar_v', 'dot', 'pie', 'bar_stacked'];
+  // Builds a conic-gradient() stop list from { pct, colorHex } rows. A
+  // rows total under 100% (rounding) is fine: CSS gradients hold the last
+  // explicit color from its stop through to 100%, so no gap appears.
+  function conicGradientStops(rows) {
+    let acc = 0;
+    return rows.map(({ pct, colorHex }) => {
+      const start = acc;
+      acc += pct;
+      return `${colorHex} ${start}% ${acc}%`;
+    }).join(', ');
+  }
 
   // ───────────────────────── i18n (full-app) ─────────────────────────
   // Mirrors lib/profile.js (LANGS + display-name regex). Translations are
@@ -174,7 +189,7 @@
       label_language: 'Language',
       desc_language: 'Choose the language for your profile and settings. Your choice is saved on this device and to your profile.',
       label_chart_type: 'Chart style', desc_chart_type: 'How vote totals are displayed in the election workspace.',
-      chart_type_bar_h: 'Horizontal bars', chart_type_bar_v: 'Vertical bars', chart_type_dot: 'Dot chart',
+      chart_type_bar_h: 'Horizontal bars', chart_type_bar_v: 'Vertical bars', chart_type_dot: 'Dot chart', chart_type_pie: 'Pie chart', chart_type_bar_stacked: 'Stacked bar',
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
@@ -267,7 +282,7 @@
       label_language: 'Bahasa',
       desc_language: 'Pilih bahasa untuk profil dan pengaturan Anda. Pilihan Anda disimpan di perangkat ini dan ke profil Anda.',
       label_chart_type: 'Gaya grafik', desc_chart_type: 'Cara total suara ditampilkan di ruang kerja pemilihan.',
-      chart_type_bar_h: 'Batang horizontal', chart_type_bar_v: 'Batang vertikal', chart_type_dot: 'Grafik titik',
+      chart_type_bar_h: 'Batang horizontal', chart_type_bar_v: 'Batang vertikal', chart_type_dot: 'Grafik titik', chart_type_pie: 'Diagram lingkaran', chart_type_bar_stacked: 'Batang bertumpuk',
       readonly_note: 'Nama pengguna dan dompet Anda dikelola oleh Usernode dan hanya bisa dibaca. Hanya nama tampilan yang dapat diubah.',
       no_wallet_note: 'Tautkan dompet Usernode untuk mengatur nama tampilan. Pilihan bahasa Anda tetap disimpan di perangkat ini.',
       not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
@@ -340,7 +355,7 @@
       label_language: '语言',
       desc_language: '选择您的资料和设置所用的语言。您的选择会保存在本设备并同步到您的资料。',
       label_chart_type: '图表样式', desc_chart_type: '选举工作区中票数的显示方式。',
-      chart_type_bar_h: '横向条形图', chart_type_bar_v: '纵向条形图', chart_type_dot: '点状图',
+      chart_type_bar_h: '横向条形图', chart_type_bar_v: '纵向条形图', chart_type_dot: '点状图', chart_type_pie: '饼图', chart_type_bar_stacked: '堆叠条形图',
       readonly_note: '您的用户名和钱包由 Usernode 管理，此处仅供查看。只有显示名称可以修改。',
       no_wallet_note: '关联 Usernode 钱包以设置显示名称。您的语言选择仍会保存在本设备。',
       not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
@@ -412,7 +427,7 @@
       label_language: 'Idioma',
       desc_language: 'Elige el idioma de tu perfil y tu configuración. Tu elección se guarda en este dispositivo y en tu perfil.',
       label_chart_type: 'Estilo de gráfico', desc_chart_type: 'Cómo se muestran los totales de votos en el espacio de trabajo de la elección.',
-      chart_type_bar_h: 'Barras horizontales', chart_type_bar_v: 'Barras verticales', chart_type_dot: 'Gráfico de puntos',
+      chart_type_bar_h: 'Barras horizontales', chart_type_bar_v: 'Barras verticales', chart_type_dot: 'Gráfico de puntos', chart_type_pie: 'Gráfico circular', chart_type_bar_stacked: 'Barra apilada',
       readonly_note: 'Tu nombre de usuario y tu billetera los gestiona Usernode y aquí son de solo lectura. Solo puedes cambiar tu nombre visible.',
       no_wallet_note: 'Vincula una billetera de Usernode para definir un nombre visible. Tu idioma se guarda igualmente en este dispositivo.',
       not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
@@ -485,7 +500,7 @@
       label_language: 'भाषा',
       desc_language: 'अपनी प्रोफ़ाइल और सेटिंग्स के लिए भाषा चुनें। आपका चयन इस डिवाइस और आपकी प्रोफ़ाइल में सहेजा जाता है।',
       label_chart_type: 'चार्ट शैली', desc_chart_type: 'चुनाव कार्यक्षेत्र में मतों की कुल संख्या कैसे दिखाई जाती है।',
-      chart_type_bar_h: 'क्षैतिज बार', chart_type_bar_v: 'लंबवत बार', chart_type_dot: 'डॉट चार्ट',
+      chart_type_bar_h: 'क्षैतिज बार', chart_type_bar_v: 'लंबवत बार', chart_type_dot: 'डॉट चार्ट', chart_type_pie: 'पाई चार्ट', chart_type_bar_stacked: 'स्टैक्ड बार',
       readonly_note: 'आपका उपयोगकर्ता नाम और वॉलेट Usernode द्वारा प्रबंधित हैं और यहाँ केवल पढ़े जा सकते हैं। केवल प्रदर्शित नाम बदला जा सकता है।',
       no_wallet_note: 'प्रदर्शित नाम सेट करने के लिए Usernode वॉलेट लिंक करें। आपकी भाषा का चयन फिर भी इस डिवाइस पर सहेजा जाता है।',
       not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
@@ -557,7 +572,7 @@
       label_language: 'اللغة',
       desc_language: 'اختر لغة ملفك الشخصي وإعداداتك. يُحفظ اختيارك على هذا الجهاز وفي ملفك الشخصي.',
       label_chart_type: 'نمط الرسم البياني', desc_chart_type: 'كيفية عرض إجماليات الأصوات في مساحة عمل الانتخابات.',
-      chart_type_bar_h: 'أعمدة أفقية', chart_type_bar_v: 'أعمدة عمودية', chart_type_dot: 'رسم نقطي',
+      chart_type_bar_h: 'أعمدة أفقية', chart_type_bar_v: 'أعمدة عمودية', chart_type_dot: 'رسم نقطي', chart_type_pie: 'رسم دائري', chart_type_bar_stacked: 'أعمدة مكدّسة',
       readonly_note: 'اسم المستخدم والمحفظة يُداران بواسطة Usernode ويظهران للقراءة فقط. يمكنك تغيير الاسم المعروض فقط.',
       no_wallet_note: 'اربط محفظة Usernode لتعيين اسم معروض. سيظل اختيار اللغة محفوظًا على هذا الجهاز.',
       not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
@@ -629,7 +644,7 @@
       label_language: 'Langue',
       desc_language: 'Choisissez la langue de votre profil et de vos paramètres. Votre choix est enregistré sur cet appareil et dans votre profil.',
       label_chart_type: 'Style de graphique', desc_chart_type: "Comment les totaux de voix s'affichent dans l'espace de travail de l'élection.",
-      chart_type_bar_h: 'Barres horizontales', chart_type_bar_v: 'Barres verticales', chart_type_dot: 'Graphique à points',
+      chart_type_bar_h: 'Barres horizontales', chart_type_bar_v: 'Barres verticales', chart_type_dot: 'Graphique à points', chart_type_pie: 'Graphique circulaire', chart_type_bar_stacked: 'Barre empilée',
       readonly_note: "Votre nom d'utilisateur et votre portefeuille sont gérés par Usernode et affichés en lecture seule. Seul votre nom d'affichage est modifiable.",
       no_wallet_note: "Liez un portefeuille Usernode pour définir un nom d'affichage. Votre choix de langue reste enregistré sur cet appareil.",
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
@@ -1677,12 +1692,38 @@
   }
 
   // ───────────────────────── Dashboard ─────────────────────────
-  // Renders a list of { name, votesText, pct, colorClass } rows as one of the
-  // three user-selectable chart styles (App.chartType): horizontal bars
-  // (default), vertical bars, or a dot chart. Used by every static (i.e.
-  // non-live-patched) tally — the live inline tally has its own DOM-patching
-  // version below, inlineBarRowHtml(), for the same three styles.
+  // Renders a list of { name, votesText, pct, colorClass, colorHex } rows as
+  // one of the five user-selectable chart styles (App.chartType): horizontal
+  // bars (default), vertical bars, dot chart, pie chart, or a single stacked
+  // bar. Used by every static (i.e. non-live-patched) tally — the live inline
+  // tally has its own DOM-patching version below, inlineBarRowHtml() plus the
+  // dedicated pie/bar_stacked build blocks in rerenderInlineSummary().
   function renderBars(rows, chartType) {
+    if (chartType === 'pie') {
+      const legend = rows.map(({ name, votesText, pct, colorClass }) => `<div class="flex items-center gap-2 text-sm mb-1.5">
+        <span class="w-3 h-3 rounded-sm shrink-0 ${colorClass}"></span>
+        <span class="flex-1 truncate">${esc(name)}</span>
+        <span class="font-mono text-slate-600 dark:text-slate-400">${votesText} (${pct}%)</span>
+      </div>`).join('');
+      const grand = rows.reduce((s, r) => s + (r.pct || 0), 0);
+      const bg = grand > 0 ? `conic-gradient(${conicGradientStops(rows)})` : '#e2e8f0';
+      return `<div class="flex items-center gap-5 mb-3 flex-wrap">
+        <div class="w-32 h-32 rounded-full shrink-0" style="background:${bg}"></div>
+        <div class="flex-1 min-w-[10rem]">${legend}</div>
+      </div>`;
+    }
+    if (chartType === 'bar_stacked') {
+      const segments = rows.map(({ name, pct, colorClass }) => `<div class="${colorClass} h-full" style="width:${pct}%" title="${esc(name)} (${pct}%)"></div>`).join('');
+      const legend = rows.map(({ name, votesText, pct, colorClass }) => `<div class="flex items-center gap-2 text-sm mb-1">
+        <span class="w-3 h-3 rounded-sm shrink-0 ${colorClass}"></span>
+        <span class="flex-1 truncate">${esc(name)}</span>
+        <span class="font-mono text-slate-600 dark:text-slate-400">${votesText} (${pct}%)</span>
+      </div>`).join('');
+      return `<div class="mb-3">
+        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden flex">${segments}</div>
+        <div class="mt-2">${legend}</div>
+      </div>`;
+    }
     if (chartType === 'bar_v') {
       const cols = rows.map(({ name, votesText, pct, colorClass }) => `
         <div class="flex flex-col items-center justify-end h-full flex-1 min-w-0">
@@ -1713,7 +1754,7 @@
     const total = Object.values(d.tally).reduce((s, n) => s + n, 0) || 1;
     const rows = d.candidates.map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
       .sort((a, b) => b.votes - a.votes)
-      .map(({ c, i, votes }) => ({ name: c.name, votesText: votes.toLocaleString(), pct: Math.round((votes / total) * 100), colorClass: COLORS[i % COLORS.length] }));
+      .map(({ c, i, votes }) => ({ name: c.name, votesText: votes.toLocaleString(), pct: Math.round((votes / total) * 100), colorClass: COLORS[i % COLORS.length], colorHex: COLOR_HEX[i % COLOR_HEX.length] }));
     return renderBars(rows, App.chartType);
   }
   // ── Inline TPS vote-entry (off-chain working tally) ──
@@ -1871,6 +1912,18 @@
       <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${color} transition-all duration-500 ease-out" style="width:0%"></div></div>
     </div>`;
   }
+  // Legend-row markup shared by the live pie and stacked-bar charts: both
+  // lean on a swatch + name + total/pct line instead of an inline bar, since
+  // the chart itself (the pie circle / the single stacked track) isn't
+  // per-candidate. Uses the same data-inl-bar/-total/-pct hooks as
+  // inlineBarRowHtml() so the patch loop below needs no special-casing.
+  function inlineLegendRowHtml(c, i) {
+    return `<div class="flex items-center gap-2 text-sm mb-1.5" data-inl-bar="${c.key}">
+      <span class="w-3 h-3 rounded-sm shrink-0 ${COLORS[i % COLORS.length]}"></span>
+      <span class="flex-1 truncate">${esc(c.name)}</span>
+      <span class="font-mono text-slate-600 dark:text-slate-400"><span data-inl-bar-total>0</span> (<span data-inl-bar-pct>0</span>%)</span>
+    </div>`;
+  }
   function rerenderInlineSummary() {
     const d = App.state && App.state.detail;
     const QC = window.QuickCountInline;
@@ -1898,21 +1951,53 @@
     if (bars) {
       const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length || bars.dataset.chartType !== App.chartType;
       if (needBuild) {
-        const innerHtml = cands.map((c, i) => inlineBarRowHtml(c, i, App.chartType)).join('');
-        bars.innerHTML = (App.chartType === 'bar_v') ? `<div class="h-28 flex items-end gap-2">${innerHtml}</div>` : innerHtml;
         bars.dataset.chartType = App.chartType;
+        if (App.chartType === 'pie') {
+          const legend = cands.map((c, i) => inlineLegendRowHtml(c, i)).join('');
+          bars.innerHTML = `<div class="flex items-center gap-5 mb-3 flex-wrap">
+            <div data-inl-pie class="w-32 h-32 rounded-full shrink-0" style="background:#e2e8f0"></div>
+            <div class="flex-1 min-w-[10rem]">${legend}</div>
+          </div>`;
+        } else if (App.chartType === 'bar_stacked') {
+          const segments = cands.map((c, i) => `<div data-inl-seg="${c.key}" class="${COLORS[i % COLORS.length]} h-full transition-all duration-500 ease-out" style="width:0%" title="${esc(c.name)}"></div>`).join('');
+          const legend = cands.map((c, i) => inlineLegendRowHtml(c, i)).join('');
+          bars.innerHTML = `<div class="mb-3">
+            <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden flex">${segments}</div>
+            <div class="mt-2">${legend}</div>
+          </div>`;
+        } else {
+          const innerHtml = cands.map((c, i) => inlineBarRowHtml(c, i, App.chartType)).join('');
+          bars.innerHTML = (App.chartType === 'bar_v') ? `<div class="h-28 flex items-end gap-2">${innerHtml}</div>` : innerHtml;
+        }
       }
       cands.forEach((c) => {
-        const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
-        if (!block) return;
         const pct = shares[c.key] || 0;
-        block.querySelector('[data-inl-bar-total]').textContent = (totals[c.key] || 0).toLocaleString();
-        block.querySelector('[data-inl-bar-pct]').textContent = pct;
-        const fill = block.querySelector('[data-inl-bar-fill]');
-        if (App.chartType === 'bar_v') fill.style.height = pct + '%';
-        else if (App.chartType === 'dot') fill.style.left = pct + '%';
-        else fill.style.width = pct + '%';
+        const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
+        if (block) {
+          const totalEl = block.querySelector('[data-inl-bar-total]');
+          if (totalEl) totalEl.textContent = (totals[c.key] || 0).toLocaleString();
+          const pctEl = block.querySelector('[data-inl-bar-pct]');
+          if (pctEl) pctEl.textContent = pct;
+          const fill = block.querySelector('[data-inl-bar-fill]');
+          if (fill) {
+            if (App.chartType === 'bar_v') fill.style.height = pct + '%';
+            else if (App.chartType === 'dot') fill.style.left = pct + '%';
+            else fill.style.width = pct + '%';
+          }
+        }
+        if (App.chartType === 'bar_stacked') {
+          const seg = bars.querySelector(`[data-inl-seg="${c.key}"]`);
+          if (seg) seg.style.width = pct + '%';
+        }
       });
+      if (App.chartType === 'pie') {
+        const pieEl = bars.querySelector('[data-inl-pie]');
+        if (pieEl) {
+          const grand = cands.reduce((s, c) => s + (totals[c.key] || 0), 0);
+          const gradRows = cands.map((c, i) => ({ pct: shares[c.key] || 0, colorHex: COLOR_HEX[i % COLOR_HEX.length] }));
+          pieEl.style.background = grand > 0 ? `conic-gradient(${conicGradientStops(gradRows)})` : '#e2e8f0';
+        }
+      }
     }
   }
   function wireStationRows(scope) {
@@ -2010,7 +2095,7 @@
     if (grand <= 0) return '';
     const barRows = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
       .sort((a, b) => b.votes - a.votes)
-      .map(({ c, i, votes, pct }) => ({ name: c.name, votesText: votes.toLocaleString(), pct, colorClass: COLORS[i % COLORS.length] }));
+      .map(({ c, i, votes, pct }) => ({ name: c.name, votesText: votes.toLocaleString(), pct, colorClass: COLORS[i % COLORS.length], colorHex: COLOR_HEX[i % COLOR_HEX.length] }));
     const bars = renderBars(barRows, App.chartType);
     const reported = t('dashboard_working_tally_reported')
       .replace('{reported}', saved.length)
