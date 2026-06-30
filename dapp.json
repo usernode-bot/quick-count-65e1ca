@@ -322,6 +322,11 @@
       "name": "C1-KWK verify endpoint returns JSON for any payload",
       "path": "/api/public/c1kwk/verify?payload=dGVzdA",
       "expectText": "\"valid\""
+    },
+    {
+      "name": "Evidence Sheet verify endpoint returns JSON",
+      "path": "/api/public/evidence-sheet/verify/staging-demo-esheet-vid-0000000000000000",
+      "expectText": "\"status\""
     }
   ]
 }

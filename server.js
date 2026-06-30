@@ -1073,6 +1073,242 @@ app.get('/api/public/c1kwk/verify', (req, res) => {
   }
 });
 
+// Authenticated: generate and download a signed evidence-sheet PDF template for
+// an election. Assigns a UUID, computes a doc_hash from the canonical election
+// data snapshot, signs with HMAC-SHA256/JWT_SECRET, embeds a QR verification
+// link, and logs the download to evidence_sheet_downloads.
+app.post('/api/elections/:eid/evidence-sheet', async (req, res) => {
+  try {
+    const { eid } = req.params;
+    if (!PDFDocument || !QRCode) return res.status(503).json({ error: 'PDF generation libraries unavailable' });
+    if (!JWT_SECRET) return res.status(503).json({ error: 'Signing not available in this environment' });
+
+    const viewer = req.user && req.user.usernode_pubkey;
+    const visible = indexer.visibleElections({ viewer });
+    if (!visible.some((el) => el.eid === eid)) return res.status(404).json({ error: 'Election not found' });
+
+    const d = indexer.electionDetail(eid, 'latest');
+    if (!d) return res.status(404).json({ error: 'Election not found' });
+
+    const wallet = (req.user && req.user.usernode_pubkey) || null;
+    const username = (req.user && req.user.username) || null;
+    const ip_address = ((req.headers['x-forwarded-for'] || req.ip || '').split(',')[0] || '').trim();
+    const user_agent = req.headers['user-agent'] || null;
+
+    const vid = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+    const doc_version = 1;
+    const downloaded_at = new Date().toISOString();
+
+    // Canonical template data — stable snapshot of election content for hashing.
+    const candidates = (d.candidates || []).map((c) => ({ cid: c.cid, name: c.name || '' }));
+    const stations = (d.stations || []).map((s) => ({ sid: s.sid, name: s.name || ('Station ' + s.sid) }));
+    const elName = d.election.name || eid;
+    const canonicalJson = JSON.stringify({ eid, election_name: elName, doc_version, candidates, stations });
+    const doc_hash = crypto.createHash('sha256').update(canonicalJson).digest('hex');
+
+    const sig = crypto.createHmac('sha256', JWT_SECRET)
+      .update(JSON.stringify({ vid, eid, doc_hash, doc_version, wallet: wallet || '', downloaded_at }))
+      .digest('hex');
+
+    if (pool) {
+      await pool.query(
+        `INSERT INTO evidence_sheet_downloads (vid, eid, doc_hash, doc_version, sig, wallet, username, ip_address, user_agent, downloaded_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [vid, eid, doc_hash, doc_version, sig, wallet, username, ip_address, user_agent, downloaded_at]
+      );
+    }
+
+    const verifyUrl = `${req.protocol}://${req.get('host')}/#/verify?esheet=${encodeURIComponent(vid)}`;
+    const qrPng = await QRCode.toBuffer(verifyUrl, { type: 'png', width: 200 });
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const pdfDone = new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+    });
+
+    // ── Page 1: Tally Sheet Template ─────────────────────────────────────────
+    doc.fontSize(16).font('Helvetica-Bold').text('EVIDENCE TALLY SHEET', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text('Fill-in template — record vote counts and verify on the Evidence page', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica-Bold').text('Election: ', { continued: true }).font('Helvetica').text(elName);
+    doc.fontSize(9).font('Helvetica').fillColor('#666').text('Generated: ' + downloaded_at);
+    doc.fillColor('#000');
+    doc.moveDown(0.8);
+
+    for (let si = 0; si < stations.length; si++) {
+      const station = stations[si];
+      const stName = station.name;
+      doc.fontSize(11).font('Helvetica-Bold').text(stName);
+      doc.moveDown(0.2);
+      for (const c of candidates) {
+        const label = `  No. ${c.cid} — ${c.name || '(unknown)'}`;
+        doc.fontSize(10).font('Helvetica').text(label, { continued: true }).text('   Votes: ___________', { align: 'right' });
+      }
+      doc.moveDown(0.3);
+      doc.fontSize(10).font('Helvetica-Bold').text('  Valid votes:', { continued: true }).font('Helvetica').text('   ___________', { align: 'right' });
+      doc.fontSize(10).font('Helvetica-Bold').text('  Invalid votes:', { continued: true }).font('Helvetica').text('   ___________', { align: 'right' });
+      doc.fontSize(10).font('Helvetica-Bold').text('  Total votes:', { continued: true }).font('Helvetica').text('   ___________', { align: 'right' });
+      doc.moveDown(0.8);
+      if (doc.y > 680 && si < stations.length - 1) doc.addPage();
+    }
+
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica').fillColor('#555')
+      .text('To verify: fill in this form → save the file → go to the Evidence tab → drop the file in the verification panel → click "Verify a file against this" on the matching station card. The file never leaves your device.');
+    doc.fillColor('#000');
+
+    // ── Page 2: Download Certificate ─────────────────────────────────────────
+    doc.addPage();
+    doc.fontSize(16).font('Helvetica-Bold').text('DOWNLOAD CERTIFICATE', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').fillColor('#555')
+      .text('Proof of download — cryptographically signed by the Quick Count platform', { align: 'center' });
+    doc.fillColor('#000');
+    doc.moveDown(1);
+
+    const kv = (k, v) => {
+      doc.fontSize(10).font('Helvetica-Bold').text(k + ':', { continued: true });
+      doc.font('Helvetica').text(' ' + String(v == null ? '—' : v));
+    };
+    kv('Download ID', vid);
+    kv('Election', elName);
+    kv('Document version', doc_version);
+    kv('Downloaded at (UTC)', downloaded_at);
+    kv('Downloader wallet', wallet ? (wallet.slice(0, 20) + '…') : '(not linked)');
+    if (username) kv('Username', username);
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica-Bold').text('Document integrity hash (SHA-256):');
+    doc.font('Courier').fontSize(8).text(doc_hash);
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica-Bold').text('Server signature (HMAC-SHA256, truncated):');
+    doc.font('Courier').fontSize(8).text(sig.slice(0, 32) + '…');
+    doc.moveDown(1);
+
+    doc.fontSize(10).font('Helvetica').text('Scan the QR code to verify this certificate:');
+    doc.moveDown(0.3);
+    const qrY = doc.y;
+    doc.image(qrPng, 50, qrY, { width: 100 });
+    doc.fontSize(9).fillColor('#555').text(verifyUrl, 50, qrY + 104);
+    doc.fillColor('#000');
+
+    // Embed machine-readable marker in PDF metadata for client-side extraction.
+    const marker = 'ESQC1.' + Buffer.from(JSON.stringify({ vid })).toString('base64url');
+    doc.setProperties({
+      title: 'Quick Count Evidence Sheet — ' + elName,
+      subject: 'Download Certificate',
+      author: 'Quick Count',
+      keywords: marker,
+    });
+
+    doc.end();
+    await pdfDone;
+
+    const pdf = Buffer.concat(chunks);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="evidence-sheet-${eid}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: verify an evidence sheet download certificate by UUID.
+// Under /api/public/ so no auth required — anyone who scans the QR code can check.
+// Writes every verification attempt to evidence_sheet_verify_log.
+app.get('/api/public/evidence-sheet/verify/:vid', async (req, res) => {
+  const { vid } = req.params;
+  const verifier_ip = ((req.headers['x-forwarded-for'] || req.ip || '').split(',')[0] || '').trim();
+  const verifier_ua = req.headers['user-agent'] || null;
+
+  async function logResult(result) {
+    if (!pool) return;
+    try {
+      await pool.query(
+        'INSERT INTO evidence_sheet_verify_log (vid, result, verifier_ip, verifier_ua) VALUES ($1,$2,$3,$4)',
+        [vid, result, verifier_ip, verifier_ua]
+      );
+    } catch { /* non-fatal */ }
+  }
+
+  try {
+    if (!pool) {
+      await logResult('not_found');
+      return res.json({ status: 'not_found' });
+    }
+
+    const { rows } = await pool.query('SELECT * FROM evidence_sheet_downloads WHERE vid = $1', [vid]);
+    if (!rows.length) {
+      await logResult('not_found');
+      return res.json({ status: 'not_found' });
+    }
+
+    const row = rows[0];
+    if (row.revoked) {
+      await logResult('revoked');
+      return res.json({
+        status: 'revoked',
+        meta: { vid: row.vid, eid: row.eid, downloaded_at: row.downloaded_at, wallet: row.wallet, username: row.username },
+      });
+    }
+
+    // Re-derive and verify the signature.
+    if (!JWT_SECRET || !row.sig) {
+      await logResult('invalid');
+      return res.json({ status: 'invalid' });
+    }
+    const rowAt = row.downloaded_at instanceof Date ? row.downloaded_at.toISOString() : row.downloaded_at;
+    const expected = crypto.createHmac('sha256', JWT_SECRET)
+      .update(JSON.stringify({ vid: row.vid, eid: row.eid, doc_hash: row.doc_hash, doc_version: row.doc_version, wallet: row.wallet || '', downloaded_at: rowAt }))
+      .digest('hex');
+    let sigValid = false;
+    try {
+      const sigBuf = Buffer.from(row.sig, 'hex');
+      const expBuf = Buffer.from(expected, 'hex');
+      sigValid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch { sigValid = false; }
+
+    if (!sigValid) {
+      await logResult('invalid');
+      return res.json({ status: 'invalid' });
+    }
+
+    // Re-derive doc_hash from current election state to detect data changes.
+    const d = indexer.electionDetail(row.eid, 'latest');
+    let currentHash = null;
+    if (d) {
+      const cands = (d.candidates || []).map((c) => ({ cid: c.cid, name: c.name || '' }));
+      const stats = (d.stations || []).map((s) => ({ sid: s.sid, name: s.name || ('Station ' + s.sid) }));
+      const elName = d.election.name || row.eid;
+      currentHash = crypto.createHash('sha256')
+        .update(JSON.stringify({ eid: row.eid, election_name: elName, doc_version: row.doc_version, candidates: cands, stations: stats }))
+        .digest('hex');
+    }
+
+    const meta = {
+      vid: row.vid, eid: row.eid, doc_hash: row.doc_hash, doc_version: row.doc_version,
+      wallet: row.wallet, username: row.username,
+      downloaded_at: rowAt,
+      ip_address: row.ip_address, user_agent: row.user_agent,
+    };
+
+    if (!currentHash) {
+      await logResult('doc_changed');
+      return res.json({ status: 'doc_changed', note: 'election state unavailable', meta });
+    }
+    if (currentHash !== row.doc_hash) {
+      await logResult('doc_changed');
+      return res.json({ status: 'doc_changed', meta });
+    }
+
+    await logResult('valid');
+    return res.json({ status: 'valid', meta });
+  } catch (err) {
+    res.status(500).json({ status: 'invalid', error: err.message });
+  }
+});
+
 // Public: list elections with counts (backed by in-memory indexer).
 app.get('/api/public/elections', (_req, res) => {
   try {
@@ -1503,6 +1739,35 @@ async function migrate() {
       downloaded_at TIMESTAMPTZ DEFAULT NOW()
     )`);
   await pool.query(`COMMENT ON TABLE c1kwk_downloads IS 'staging:private'`);
+  // Evidence sheet downloads — signed PDF tally-sheet templates. PRIVATE: stores
+  // IP address, user-agent, wallet address — PII. Staging gets schema only;
+  // seedStaging() inserts an obviously-fake row for the demo election.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS evidence_sheet_downloads (
+      vid TEXT PRIMARY KEY,
+      eid TEXT NOT NULL,
+      doc_hash TEXT NOT NULL,
+      doc_version INTEGER NOT NULL DEFAULT 1,
+      sig TEXT,
+      wallet TEXT,
+      username TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      downloaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      revoked BOOLEAN NOT NULL DEFAULT FALSE
+    )`);
+  await pool.query(`COMMENT ON TABLE evidence_sheet_downloads IS 'staging:private'`);
+  // Evidence sheet verification audit log. PRIVATE: stores verifier IP addresses.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS evidence_sheet_verify_log (
+      id SERIAL PRIMARY KEY,
+      vid TEXT,
+      result TEXT NOT NULL,
+      verifier_ip TEXT,
+      verifier_ua TEXT,
+      checked_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  await pool.query(`COMMENT ON TABLE evidence_sheet_verify_log IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
   // v3 — username-as-identity: `profiles` is the authoritative username↔address
@@ -1665,6 +1930,19 @@ async function seedStaging() {
      SELECT $1, $2, $3, $4, NOW()
      WHERE NOT EXISTS (SELECT 1 FROM c1kwk_downloads WHERE eid = $1 AND doc_hash = $2)`,
     [PILPRES_EID, demoHash, 'staging-demo-sig', DEMO.obs1]
+  );
+  // Evidence sheet downloads (staging:private → seed one obviously-fake row so
+  // the verify endpoint is exercisable in PR previews).
+  await pool.query(
+    `INSERT INTO evidence_sheet_downloads (vid, eid, doc_hash, doc_version, sig, wallet, username, ip_address, downloaded_at)
+     VALUES ($1, $2, $3, 1, NULL, $4, 'staging_demo_user', '127.0.0.1', '2026-06-19T08:30:00.000Z')
+     ON CONFLICT (vid) DO NOTHING`,
+    [
+      'staging-demo-esheet-vid-0000000000000000',
+      'demo-election',
+      '0000000000000000000000000000000000000000000000000000000000000000',
+      DEMO.orgA,
+    ]
   );
 }
 
