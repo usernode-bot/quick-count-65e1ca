@@ -246,6 +246,7 @@
       action_refresh: 'Refresh',
       toast_refreshed: 'Refreshed ✓',
       tab_heatmap: 'Heatmap', heatmap_heading: 'Voter Turnout by Region', heatmap_select_election: 'Select an election to view turnout by region.', heatmap_no_regions: 'No regions are defined. Add a label to each station in the election workspace.', heatmap_col_region: 'Region', heatmap_col_stations: 'Stations', heatmap_col_ballots: 'Ballots cast', heatmap_col_valid_rate: 'Valid ballots', heatmap_col_invalid: 'Blank / invalid', heatmap_unlabeled: '(No region)', heatmap_summary: '{reported} of {total} stations reported · {regions} regions',
+      geo_heading: 'Area Hierarchy', geo_level_1: 'Province', geo_level_2: 'Regency / City', geo_level_3: 'District (Kecamatan)', geo_level_4: 'Village / Ward', geo_level_5: 'TPS', geo_pick_from_hierarchy: 'Pick from area hierarchy', geo_select_placeholder: '— select {level} —', geo_add_placeholder: 'Add new {level}…', geo_add_btn: 'Add', geo_delete_confirm: 'Delete "{name}" and all its sub-entries? This cannot be undone.', toast_geo_added: 'Added ✓', toast_geo_deleted: 'Deleted ✓', geo_empty: 'No entries yet.', geo_tps_select: 'Select', geo_loading: 'Loading…',
       c1kwk_panel_title: 'C1-KWK — Ballot Count Certificate', c1kwk_download_btn: 'Download Signed PDF', c1kwk_generating: 'Generating…', c1kwk_wallet_required: 'A linked wallet is required to sign the form.', c1kwk_province: 'Province', c1kwk_regency: 'Regency / City', c1kwk_subdistrict: 'Subdistrict', c1kwk_village: 'Village / Kelurahan', c1kwk_tps_number: 'TPS No.', c1kwk_valid_votes: 'Valid Votes (by candidate)', c1kwk_invalid_votes: 'Invalid / Blank Votes', c1kwk_total_votes: 'Total Votes (auto)', c1kwk_dpt: 'DPT (Registered Voters)', c1kwk_verify_title: 'Verify C1-KWK Signature', c1kwk_sig_valid: '✓ Signature valid — document has not been altered.', c1kwk_sig_invalid: '✗ Signature invalid — document may have been altered.',
     },
     id: {
@@ -317,6 +318,7 @@
       action_refresh: 'Segarkan',
       toast_refreshed: 'Disegarkan ✓',
       tab_heatmap: 'Peta Panas', heatmap_heading: 'Partisipasi Pemilih per Wilayah', heatmap_select_election: 'Pilih pemilihan untuk melihat partisipasi per wilayah.', heatmap_no_regions: 'Tidak ada wilayah yang ditentukan. Tambahkan label ke setiap TPS di ruang kerja pemilihan.', heatmap_col_region: 'Wilayah', heatmap_col_stations: 'TPS', heatmap_col_ballots: 'Surat suara masuk', heatmap_col_valid_rate: 'Surat suara sah', heatmap_col_invalid: 'Kosong / tidak sah', heatmap_unlabeled: '(Tanpa wilayah)', heatmap_summary: '{reported} dari {total} TPS dilaporkan · {regions} wilayah',
+      geo_heading: 'Hierarki Wilayah', geo_level_1: 'Provinsi', geo_level_2: 'Kabupaten / Kota', geo_level_3: 'Kecamatan', geo_level_4: 'Kelurahan / Desa', geo_level_5: 'TPS', geo_pick_from_hierarchy: 'Pilih dari hierarki wilayah', geo_select_placeholder: '— pilih {level} —', geo_add_placeholder: 'Tambah {level} baru…', geo_add_btn: 'Tambah', geo_delete_confirm: 'Hapus "{name}" beserta semua sub-entri? Tidak dapat dibatalkan.', toast_geo_added: 'Ditambahkan ✓', toast_geo_deleted: 'Dihapus ✓', geo_empty: 'Belum ada data.', geo_tps_select: 'Pilih', geo_loading: 'Memuat…',
       c1kwk_panel_title: 'C1-KWK — Catatan Hasil Penghitungan Suara', c1kwk_download_btn: 'Unduh PDF Tertandatangan', c1kwk_generating: 'Membuat dokumen…', c1kwk_wallet_required: 'Dompet tertaut diperlukan untuk menandatangani formulir.', c1kwk_province: 'Provinsi', c1kwk_regency: 'Kabupaten / Kota', c1kwk_subdistrict: 'Kecamatan', c1kwk_village: 'Kelurahan / Desa', c1kwk_tps_number: 'No. TPS', c1kwk_valid_votes: 'Suara Sah (per pasangan)', c1kwk_invalid_votes: 'Suara Tidak Sah / Kosong', c1kwk_total_votes: 'Jumlah Suara (otomatis)', c1kwk_dpt: 'DPT (Pemilih Terdaftar)', c1kwk_verify_title: 'Verifikasi Tanda Tangan C1-KWK', c1kwk_sig_valid: '✓ Tanda tangan valid — dokumen belum diubah.', c1kwk_sig_invalid: '✗ Tanda tangan tidak valid — dokumen mungkin telah diubah.',
     },
     'zh-Hans': {
@@ -2428,6 +2430,10 @@
         <input id="st-label" placeholder="${t('election_station_label_ph')}" class="w-36 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
         <button id="st-add" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_station_add_btn')}</button>
       </div>
+      <details id="geo-hierarchy-details" class="text-sm mb-3">
+        <summary class="cursor-pointer text-slate-500 dark:text-slate-400 mb-2">${t('geo_pick_from_hierarchy')}</summary>
+        <div id="geo-picker-container" class="mt-2 p-3 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800"></div>
+      </details>
       <details class="text-sm">
         <summary class="cursor-pointer text-slate-500 dark:text-slate-400 mb-2">${t('election_station_bulk_import')}</summary>
         <p class="text-xs text-slate-600 dark:text-slate-500 mb-1">${t('election_station_csv_desc')}</p>
@@ -2452,6 +2458,22 @@
     const p = panel(t('election_stations_title'), inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
+      const geoDetails = p.querySelector('#geo-hierarchy-details');
+      if (geoDetails && d.election && d.election.orgAddr) {
+        geoDetails.addEventListener('toggle', function () {
+          if (!this.open) return;
+          const pickerContainer = p.querySelector('#geo-picker-container');
+          if (!pickerContainer) return;
+          renderGeoSection(pickerContainer, d.election.orgAddr, false, {
+            pathKey: 'geoPickerPath',
+            onTpsSelect: (tpsName, provinceName) => {
+              p.querySelector('#st-name').value = tpsName;
+              p.querySelector('#st-label').value = provinceName || '';
+              geoDetails.open = false;
+            },
+          });
+        });
+      }
       p.querySelector('#st-add').onclick = () => {
         const name = p.querySelector('#st-name').value.trim(); if (!name) return toast(t('toast_enter_station_name'), 'warn');
         const label = p.querySelector('#st-label').value.trim();
@@ -2768,6 +2790,157 @@
     v.querySelectorAll('.org-manage').forEach((b) => { b.onclick = () => { App.orgView = b.dataset.addr; render(); }; });
   }
 
+  // Drill-down geo hierarchy navigator (Province → Regency → District → Village → TPS).
+  // container: DOM element to render into.
+  // orgAddr: org whose geo tree to show.
+  // canWrite: whether the viewer may add/delete nodes.
+  // opts.pathKey: App key holding the breadcrumb path array (default 'geoPath').
+  // opts.onTpsSelect(tpsName, provinceName): callback when a TPS is picked (picker mode).
+  async function renderGeoSection(container, orgAddr, canWrite, opts) {
+    const pathKey = (opts && opts.pathKey) || 'geoPath';
+    const onTpsSelect = opts && opts.onTpsSelect;
+    if (!App[pathKey]) App[pathKey] = [];
+
+    const path = App[pathKey];
+    const curLevel = path.length + 1;
+    const parentId = path.length > 0 ? path[path.length - 1].id : null;
+    const provinceName = path.length > 0 ? path[0].name : null;
+    const GEO_LEVELS = [null, t('geo_level_1'), t('geo_level_2'), t('geo_level_3'), t('geo_level_4'), t('geo_level_5')];
+
+    container.innerHTML = `<p class="text-xs text-slate-400">${t('geo_loading')}</p>`;
+
+    let nodes = [];
+    try {
+      const qp = parentId != null ? ('?parent_id=' + parentId) : '';
+      const viewer = viewerAddr();
+      const sep = qp ? '&' : '?';
+      const url = '/__quickcount/orgs/' + encodeURIComponent(orgAddr) + '/geo' + qp + (viewer ? sep + 'viewer=' + encodeURIComponent(viewer) : '');
+      const data = await fetch(url).then((r) => r.json());
+      nodes = (data && data.nodes) || [];
+    } catch (_) {}
+
+    let html = '<div>';
+
+    // Breadcrumbs when drilled in.
+    if (path.length > 0) {
+      html += '<div class="flex items-center flex-wrap gap-1 mb-3 text-xs">';
+      html += `<button class="geo-crumb text-indigo-500 hover:underline font-medium" data-depth="-1">${t('geo_heading')}</button>`;
+      for (let i = 0; i < path.length; i++) {
+        html += `<span class="text-slate-400 mx-1">›</span><button class="geo-crumb text-indigo-500 hover:underline" data-depth="${i}">${esc(path[i].name)}</button>`;
+      }
+      html += '</div>';
+    }
+
+    if (curLevel <= 5) {
+      const levelLabel = GEO_LEVELS[curLevel];
+      html += `<p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">${levelLabel}</p>`;
+      html += `<div class="flex gap-2 items-center mb-2 flex-wrap">
+        <select class="geo-select flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-sm">
+          <option value="">${t('geo_select_placeholder').replace('{level}', levelLabel)}</option>`;
+      for (const n of nodes) {
+        html += `<option value="${n.id}" data-name="${esc(n.name)}">${esc(n.name)}</option>`;
+      }
+      html += `</select>`;
+      if (curLevel < 5) {
+        html += `<button class="geo-drill-btn px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-medium opacity-40 pointer-events-none" disabled>▸</button>`;
+      } else if (onTpsSelect) {
+        html += `<button class="geo-tps-pick-btn px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium opacity-40 pointer-events-none" disabled>${t('geo_tps_select')}</button>`;
+      }
+      if (canWrite) {
+        html += `<button class="geo-delete-btn hidden px-2 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold">${t('org_remove')}</button>`;
+      }
+      html += `</div>`;
+      if (nodes.length === 0) {
+        html += `<p class="text-xs text-slate-400 dark:text-slate-500 mb-2">${t('geo_empty')}</p>`;
+      }
+      if (canWrite) {
+        html += `<div class="flex gap-2">
+          <input class="geo-new-input flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-sm outline-none" placeholder="${t('geo_add_placeholder').replace('{level}', levelLabel)}">
+          <button class="geo-add-btn px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">${t('geo_add_btn')}</button>
+        </div>`;
+      }
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    const refresh = () => renderGeoSection(container, orgAddr, canWrite, opts);
+
+    container.querySelectorAll('.geo-crumb').forEach((btn) => {
+      btn.onclick = () => {
+        const depth = Number(btn.dataset.depth);
+        App[pathKey] = depth === -1 ? [] : path.slice(0, depth + 1);
+        refresh();
+      };
+    });
+
+    const select = container.querySelector('.geo-select');
+    const drillBtn = container.querySelector('.geo-drill-btn');
+    const tpsBtn = container.querySelector('.geo-tps-pick-btn');
+    const deleteBtn = container.querySelector('.geo-delete-btn');
+    const addInput = container.querySelector('.geo-new-input');
+    const addBtn = container.querySelector('.geo-add-btn');
+
+    let selId = null, selName = '';
+    if (select) {
+      select.onchange = () => {
+        const opt = select.options[select.selectedIndex];
+        selId = select.value ? Number(select.value) : null;
+        selName = opt ? (opt.dataset.name || '') : '';
+        const hasVal = !!selId;
+        if (drillBtn) { drillBtn.disabled = !hasVal; drillBtn.classList.toggle('opacity-40', !hasVal); drillBtn.classList.toggle('pointer-events-none', !hasVal); }
+        if (tpsBtn) { tpsBtn.disabled = !hasVal; tpsBtn.classList.toggle('opacity-40', !hasVal); tpsBtn.classList.toggle('pointer-events-none', !hasVal); }
+        if (deleteBtn) {
+          if (hasVal) { deleteBtn.dataset.id = selId; deleteBtn.dataset.name = selName; deleteBtn.classList.remove('hidden'); }
+          else { deleteBtn.classList.add('hidden'); }
+        }
+      };
+    }
+    if (drillBtn) {
+      drillBtn.onclick = () => {
+        if (!selId) return;
+        App[pathKey] = path.concat([{ id: selId, name: selName, level: curLevel }]);
+        refresh();
+      };
+    }
+    if (tpsBtn && onTpsSelect) {
+      tpsBtn.onclick = () => { if (selId) onTpsSelect(selName, provinceName); };
+    }
+    if (deleteBtn) {
+      deleteBtn.onclick = async () => {
+        if (!selId) return;
+        if (!confirm(t('geo_delete_confirm').replace('{name}', selName))) return;
+        try {
+          const r = await fetch('/api/orgs/' + encodeURIComponent(orgAddr) + '/geo/' + selId, { method: 'DELETE', headers: authHeaders() });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('toast_geo_deleted'));
+          refresh();
+        } catch (e) { toast(e.message, 'error'); }
+      };
+    }
+    if (addBtn && addInput) {
+      const doAdd = async () => {
+        const name = addInput.value.trim();
+        if (!name) return;
+        try {
+          const r = await fetch('/api/orgs/' + encodeURIComponent(orgAddr) + '/geo', {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ parent_id: parentId, name }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('toast_geo_added'));
+          addInput.value = '';
+          refresh();
+        } catch (e) { toast(e.message, 'error'); }
+      };
+      addBtn.onclick = doAdd;
+      addInput.onkeydown = (e) => { if (e.key === 'Enter') doAdd(); };
+    }
+  }
+
   // Org management workspace: roster + role-gated controls.
   function renderOrgWorkspace(v, org) {
     const vr = org.viewerRole;
@@ -2863,6 +3036,15 @@
       </div>`;
     }
 
+    // Geographic hierarchy management (owner/admin only — not mods).
+    const canManageGeo = vr === 'owner' || vr === 'admin';
+    if (canManageGeo) {
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <h3 class="font-semibold mb-3">${t('geo_heading')}</h3>
+        <div id="org-geo-section"><p class="text-xs text-slate-400">${t('geo_loading')}</p></div>
+      </div>`;
+    }
+
     // Danger zone — delete (Owner only).
     if (canDelete) {
       html += `<div class="p-4 mb-4 rounded-xl border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10">
@@ -2874,6 +3056,11 @@
     v.innerHTML = html;
 
     document.getElementById('org-back').onclick = () => { App.orgView = null; render(); };
+    if (canManageGeo) {
+      App.geoPath = []; // reset drill-down whenever the workspace loads
+      const geoContainer = document.getElementById('org-geo-section');
+      if (geoContainer) renderGeoSection(geoContainer, org.addr, true, { pathKey: 'geoPath' });
+    }
     const detailsBtn = document.getElementById('org-details-save');
     if (detailsBtn) detailsBtn.onclick = () => editOrgDetails(org.addr);
     const addBtn = document.getElementById('org-mem-add');

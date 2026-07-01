@@ -314,6 +314,16 @@
       "expectSelector": "[data-ballot-proof]"
     },
     {
+      "name": "Geo API returns seeded DKI Jakarta province for Pemilu Watch org",
+      "path": "/__quickcount/orgs/ut1demopemiluwatchid00000000000000000000000/geo",
+      "expectText": "DKI Jakarta"
+    },
+    {
+      "name": "Org workspace renders the Area Hierarchy section for an admin",
+      "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/orgs",
+      "expectText": "Area Hierarchy"
+    },
+    {
       "name": "Closed election workspace shows Closed badge",
       "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-closed-election",
       "expectText": "Closed"
