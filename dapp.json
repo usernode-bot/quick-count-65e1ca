@@ -339,6 +339,11 @@
       "expectText": "\"valid\""
     },
     {
+      "name": "Evidence Sheet verify endpoint returns JSON",
+      "path": "/api/public/evidence-sheet/verify/staging-demo-esheet-vid-0000000000000000",
+      "expectText": "\"status\""
+    },
+    {
       "name": "Public elections list endpoint surfaces a seeded election (ingest→index→list path)",
       "path": "/api/public/elections",
       "expectText": "General Election"
