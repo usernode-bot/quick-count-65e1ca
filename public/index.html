@@ -265,7 +265,16 @@
       action_refresh: 'Refresh',
       toast_refreshed: 'Refreshed ✓',
       tab_heatmap: 'Heatmap', heatmap_heading: 'Voter Turnout by Region', heatmap_select_election: 'Select an election to view turnout by region.', heatmap_no_regions: 'No regions are defined. Add a label to each station in the election workspace.', heatmap_col_region: 'Region', heatmap_col_stations: 'Stations', heatmap_col_ballots: 'Ballots cast', heatmap_col_valid_rate: 'Valid ballots', heatmap_col_invalid: 'Blank / invalid', heatmap_unlabeled: '(No region)', heatmap_summary: '{reported} of {total} stations reported · {regions} regions',
+      geo_heading: 'Area Hierarchy', geo_level_1: 'Province', geo_level_2: 'Regency / City', geo_level_3: 'District (Kecamatan)', geo_level_4: 'Village / Ward', geo_level_5: 'TPS', geo_pick_from_hierarchy: 'Pick from area hierarchy', geo_select_placeholder: '— select {level} —', geo_add_placeholder: 'Add new {level}…', geo_add_btn: 'Add', geo_delete_confirm: 'Delete "{name}" and all its sub-entries? This cannot be undone.', toast_geo_added: 'Added ✓', toast_geo_deleted: 'Deleted ✓', geo_empty: 'No entries yet.', geo_tps_select: 'Select', geo_loading: 'Loading…',
       c1kwk_panel_title: 'C1-KWK — Ballot Count Certificate', c1kwk_download_btn: 'Download Signed PDF', c1kwk_generating: 'Generating…', c1kwk_wallet_required: 'A linked wallet is required to sign the form.', c1kwk_province: 'Province', c1kwk_regency: 'Regency / City', c1kwk_subdistrict: 'Subdistrict', c1kwk_village: 'Village / Kelurahan', c1kwk_tps_number: 'TPS No.', c1kwk_valid_votes: 'Valid Votes (by candidate)', c1kwk_invalid_votes: 'Invalid / Blank Votes', c1kwk_total_votes: 'Total Votes (auto)', c1kwk_dpt: 'DPT (Registered Voters)', c1kwk_verify_title: 'Verify C1-KWK Signature', c1kwk_sig_valid: '✓ Signature valid — document has not been altered.', c1kwk_sig_invalid: '✗ Signature invalid — document may have been altered.',
+      orgs_pending_owner_heading: 'Pending ownership offers', orgs_pending_owner_desc: 'You have been offered ownership of these organizations.',
+      org_transfer_heading: 'Transfer ownership', org_transfer_desc: 'Transfer ownership of this organization to another wallet. The recipient must accept before the transfer takes effect.', org_transfer_addr_ph: 'Recipient wallet address (ut1…)', org_transfer_offer_btn: 'Offer transfer', org_transfer_cancel_btn: 'Cancel transfer offer', org_transfer_pending_note: 'Transfer pending — waiting for {addr} to accept.',
+      org_transfer_accept_heading: 'Accept ownership offer', org_transfer_accept_desc: 'You have been offered ownership of {name}. Accepting makes you the Owner and demotes the current Owner to Administrator.', org_transfer_accept_btn: 'Accept ownership',
+      toast_transfer_offered: 'Ownership transfer offered ✓', toast_transfer_cancelled: 'Transfer offer cancelled ✓', toast_transfer_accepted: 'Ownership accepted ✓',
+      loading_offering_transfer: 'Offering transfer…', loading_cancelling_transfer: 'Cancelling transfer…', loading_accepting_transfer: 'Accepting ownership…',
+      org_audit_heading: 'Activity & Audit log', org_audit_empty: 'No recorded activity yet.',
+      org_audit_action_org_edited: 'Updated organization details to "{detail}"', org_audit_action_visibility_changed: 'Changed visibility to {detail}', org_audit_action_admin_assigned: 'Assigned {target} as Administrator', org_audit_action_member_removed: 'Removed {target} ({detail})', org_audit_action_org_deleted: 'Deleted organization', org_audit_action_ownership_offered: 'Offered ownership to {target}', org_audit_action_ownership_transferred: 'Accepted ownership (from {target})',
+      evidence_sheet_download: 'Download Evidence Sheet', evidence_sheet_generating: 'Generating PDF…', evidence_sheet_checking: 'Checking…', evidence_sheet_valid: '✓ Certificate valid — document has not been altered.', evidence_sheet_invalid: '✗ Certificate invalid — signature did not match.', evidence_sheet_doc_changed: '⚠ Document changed — election data has been modified since download.', evidence_sheet_not_found: '⚠ Certificate not found — this document was not issued by this platform.', evidence_sheet_revoked: '✗ Certificate revoked.', evidence_sheet_meta_downloader: 'Downloaded by', evidence_sheet_meta_timestamp: 'Downloaded at', evidence_sheet_meta_hash: 'Document hash',
     },
     id: {
       loading_connecting: 'Menghubungkan ke Usernode…', loading_verifying: 'Memverifikasi sesi Anda…', loading_restoring: 'Memulihkan data Anda…',
@@ -338,7 +347,16 @@
       action_refresh: 'Segarkan',
       toast_refreshed: 'Disegarkan ✓',
       tab_heatmap: 'Peta Panas', heatmap_heading: 'Partisipasi Pemilih per Wilayah', heatmap_select_election: 'Pilih pemilihan untuk melihat partisipasi per wilayah.', heatmap_no_regions: 'Tidak ada wilayah yang ditentukan. Tambahkan label ke setiap TPS di ruang kerja pemilihan.', heatmap_col_region: 'Wilayah', heatmap_col_stations: 'TPS', heatmap_col_ballots: 'Surat suara masuk', heatmap_col_valid_rate: 'Surat suara sah', heatmap_col_invalid: 'Kosong / tidak sah', heatmap_unlabeled: '(Tanpa wilayah)', heatmap_summary: '{reported} dari {total} TPS dilaporkan · {regions} wilayah',
+      geo_heading: 'Hierarki Wilayah', geo_level_1: 'Provinsi', geo_level_2: 'Kabupaten / Kota', geo_level_3: 'Kecamatan', geo_level_4: 'Kelurahan / Desa', geo_level_5: 'TPS', geo_pick_from_hierarchy: 'Pilih dari hierarki wilayah', geo_select_placeholder: '— pilih {level} —', geo_add_placeholder: 'Tambah {level} baru…', geo_add_btn: 'Tambah', geo_delete_confirm: 'Hapus "{name}" beserta semua sub-entri? Tidak dapat dibatalkan.', toast_geo_added: 'Ditambahkan ✓', toast_geo_deleted: 'Dihapus ✓', geo_empty: 'Belum ada data.', geo_tps_select: 'Pilih', geo_loading: 'Memuat…',
       c1kwk_panel_title: 'C1-KWK — Catatan Hasil Penghitungan Suara', c1kwk_download_btn: 'Unduh PDF Tertandatangan', c1kwk_generating: 'Membuat dokumen…', c1kwk_wallet_required: 'Dompet tertaut diperlukan untuk menandatangani formulir.', c1kwk_province: 'Provinsi', c1kwk_regency: 'Kabupaten / Kota', c1kwk_subdistrict: 'Kecamatan', c1kwk_village: 'Kelurahan / Desa', c1kwk_tps_number: 'No. TPS', c1kwk_valid_votes: 'Suara Sah (per pasangan)', c1kwk_invalid_votes: 'Suara Tidak Sah / Kosong', c1kwk_total_votes: 'Jumlah Suara (otomatis)', c1kwk_dpt: 'DPT (Pemilih Terdaftar)', c1kwk_verify_title: 'Verifikasi Tanda Tangan C1-KWK', c1kwk_sig_valid: '✓ Tanda tangan valid — dokumen belum diubah.', c1kwk_sig_invalid: '✗ Tanda tangan tidak valid — dokumen mungkin telah diubah.',
+      orgs_pending_owner_heading: 'Tawaran kepemilikan tertunda', orgs_pending_owner_desc: 'Anda telah ditawari kepemilikan organisasi berikut.',
+      org_transfer_heading: 'Alihkan kepemilikan', org_transfer_desc: 'Alihkan kepemilikan organisasi ini ke dompet lain. Penerima harus menerima sebelum pengalihan berlaku.', org_transfer_addr_ph: 'Alamat dompet penerima (ut1…)', org_transfer_offer_btn: 'Tawarkan pengalihan', org_transfer_cancel_btn: 'Batalkan tawaran pengalihan', org_transfer_pending_note: 'Pengalihan tertunda — menunggu {addr} menerima.',
+      org_transfer_accept_heading: 'Terima tawaran kepemilikan', org_transfer_accept_desc: 'Anda telah ditawari kepemilikan {name}. Menerima akan menjadikan Anda Pemilik dan menurunkan Pemilik saat ini menjadi Administrator.', org_transfer_accept_btn: 'Terima kepemilikan',
+      toast_transfer_offered: 'Tawaran pengalihan kepemilikan dikirim ✓', toast_transfer_cancelled: 'Tawaran pengalihan dibatalkan ✓', toast_transfer_accepted: 'Kepemilikan diterima ✓',
+      loading_offering_transfer: 'Mengirim tawaran…', loading_cancelling_transfer: 'Membatalkan tawaran…', loading_accepting_transfer: 'Menerima kepemilikan…',
+      org_audit_heading: 'Log Aktivitas & Audit', org_audit_empty: 'Belum ada aktivitas yang tercatat.',
+      org_audit_action_org_edited: 'Memperbarui detail organisasi menjadi "{detail}"', org_audit_action_visibility_changed: 'Mengubah visibilitas menjadi {detail}', org_audit_action_admin_assigned: 'Menetapkan {target} sebagai Administrator', org_audit_action_member_removed: 'Menghapus {target} ({detail})', org_audit_action_org_deleted: 'Menghapus organisasi', org_audit_action_ownership_offered: 'Menawarkan kepemilikan kepada {target}', org_audit_action_ownership_transferred: 'Menerima kepemilikan (dari {target})',
+      evidence_sheet_download: 'Unduh Lembar Bukti', evidence_sheet_generating: 'Membuat PDF…', evidence_sheet_checking: 'Memeriksa…', evidence_sheet_valid: '✓ Sertifikat valid — dokumen belum diubah.', evidence_sheet_invalid: '✗ Sertifikat tidak valid — tanda tangan tidak cocok.', evidence_sheet_doc_changed: '⚠ Dokumen berubah — data pemilihan telah dimodifikasi sejak diunduh.', evidence_sheet_not_found: '⚠ Sertifikat tidak ditemukan — dokumen ini tidak diterbitkan oleh platform ini.', evidence_sheet_revoked: '✗ Sertifikat dicabut.', evidence_sheet_meta_downloader: 'Diunduh oleh', evidence_sheet_meta_timestamp: 'Diunduh pada', evidence_sheet_meta_hash: 'Hash dokumen',
     },
     'zh-Hans': {
       loading_connecting: '正在连接 Usernode…', loading_verifying: '正在验证您的会话…', loading_restoring: '正在恢复您的数据…',
@@ -411,6 +429,7 @@
       toast_refreshed: '已刷新 ✓',
       tab_heatmap: '热力图', heatmap_heading: '各地区选民参与率', heatmap_select_election: '选择一场选举以查看各地区的参与率。', heatmap_no_regions: '未定义地区。请在选举工作区中为每个投票站添加标签。', heatmap_col_region: '地区', heatmap_col_stations: '投票站', heatmap_col_ballots: '投票数', heatmap_col_valid_rate: '有效票', heatmap_col_invalid: '空白/无效', heatmap_unlabeled: '（无地区）', heatmap_summary: '{reported}/{total} 个投票站已上报 · {regions} 个地区',
       c1kwk_panel_title: 'C1-KWK — 选票计数证书', c1kwk_download_btn: '下载已签署 PDF', c1kwk_generating: '生成中…', c1kwk_wallet_required: '需要绑定钱包才能签署表格。', c1kwk_province: '省份', c1kwk_regency: '县 / 市', c1kwk_subdistrict: '乡镇', c1kwk_village: '村 / 街道', c1kwk_tps_number: 'TPS 编号', c1kwk_valid_votes: '有效票数（按候选人）', c1kwk_invalid_votes: '无效 / 空白票', c1kwk_total_votes: '总票数（自动）', c1kwk_dpt: 'DPT（注册选民）', c1kwk_verify_title: '验证 C1-KWK 签名', c1kwk_sig_valid: '✓ 签名有效 — 文件未被篡改。', c1kwk_sig_invalid: '✗ 签名无效 — 文件可能已被篡改。',
+      evidence_sheet_download: '下载证据表', evidence_sheet_generating: '生成 PDF…', evidence_sheet_checking: '检查中…', evidence_sheet_valid: '✓ 证书有效 — 文件未被篡改。', evidence_sheet_invalid: '✗ 证书无效 — 签名不匹配。', evidence_sheet_doc_changed: '⚠ 文件已更改 — 下载后选举数据已被修改。', evidence_sheet_not_found: '⚠ 未找到证书 — 此文件不是由本平台颁发的。', evidence_sheet_revoked: '✗ 证书已撤销。', evidence_sheet_meta_downloader: '下载者', evidence_sheet_meta_timestamp: '下载时间', evidence_sheet_meta_hash: '文件哈希',
     },
     es: {
       loading_connecting: 'Conectando con Usernode…', loading_verifying: 'Verificando tu sesión…', loading_restoring: 'Restaurando tus datos…',
@@ -484,6 +503,7 @@
       toast_refreshed: 'Actualizado ✓',
       tab_heatmap: 'Mapa de calor', heatmap_heading: 'Participación por región', heatmap_select_election: 'Selecciona una elección para ver la participación por región.', heatmap_no_regions: 'No hay regiones definidas. Añade una etiqueta a cada mesa en el espacio de trabajo de la elección.', heatmap_col_region: 'Región', heatmap_col_stations: 'Mesas', heatmap_col_ballots: 'Votos emitidos', heatmap_col_valid_rate: 'Votos válidos', heatmap_col_invalid: 'En blanco / nulos', heatmap_unlabeled: '(Sin región)', heatmap_summary: '{reported} de {total} mesas reportadas · {regions} regiones',
       c1kwk_panel_title: 'C1-KWK — Certificado de Recuento de Votos', c1kwk_download_btn: 'Descargar PDF firmado', c1kwk_generating: 'Generando…', c1kwk_wallet_required: 'Se requiere una billetera vinculada para firmar el formulario.', c1kwk_province: 'Provincia', c1kwk_regency: 'Regencia / Ciudad', c1kwk_subdistrict: 'Subdistrito', c1kwk_village: 'Pueblo / Kelurahan', c1kwk_tps_number: 'N.° de TPS', c1kwk_valid_votes: 'Votos válidos (por candidato)', c1kwk_invalid_votes: 'Votos inválidos / en blanco', c1kwk_total_votes: 'Total de votos (automático)', c1kwk_dpt: 'DPT (Votantes registrados)', c1kwk_verify_title: 'Verificar firma C1-KWK', c1kwk_sig_valid: '✓ Firma válida — el documento no ha sido alterado.', c1kwk_sig_invalid: '✗ Firma inválida — el documento puede haber sido alterado.',
+      evidence_sheet_download: 'Descargar hoja de evidencia', evidence_sheet_generating: 'Generando PDF…', evidence_sheet_checking: 'Verificando…', evidence_sheet_valid: '✓ Certificado válido — el documento no ha sido alterado.', evidence_sheet_invalid: '✗ Certificado inválido — la firma no coincide.', evidence_sheet_doc_changed: '⚠ Documento modificado — los datos de la elección han cambiado desde la descarga.', evidence_sheet_not_found: '⚠ Certificado no encontrado — este documento no fue emitido por esta plataforma.', evidence_sheet_revoked: '✗ Certificado revocado.', evidence_sheet_meta_downloader: 'Descargado por', evidence_sheet_meta_timestamp: 'Descargado el', evidence_sheet_meta_hash: 'Hash del documento',
     },
     hi: {
       loading_connecting: 'Usernode से कनेक्ट हो रहा है…', loading_verifying: 'आपका सत्र सत्यापित किया जा रहा है…', loading_restoring: 'आपका डेटा पुनर्स्थापित किया जा रहा है…',
@@ -556,6 +576,7 @@
       toast_refreshed: 'ताज़ा किया गया ✓',
       tab_heatmap: 'हीटमैप', heatmap_heading: 'क्षेत्रवार मतदाता भागीदारी', heatmap_select_election: 'क्षेत्र के अनुसार भागीदारी देखने के लिए चुनाव चुनें।', heatmap_no_regions: 'कोई क्षेत्र परिभाषित नहीं है। चुनाव कार्यक्षेत्र में प्रत्येक बूथ में लेबल जोड़ें।', heatmap_col_region: 'क्षेत्र', heatmap_col_stations: 'बूथ', heatmap_col_ballots: 'डाले गए मत', heatmap_col_valid_rate: 'वैध मत', heatmap_col_invalid: 'रिक्त / अमान्य', heatmap_unlabeled: '(कोई क्षेत्र नहीं)', heatmap_summary: '{total} में से {reported} बूथों ने रिपोर्ट किया · {regions} क्षेत्र',
       c1kwk_panel_title: 'C1-KWK — मतपत्र गणना प्रमाणपत्र', c1kwk_download_btn: 'हस्ताक्षरित PDF डाउनलोड करें', c1kwk_generating: 'तैयार हो रहा है…', c1kwk_wallet_required: 'फ़ॉर्म पर हस्ताक्षर करने के लिए एक लिंक्ड वॉलेट आवश्यक है।', c1kwk_province: 'प्रांत', c1kwk_regency: 'जिला / शहर', c1kwk_subdistrict: 'उपखंड', c1kwk_village: 'गाँव / केलुराहान', c1kwk_tps_number: 'TPS नं.', c1kwk_valid_votes: 'वैध मत (उम्मीदवार अनुसार)', c1kwk_invalid_votes: 'अमान्य / रिक्त मत', c1kwk_total_votes: 'कुल मत (स्वचालित)', c1kwk_dpt: 'DPT (पंजीकृत मतदाता)', c1kwk_verify_title: 'C1-KWK हस्ताक्षर सत्यापित करें', c1kwk_sig_valid: '✓ हस्ताक्षर मान्य — दस्तावेज़ अपरिवर्तित है।', c1kwk_sig_invalid: '✗ हस्ताक्षर अमान्य — दस्तावेज़ बदला गया हो सकता है।',
+      evidence_sheet_download: 'साक्ष्य पत्र डाउनलोड करें', evidence_sheet_generating: 'PDF बनाया जा रहा है…', evidence_sheet_checking: 'जाँच हो रही है…', evidence_sheet_valid: '✓ प्रमाणपत्र वैध — दस्तावेज़ अपरिवर्तित है।', evidence_sheet_invalid: '✗ प्रमाणपत्र अमान्य — हस्ताक्षर मेल नहीं खाया।', evidence_sheet_doc_changed: '⚠ दस्तावेज़ बदल गया — डाउनलोड के बाद चुनाव डेटा संशोधित हुआ।', evidence_sheet_not_found: '⚠ प्रमाणपत्र नहीं मिला — यह दस्तावेज़ इस प्लेटफ़ॉर्म द्वारा जारी नहीं किया गया।', evidence_sheet_revoked: '✗ प्रमाणपत्र रद्द किया गया।', evidence_sheet_meta_downloader: 'डाउनलोडकर्ता', evidence_sheet_meta_timestamp: 'डाउनलोड समय', evidence_sheet_meta_hash: 'दस्तावेज़ हैश',
     },
     ar: {
       loading_connecting: 'جارٍ الاتصال بـ Usernode…', loading_verifying: 'جارٍ التحقق من جلستك…', loading_restoring: 'جارٍ استعادة بياناتك…',
@@ -628,6 +649,7 @@
       toast_refreshed: 'تم التحديث ✓',
       tab_heatmap: 'خريطة حرارية', heatmap_heading: 'مشاركة الناخبين حسب المنطقة', heatmap_select_election: 'اختر انتخابات لعرض المشاركة حسب المنطقة.', heatmap_no_regions: 'لا توجد مناطق محددة. أضف تسميات للمراكز في مساحة عمل الانتخابات.', heatmap_col_region: 'المنطقة', heatmap_col_stations: 'المراكز', heatmap_col_ballots: 'الأوراق المُدلى بها', heatmap_col_valid_rate: 'الأوراق الصالحة', heatmap_col_invalid: 'فارغة / غير صالحة', heatmap_unlabeled: '(بدون منطقة)', heatmap_summary: '{reported} من {total} مركز أبلغ · {regions} منطقة',
       c1kwk_panel_title: 'C1-KWK — شهادة فرز الأصوات', c1kwk_download_btn: 'تنزيل PDF الموقَّع', c1kwk_generating: 'جارٍ الإنشاء…', c1kwk_wallet_required: 'يلزم وجود محفظة مرتبطة لتوقيع النموذج.', c1kwk_province: 'المحافظة', c1kwk_regency: 'الريجنسي / المدينة', c1kwk_subdistrict: 'الحي الفرعي', c1kwk_village: 'القرية / كيلوراهان', c1kwk_tps_number: 'رقم TPS', c1kwk_valid_votes: 'الأصوات الصالحة (حسب المرشح)', c1kwk_invalid_votes: 'الأصوات غير الصالحة / الفارغة', c1kwk_total_votes: 'مجموع الأصوات (تلقائي)', c1kwk_dpt: 'DPT (الناخبون المسجّلون)', c1kwk_verify_title: 'التحقق من توقيع C1-KWK', c1kwk_sig_valid: '✓ التوقيع صالح — لم يُعدَّل المستند.', c1kwk_sig_invalid: '✗ التوقيع غير صالح — ربما تم تعديل المستند.',
+      evidence_sheet_download: 'تنزيل ورقة الأدلة', evidence_sheet_generating: 'جارٍ إنشاء PDF…', evidence_sheet_checking: 'جارٍ الفحص…', evidence_sheet_valid: '✓ الشهادة صالحة — لم يُعدَّل المستند.', evidence_sheet_invalid: '✗ الشهادة غير صالحة — لم يتطابق التوقيع.', evidence_sheet_doc_changed: '⚠ تغيّر المستند — تم تعديل بيانات الانتخابات بعد التنزيل.', evidence_sheet_not_found: '⚠ لم تُعثر على الشهادة — هذا المستند لم تُصدره هذه المنصة.', evidence_sheet_revoked: '✗ تم إلغاء الشهادة.', evidence_sheet_meta_downloader: 'نزّله', evidence_sheet_meta_timestamp: 'تاريخ التنزيل', evidence_sheet_meta_hash: 'هاش المستند',
     },
     fr: {
       loading_connecting: 'Connexion à Usernode…', loading_verifying: 'Vérification de votre session…', loading_restoring: 'Restauration de vos données…',
@@ -701,6 +723,7 @@
       toast_refreshed: 'Actualisé ✓',
       tab_heatmap: 'Carte thermique', heatmap_heading: 'Participation par région', heatmap_select_election: 'Sélectionnez une élection pour voir la participation par région.', heatmap_no_regions: "Aucune région définie. Ajoutez une étiquette à chaque bureau dans l'espace de travail de l'élection.", heatmap_col_region: 'Région', heatmap_col_stations: 'Bureaux', heatmap_col_ballots: 'Bulletins exprimés', heatmap_col_valid_rate: 'Bulletins valides', heatmap_col_invalid: 'Blancs / nuls', heatmap_unlabeled: '(Sans région)', heatmap_summary: '{reported} sur {total} bureaux déclarés · {regions} régions',
       c1kwk_panel_title: 'C1-KWK — Certificat de dépouillement des votes', c1kwk_download_btn: 'Télécharger le PDF signé', c1kwk_generating: 'Génération en cours…', c1kwk_wallet_required: 'Un portefeuille lié est requis pour signer le formulaire.', c1kwk_province: 'Province', c1kwk_regency: 'Régence / Ville', c1kwk_subdistrict: 'Sous-district', c1kwk_village: 'Village / Kelurahan', c1kwk_tps_number: 'N° TPS', c1kwk_valid_votes: 'Votes valides (par candidat)', c1kwk_invalid_votes: 'Votes invalides / blancs', c1kwk_total_votes: 'Total des votes (automatique)', c1kwk_dpt: 'DPT (Électeurs inscrits)', c1kwk_verify_title: 'Vérifier la signature C1-KWK', c1kwk_sig_valid: "✓ Signature valide — le document n'a pas été altéré.", c1kwk_sig_invalid: '✗ Signature invalide — le document a peut-être été altéré.',
+      evidence_sheet_download: 'Télécharger la feuille de dépouillement', evidence_sheet_generating: 'Génération du PDF…', evidence_sheet_checking: 'Vérification…', evidence_sheet_valid: "✓ Certificat valide — le document n'a pas été altéré.", evidence_sheet_invalid: '✗ Certificat invalide — la signature ne correspond pas.', evidence_sheet_doc_changed: "⚠ Document modifié — les données de l'élection ont changé depuis le téléchargement.", evidence_sheet_not_found: "⚠ Certificat introuvable — ce document n'a pas été émis par cette plateforme.", evidence_sheet_revoked: '✗ Certificat révoqué.', evidence_sheet_meta_downloader: 'Téléchargé par', evidence_sheet_meta_timestamp: 'Téléchargé le', evidence_sheet_meta_hash: 'Empreinte du document',
     },
   };
 
@@ -909,6 +932,8 @@
     odel: (org) => ({ app: APP, v: V, t: 'odel', org }),
     ecl: (eid) => ({ app: APP, v: V, t: 'ecl', eid: String(eid) }),
     oedit: (org, name, jur) => ({ app: APP, v: V, t: 'oedit', org, name: String(name == null ? '' : name).slice(0, 120), jur: String(jur == null ? '' : jur).slice(0, 80) }),
+    oxfer: (org, to) => ({ app: APP, v: V, t: 'oxfer', org: String(org || ''), to: String(to || '') }),
+    oxacc: (org) => ({ app: APP, v: V, t: 'oxacc', org: String(org || '') }),
   };
 
   // ───────────────────────── Helpers ─────────────────────────
@@ -1048,6 +1073,10 @@
         return typeof m.eid === 'string' && m.eid.length > 0;
       case 'oedit':
         return typeof m.org === 'string' && m.org.length > 0 && typeof m.name === 'string' && m.name.trim().length > 0;
+      case 'oxfer':
+        return typeof m.org === 'string' && m.org.length > 0 && typeof m.to === 'string' && m.to.length > 0;
+      case 'oxacc':
+        return typeof m.org === 'string' && m.org.length > 0;
       default:
         return false;
     }
@@ -2583,6 +2612,10 @@
         <input id="st-label" placeholder="${t('election_station_label_ph')}" class="w-36 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none">
         <button id="st-add" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium">${t('election_station_add_btn')}</button>
       </div>
+      <details id="geo-hierarchy-details" class="text-sm mb-3">
+        <summary class="cursor-pointer text-slate-500 dark:text-slate-400 mb-2">${t('geo_pick_from_hierarchy')}</summary>
+        <div id="geo-picker-container" class="mt-2 p-3 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800"></div>
+      </details>
       <details class="text-sm">
         <summary class="cursor-pointer text-slate-500 dark:text-slate-400 mb-2">${t('election_station_bulk_import')}</summary>
         <p class="text-xs text-slate-600 dark:text-slate-500 mb-1">${t('election_station_csv_desc')}</p>
@@ -2607,6 +2640,22 @@
     const p = panel(t('election_stations_title'), inner);
     setTimeout(() => {
       const nextSid = () => (d.stations.reduce((m, s) => Math.max(m, s.sid), 0) + 1);
+      const geoDetails = p.querySelector('#geo-hierarchy-details');
+      if (geoDetails && d.election && d.election.orgAddr) {
+        geoDetails.addEventListener('toggle', function () {
+          if (!this.open) return;
+          const pickerContainer = p.querySelector('#geo-picker-container');
+          if (!pickerContainer) return;
+          renderGeoSection(pickerContainer, d.election.orgAddr, false, {
+            pathKey: 'geoPickerPath',
+            onTpsSelect: (tpsName, provinceName) => {
+              p.querySelector('#st-name').value = tpsName;
+              p.querySelector('#st-label').value = provinceName || '';
+              geoDetails.open = false;
+            },
+          });
+        });
+      }
       p.querySelector('#st-add').onclick = () => {
         const name = p.querySelector('#st-name').value.trim(); if (!name) return toast(t('toast_enter_station_name'), 'warn');
         const label = p.querySelector('#st-label').value.trim();
@@ -2893,8 +2942,10 @@
       </div>`;
     }
 
-    // Member-of list.
-    const memberOrgs = myOrgs.filter((o) => o.viewerRole !== 'owner');
+    // Member-of list (excludes owned org and pending-offer orgs).
+    const viewerAddr = App.role.addr;
+    const pendingOwnerOrgs = myOrgs.filter((o) => o.viewerRole === null && o.pendingOwner === viewerAddr);
+    const memberOrgs = myOrgs.filter((o) => o.viewerRole !== 'owner' && o.viewerRole !== null);
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 mt-6">${t('orgs_member_heading')}</h3>`;
     html += memberOrgs.length
       ? '<div class="space-y-2 mb-6">' + memberOrgs.map((o) => `
@@ -2903,6 +2954,17 @@
           <button class="org-manage px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold" data-addr="${esc(o.addr)}">${t('org_manage')}</button>
         </div>`).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm mb-6">${t('orgs_none_member')}</p>`;
+
+    // Pending ownership offers.
+    if (pendingOwnerOrgs.length) {
+      html += `<h3 class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1 mt-2">${t('orgs_pending_owner_heading')}</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">${t('orgs_pending_owner_desc')}</p>
+        <div class="space-y-2 mb-6">` + pendingOwnerOrgs.map((o) => `
+        <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30 text-sm flex items-center justify-between gap-2 flex-wrap">
+          <span class="flex items-center gap-2"><span class="font-medium">${esc(o.name)}</span>${orgVisBadge(o.visibility || 'public')}</span>
+          <button class="org-manage px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold" data-addr="${esc(o.addr)}">${t('org_transfer_accept_btn')}</button>
+        </div>`).join('') + '</div>';
+    }
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('orgs_active_orgs')}</h3>`;
     // Authoritative list of active orgs from the indexer — independent of whether
     // an org has published elections, so a just-registered org shows instantly.
@@ -2923,9 +2985,161 @@
     v.querySelectorAll('.org-manage').forEach((b) => { b.onclick = () => { App.orgView = b.dataset.addr; render(); }; });
   }
 
+  // Drill-down geo hierarchy navigator (Province → Regency → District → Village → TPS).
+  // container: DOM element to render into.
+  // orgAddr: org whose geo tree to show.
+  // canWrite: whether the viewer may add/delete nodes.
+  // opts.pathKey: App key holding the breadcrumb path array (default 'geoPath').
+  // opts.onTpsSelect(tpsName, provinceName): callback when a TPS is picked (picker mode).
+  async function renderGeoSection(container, orgAddr, canWrite, opts) {
+    const pathKey = (opts && opts.pathKey) || 'geoPath';
+    const onTpsSelect = opts && opts.onTpsSelect;
+    if (!App[pathKey]) App[pathKey] = [];
+
+    const path = App[pathKey];
+    const curLevel = path.length + 1;
+    const parentId = path.length > 0 ? path[path.length - 1].id : null;
+    const provinceName = path.length > 0 ? path[0].name : null;
+    const GEO_LEVELS = [null, t('geo_level_1'), t('geo_level_2'), t('geo_level_3'), t('geo_level_4'), t('geo_level_5')];
+
+    container.innerHTML = `<p class="text-xs text-slate-400">${t('geo_loading')}</p>`;
+
+    let nodes = [];
+    try {
+      const qp = parentId != null ? ('?parent_id=' + parentId) : '';
+      const viewer = viewerAddr();
+      const sep = qp ? '&' : '?';
+      const url = '/__quickcount/orgs/' + encodeURIComponent(orgAddr) + '/geo' + qp + (viewer ? sep + 'viewer=' + encodeURIComponent(viewer) : '');
+      const data = await fetch(url).then((r) => r.json());
+      nodes = (data && data.nodes) || [];
+    } catch (_) {}
+
+    let html = '<div>';
+
+    // Breadcrumbs when drilled in.
+    if (path.length > 0) {
+      html += '<div class="flex items-center flex-wrap gap-1 mb-3 text-xs">';
+      html += `<button class="geo-crumb text-indigo-500 hover:underline font-medium" data-depth="-1">${t('geo_heading')}</button>`;
+      for (let i = 0; i < path.length; i++) {
+        html += `<span class="text-slate-400 mx-1">›</span><button class="geo-crumb text-indigo-500 hover:underline" data-depth="${i}">${esc(path[i].name)}</button>`;
+      }
+      html += '</div>';
+    }
+
+    if (curLevel <= 5) {
+      const levelLabel = GEO_LEVELS[curLevel];
+      html += `<p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">${levelLabel}</p>`;
+      html += `<div class="flex gap-2 items-center mb-2 flex-wrap">
+        <select class="geo-select flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-sm">
+          <option value="">${t('geo_select_placeholder').replace('{level}', levelLabel)}</option>`;
+      for (const n of nodes) {
+        html += `<option value="${n.id}" data-name="${esc(n.name)}">${esc(n.name)}</option>`;
+      }
+      html += `</select>`;
+      if (curLevel < 5) {
+        html += `<button class="geo-drill-btn px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-sm font-medium opacity-40 pointer-events-none" disabled>▸</button>`;
+      } else if (onTpsSelect) {
+        html += `<button class="geo-tps-pick-btn px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium opacity-40 pointer-events-none" disabled>${t('geo_tps_select')}</button>`;
+      }
+      if (canWrite) {
+        html += `<button class="geo-delete-btn hidden px-2 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold">${t('org_remove')}</button>`;
+      }
+      html += `</div>`;
+      if (nodes.length === 0) {
+        html += `<p class="text-xs text-slate-400 dark:text-slate-500 mb-2">${t('geo_empty')}</p>`;
+      }
+      if (canWrite) {
+        html += `<div class="flex gap-2">
+          <input class="geo-new-input flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-sm outline-none" placeholder="${t('geo_add_placeholder').replace('{level}', levelLabel)}">
+          <button class="geo-add-btn px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">${t('geo_add_btn')}</button>
+        </div>`;
+      }
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    const refresh = () => renderGeoSection(container, orgAddr, canWrite, opts);
+
+    container.querySelectorAll('.geo-crumb').forEach((btn) => {
+      btn.onclick = () => {
+        const depth = Number(btn.dataset.depth);
+        App[pathKey] = depth === -1 ? [] : path.slice(0, depth + 1);
+        refresh();
+      };
+    });
+
+    const select = container.querySelector('.geo-select');
+    const drillBtn = container.querySelector('.geo-drill-btn');
+    const tpsBtn = container.querySelector('.geo-tps-pick-btn');
+    const deleteBtn = container.querySelector('.geo-delete-btn');
+    const addInput = container.querySelector('.geo-new-input');
+    const addBtn = container.querySelector('.geo-add-btn');
+
+    let selId = null, selName = '';
+    if (select) {
+      select.onchange = () => {
+        const opt = select.options[select.selectedIndex];
+        selId = select.value ? Number(select.value) : null;
+        selName = opt ? (opt.dataset.name || '') : '';
+        const hasVal = !!selId;
+        if (drillBtn) { drillBtn.disabled = !hasVal; drillBtn.classList.toggle('opacity-40', !hasVal); drillBtn.classList.toggle('pointer-events-none', !hasVal); }
+        if (tpsBtn) { tpsBtn.disabled = !hasVal; tpsBtn.classList.toggle('opacity-40', !hasVal); tpsBtn.classList.toggle('pointer-events-none', !hasVal); }
+        if (deleteBtn) {
+          if (hasVal) { deleteBtn.dataset.id = selId; deleteBtn.dataset.name = selName; deleteBtn.classList.remove('hidden'); }
+          else { deleteBtn.classList.add('hidden'); }
+        }
+      };
+    }
+    if (drillBtn) {
+      drillBtn.onclick = () => {
+        if (!selId) return;
+        App[pathKey] = path.concat([{ id: selId, name: selName, level: curLevel }]);
+        refresh();
+      };
+    }
+    if (tpsBtn && onTpsSelect) {
+      tpsBtn.onclick = () => { if (selId) onTpsSelect(selName, provinceName); };
+    }
+    if (deleteBtn) {
+      deleteBtn.onclick = async () => {
+        if (!selId) return;
+        if (!confirm(t('geo_delete_confirm').replace('{name}', selName))) return;
+        try {
+          const r = await fetch('/api/orgs/' + encodeURIComponent(orgAddr) + '/geo/' + selId, { method: 'DELETE', headers: authHeaders() });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('toast_geo_deleted'));
+          refresh();
+        } catch (e) { toast(e.message, 'error'); }
+      };
+    }
+    if (addBtn && addInput) {
+      const doAdd = async () => {
+        const name = addInput.value.trim();
+        if (!name) return;
+        try {
+          const r = await fetch('/api/orgs/' + encodeURIComponent(orgAddr) + '/geo', {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ parent_id: parentId, name }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          toast(t('toast_geo_added'));
+          addInput.value = '';
+          refresh();
+        } catch (e) { toast(e.message, 'error'); }
+      };
+      addBtn.onclick = doAdd;
+      addInput.onkeydown = (e) => { if (e.key === 'Enter') doAdd(); };
+    }
+  }
+
   // Org management workspace: roster + role-gated controls.
   function renderOrgWorkspace(v, org) {
     const vr = org.viewerRole;
+    const isPendingOwner = !vr && org.pendingOwner === App.role.addr;
 
     // Paid gate: management unlocks only for owners/founders (and their
     // delegates) once the org has paid its fee (org.active). A pending org's
@@ -2961,10 +3175,20 @@
     const canSetVisibility = vr === 'owner' || vr === 'admin';
     const canDelete = vr === 'owner';
     const canAssignAdmin = vr === 'owner';
+    const canSeeAudit = vr === 'owner' || vr === 'admin';
 
     let html = `<button id="org-back" class="text-sm text-indigo-500 hover:underline mb-3">${t('org_back')}</button>
       <div class="flex items-center gap-2 flex-wrap mb-1"><h2 class="text-lg font-semibold">${esc(org.name)}</h2>${orgRoleBadge(vr)}${orgVisBadge(org.visibility || 'public')}</div>
       <p class="text-xs text-slate-600 dark:text-slate-500 mb-5 font-mono">${esc(org.addr)}</p>`;
+
+    // Accept ownership banner (pending-owner viewer only).
+    if (isPendingOwner) {
+      html += `<div class="p-4 mb-4 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10">
+        <h3 class="font-semibold mb-2 text-amber-700 dark:text-amber-300">${t('org_transfer_accept_heading')}</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">${t('org_transfer_accept_desc')}</p>
+        <button id="org-accept-ownership" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">${t('org_transfer_accept_btn')}</button>
+      </div>`;
+    }
 
     // Organization details (owner only) — edit name and jurisdiction.
     if (canDelete) {
@@ -2978,22 +3202,25 @@
       </div>`;
     }
 
-    // Members roster.
-    html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('org_members_heading')} (${org.members.length})</h3>
-      <div class="space-y-2 mb-4">`;
     const roleOpts = (sel) => ['member', 'mod'].concat(canAssignAdmin ? ['admin'] : [])
       .map((r) => `<option value="${r}" ${r === sel ? 'selected' : ''}>${orgRoleLabel(r)}</option>`).join('');
-    for (const m of org.members) {
-      const manageable = canManageMembers && canManageTarget(vr, m.role);
-      html += `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex items-center justify-between gap-2 flex-wrap">
-        <span class="flex items-center gap-2">${userLink(m.addr)}${orgRoleBadge(m.role)}</span>
-        ${manageable ? `<span class="flex items-center gap-2">
-          <select class="org-role-sel px-2 py-1 rounded bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-xs" data-addr="${esc(m.addr)}" data-cur="${m.role}">${roleOpts(m.role)}</select>
-          <button class="org-remove px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold" data-addr="${esc(m.addr)}">${t('org_remove')}</button>
-        </span>` : ''}
-      </div>`;
+
+    // Members roster (not shown to pending-owner viewers with no role).
+    if (org.members) {
+      html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('org_members_heading')} (${org.members.length})</h3>
+        <div class="space-y-2 mb-4">`;
+      for (const m of org.members) {
+        const manageable = canManageMembers && canManageTarget(vr, m.role);
+        html += `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex items-center justify-between gap-2 flex-wrap">
+          <span class="flex items-center gap-2">${userLink(m.addr)}${orgRoleBadge(m.role)}</span>
+          ${manageable ? `<span class="flex items-center gap-2">
+            <select class="org-role-sel px-2 py-1 rounded bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-xs" data-addr="${esc(m.addr)}" data-cur="${m.role}">${roleOpts(m.role)}</select>
+            <button class="org-remove px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold" data-addr="${esc(m.addr)}">${t('org_remove')}</button>
+          </span>` : ''}
+        </div>`;
+      }
+      html += '</div>';
     }
-    html += '</div>';
 
     // Add member.
     if (canManageMembers) {
@@ -3018,17 +3245,61 @@
       </div>`;
     }
 
-    // Danger zone — delete (Owner only).
+    // Geographic hierarchy management (owner/admin only — not mods).
+    const canManageGeo = vr === 'owner' || vr === 'admin';
+    if (canManageGeo) {
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <h3 class="font-semibold mb-3">${t('geo_heading')}</h3>
+        <div id="org-geo-section"><p class="text-xs text-slate-400">${t('geo_loading')}</p></div>
+      </div>`;
+    }
+
+    // Danger zone — transfer ownership + delete (Owner only).
     if (canDelete) {
+      const pendingNote = org.pendingOwner
+        ? `<p class="text-xs text-amber-700 dark:text-amber-300 mb-3">${t('org_transfer_pending_note').replace('{addr}', esc(org.pendingOwner))}</p>
+          <button id="org-transfer-cancel" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold">${t('org_transfer_cancel_btn')}</button>`
+        : `<input id="org-transfer-addr" placeholder="${t('org_transfer_addr_ph')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none font-mono text-sm">
+          <button id="org-transfer-offer" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold">${t('org_transfer_offer_btn')}</button>`;
       html += `<div class="p-4 mb-4 rounded-xl border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10">
-        <h3 class="font-semibold mb-2 text-rose-700 dark:text-rose-300">${t('org_danger_heading')}</h3>
-        <button id="org-del" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">${t('org_delete')}</button>
+        <h3 class="font-semibold mb-3 text-rose-700 dark:text-rose-300">${t('org_danger_heading')}</h3>
+        <p class="text-sm font-medium mb-1 text-rose-800 dark:text-rose-200">${t('org_transfer_heading')}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-400 mb-3">${t('org_transfer_desc')}</p>
+        ${pendingNote}
+        <div class="mt-4 pt-4 border-t border-rose-200 dark:border-rose-500/30">
+          <button id="org-del" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">${t('org_delete')}</button>
+        </div>
+      </div>`;
+    }
+
+    // Activity & Audit log (owner/admin only).
+    if (canSeeAudit && org.audit) {
+      const auditRows = org.audit.length
+        ? org.audit.map((e) => {
+            const actionKey = 'org_audit_action_' + e.action;
+            const label = t(actionKey) || e.action;
+            const who = e.actor ? `<span class="font-mono text-xs">${esc(e.actor.slice(0, 12))}…</span>` : '';
+            const target = e.target ? ` → <span class="font-mono text-xs">${esc(e.target.slice(0, 12))}…</span>` : '';
+            const when = e.createdAt ? `<span class="text-slate-400 text-xs">${new Date(e.createdAt).toLocaleString()}</span>` : '';
+            return `<div class="py-2 border-b border-slate-200 dark:border-slate-800 last:border-0 text-sm flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span class="font-medium">${esc(label)}</span>${who}${target}${when}
+            </div>`;
+          }).join('')
+        : `<p class="text-sm text-slate-500 dark:text-slate-400">${t('org_audit_empty')}</p>`;
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <h3 class="font-semibold mb-3">${t('org_audit_heading')}</h3>
+        ${auditRows}
       </div>`;
     }
 
     v.innerHTML = html;
 
     document.getElementById('org-back').onclick = () => { App.orgView = null; render(); };
+    if (canManageGeo) {
+      App.geoPath = []; // reset drill-down whenever the workspace loads
+      const geoContainer = document.getElementById('org-geo-section');
+      if (geoContainer) renderGeoSection(geoContainer, org.addr, true, { pathKey: 'geoPath' });
+    }
     const detailsBtn = document.getElementById('org-details-save');
     if (detailsBtn) detailsBtn.onclick = () => editOrgDetails(org.addr);
     const addBtn = document.getElementById('org-mem-add');
@@ -3041,6 +3312,12 @@
     if (visBtn) visBtn.onclick = () => setOrgVisibility(org.addr, visBtn.dataset.next);
     const delBtn = document.getElementById('org-del');
     if (delBtn) delBtn.onclick = () => deleteOrg(org.addr);
+    const acceptOwnerBtn = document.getElementById('org-accept-ownership');
+    if (acceptOwnerBtn) acceptOwnerBtn.onclick = () => acceptOwnerTransfer(org.addr);
+    const offerBtn = document.getElementById('org-transfer-offer');
+    if (offerBtn) offerBtn.onclick = () => offerOwnerTransfer(org.addr);
+    const cancelOfferBtn = document.getElementById('org-transfer-cancel');
+    if (cancelOfferBtn) cancelOfferBtn.onclick = () => cancelOwnerTransfer(org.addr);
   }
 
   function addOrgMember(orgAddr) {
@@ -3074,6 +3351,20 @@
     if (!name) return toast(t('toast_enter_org_name'), 'warn');
     runTx({ to: orgAddr, amount: 0, memo: QC.oedit(orgAddr, name, jur), idempotent: true },
       { loading: t('loading_updating_details'), success: () => { toast(t('toast_details_updated')); refreshSoon(); } });
+  }
+  function offerOwnerTransfer(orgAddr) {
+    const to = (document.getElementById('org-transfer-addr').value || '').trim();
+    if (!to) return toast(t('org_transfer_addr_ph'), 'warn');
+    runTx({ to: orgAddr, amount: 0, memo: QC.oxfer(orgAddr, to), idempotent: true },
+      { loading: t('loading_offering_transfer'), success: () => { toast(t('toast_transfer_offered')); refreshSoon(); } });
+  }
+  function cancelOwnerTransfer(orgAddr) {
+    runTx({ to: orgAddr, amount: 0, memo: QC.oxfer(orgAddr, App.role.addr), idempotent: true },
+      { loading: t('loading_cancelling_transfer'), success: () => { toast(t('toast_transfer_cancelled')); refreshSoon(); } });
+  }
+  function acceptOwnerTransfer(orgAddr) {
+    runTx({ to: orgAddr, amount: 0, memo: QC.oxacc(orgAddr), idempotent: true },
+      { loading: t('loading_accepting_transfer'), success: () => { toast(t('toast_transfer_accepted')); refreshSoon(); } });
   }
   async function registerOrg() {
     if (!App.wallet.connected) { await connectWallet(); if (!App.wallet.connected) return; }
@@ -3233,7 +3524,10 @@
           </div>
         </div>`).join('') : `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('evidence_no_evidence')}</p>`;
       return `<h2 class="text-lg font-semibold mb-1">${t('evidence_heading')} — ${esc(d.election.name)}</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">${t('evidence_sha256_desc')}</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">${t('evidence_sha256_desc')}</p>
+        <div class="mb-4">
+          <button id="es-download-btn" class="text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">${t('evidence_sheet_download')}</button>
+        </div>
         <div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
           <p class="text-sm text-slate-600 dark:text-slate-500 mb-2" id="vf-target">${t('evidence_verifying_label')} <span class="text-slate-600 dark:text-slate-500">${t('evidence_verifying_default')}</span></p>
           <input id="vf-file" type="file" class="text-xs text-slate-600 dark:text-slate-400 mb-2 block">
@@ -3262,6 +3556,8 @@
 
     // Wire up evidence gallery interactions (when an election is loaded).
     if (d) {
+      const esBtn = document.getElementById('es-download-btn');
+      if (esBtn) esBtn.onclick = () => generateEvidenceSheet(d.election.eid, esBtn);
       let target = '';
       body.querySelectorAll('.ev-verify').forEach((b) => b.onclick = () => {
         target = b.dataset.hash;
@@ -3292,12 +3588,44 @@
       });
     }
 
-    fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg)); };
+    // Unified drop handler: detect ESQC1 (evidence sheet certificate) first,
+    // fall through to QCEvidenceVerify (QCEV1 blockchain evidence PDFs) otherwise.
+    function runVerifyFile(f) {
+      out.innerHTML = `<p class="text-sm text-slate-500">${t('evidence_sheet_checking')}</p>`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const latin = String.fromCharCode(...new Uint8Array(ev.target.result));
+          const m = latin.match(/ESQC1\.([A-Za-z0-9_-]+)/);
+          if (m) {
+            let vid;
+            try { vid = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))).vid; } catch (_e) { vid = null; }
+            if (vid) {
+              fetch('/api/public/evidence-sheet/verify/' + encodeURIComponent(vid))
+                .then((r) => r.json())
+                .then((data) => renderEvidenceSheetResult(out, data))
+                .catch(() => { out.innerHTML = `<p class="text-sm text-rose-500">${t('evidence_sheet_invalid')}</p>`; });
+              return;
+            }
+          }
+          if (window.QCEvidenceVerify) {
+            run(window.QCEvidenceVerify.verifyFile(f, App.cfg));
+          } else {
+            out.innerHTML = `<p class="text-sm text-rose-500">${t('evidence_sheet_not_found')}</p>`;
+          }
+        } catch (err) {
+          out.innerHTML = `<p class="text-sm text-rose-500">${esc(err && err.message || '')}</p>`;
+        }
+      };
+      reader.readAsArrayBuffer(f);
+    }
+
+    fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) runVerifyFile(f); };
     ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('border-indigo-500'); }));
     ['dragleave'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('border-indigo-500'); }));
     drop.addEventListener('drop', (e) => {
       e.preventDefault(); drop.classList.remove('border-indigo-500');
-      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) run(window.QCEvidenceVerify.verifyFile(f, App.cfg));
+      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) runVerifyFile(f);
     });
 
     // Auto-verify when arriving via a deep link from an Evidence PDF QR code.
@@ -3324,6 +3652,59 @@
 
     const sample = document.getElementById('vr-sample');
     if (sample) sample.onclick = () => run(runSampleVerify());
+
+    // Auto-verify an evidence sheet when arriving via its QR code deep link.
+    if (deepParams.esheet) {
+      const esSection = document.createElement('div');
+      esSection.className = 'mt-6 p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800';
+      esSection.innerHTML = `<h3 class="font-semibold mb-2">${t('verify_heading')}</h3><p id="esvr-deeplink-result" class="text-sm text-slate-500 dark:text-slate-400">${t('evidence_sheet_checking')}</p>`;
+      body.appendChild(esSection);
+      fetch('/api/public/evidence-sheet/verify/' + encodeURIComponent(deepParams.esheet))
+        .then((r) => r.json())
+        .then((data) => { const el = document.getElementById('esvr-deeplink-result'); if (el) renderEvidenceSheetResult(el, data); })
+        .catch(() => { const el = document.getElementById('esvr-deeplink-result'); if (el) { el.textContent = t('evidence_sheet_invalid'); el.className = 'text-sm text-rose-600 dark:text-rose-400'; } });
+    }
+  }
+
+  async function generateEvidenceSheet(eid, btn) {
+    const origText = btn.textContent;
+    btn.textContent = t('evidence_sheet_generating'); btn.disabled = true;
+    try {
+      const r = await fetch('/api/elections/' + encodeURIComponent(eid) + '/evidence-sheet', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+      });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || r.statusText); }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'evidence-sheet-' + eid + '.pdf';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message || 'Download failed');
+    } finally {
+      btn.textContent = origText; btn.disabled = false;
+    }
+  }
+
+  function renderEvidenceSheetResult(el, data) {
+    const meta = data.meta || {};
+    const metaHtml = (meta.wallet || meta.username || meta.downloaded_at) ? `
+      <div class="mt-3 text-xs text-slate-600 dark:text-slate-400 space-y-1">
+        ${meta.wallet || meta.username ? `<p><strong>${t('evidence_sheet_meta_downloader')}:</strong> ${esc(meta.username || meta.wallet || '—')}</p>` : ''}
+        ${meta.downloaded_at ? `<p><strong>${t('evidence_sheet_meta_timestamp')}:</strong> ${esc(meta.downloaded_at)}</p>` : ''}
+        ${meta.doc_hash ? `<p><strong>${t('evidence_sheet_meta_hash')}:</strong> <span class="font-mono break-all">${esc(meta.doc_hash.slice(0, 24))}…</span></p>` : ''}
+      </div>` : '';
+    if (data.status === 'valid') {
+      el.innerHTML = `<p class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">${t('evidence_sheet_valid')}</p>${metaHtml}`;
+    } else if (data.status === 'doc_changed') {
+      el.innerHTML = `<p class="text-sm font-semibold text-amber-600 dark:text-amber-400">${t('evidence_sheet_doc_changed')}</p>${metaHtml}`;
+    } else if (data.status === 'not_found') {
+      el.innerHTML = `<p class="text-sm font-semibold text-rose-600 dark:text-rose-400">${t('evidence_sheet_not_found')}</p>`;
+    } else if (data.status === 'revoked') {
+      el.innerHTML = `<p class="text-sm font-semibold text-rose-600 dark:text-rose-400">${t('evidence_sheet_revoked')}</p>${metaHtml}`;
+    } else {
+      el.innerHTML = `<p class="text-sm font-semibold text-rose-600 dark:text-rose-400">${t('evidence_sheet_invalid')}</p>`;
+    }
   }
 
   // ───────────────────────── Disputes ─────────────────────────

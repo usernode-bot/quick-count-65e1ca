@@ -1,12 +1,13 @@
 'use strict';
 
-// Always-on local-ingest ("mock") transaction flow. Loads the server in a
-// production-like environment (no APP_MODE, no chain URLs) with MOCK_TX_FLOW at
-// its default (on), and asserts that a submission posted to /__mock/submit is
-// ingested into the event-sourced read model immediately — orgs appear in
-// /__quickcount/orgs with NO chain read-back, deduped by txId, and the config
-// endpoints advertise mockMode. Also verifies the authenticated wallet (req.user)
-// wins over a spoofed body `from`.
+// Opt-in local-ingest ("mock") transaction flow. Loads the server in a
+// production-like environment (no APP_MODE, no chain URLs) with MOCK_TX_FLOW
+// EXPLICITLY set to 'true' — real on-chain mode is now the default, so the
+// local-ingest path is only reached when a run deliberately opts in. Asserts
+// that a submission posted to /__mock/submit is ingested into the event-sourced
+// read model immediately — orgs appear in /__quickcount/orgs with NO chain
+// read-back, deduped by txId, and the config endpoints advertise mockMode.
+// Also verifies the authenticated wallet (req.user) wins over a spoofed body `from`.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
@@ -22,7 +23,7 @@ delete process.env.APP_MODE;
 delete process.env.EXPLORER_API_URL;
 delete process.env.NODE_RPC_URL;
 delete process.env.DATABASE_URL;
-delete process.env.MOCK_TX_FLOW; // default → on
+process.env.MOCK_TX_FLOW = 'true'; // explicit opt-in (real mode is now the default)
 
 const { app, indexer } = require('../server');
 
