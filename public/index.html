@@ -3525,7 +3525,7 @@
       const a = document.createElement('a'); a.href = url; a.download = 'evidence-sheet-' + eid + '.pdf';
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err.message || 'Download failed');
+      toast(t('toast_failed') + ' ' + (err && err.message || ''), 'error');
     } finally {
       btn.textContent = origText; btn.disabled = false;
     }
