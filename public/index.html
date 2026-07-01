@@ -1779,8 +1779,13 @@
       throw e;
     }
     const memoStr = JSON.stringify(memoObj);
+    // Every transaction the app broadcasts must move at least 1 token — most
+    // callers pass amount: 0 since the payload lives in the memo, but a
+    // 0-amount transaction is invalid on-chain. Floor it here, once, so no
+    // call site (current or future) can regress this.
+    const amt = Math.max(1, Number(amount) || 0);
     if (App.cfg.localDev) {
-      return window.QCBridge.send(to, amount, memoStr, {
+      return window.QCBridge.send(to, amt, memoStr, {
         idempotent: opts.idempotent,
         sender: (a, b, c) => window.QCMock.send(a, b, c),
       });
@@ -1792,12 +1797,12 @@
     // real user and the server can prefer req.user over the body. The server still
     // resolves `from` from req.user when authenticated, so this is spoof-resistant.
     if (App.cfg.mockMode) {
-      return window.QCBridge.send(to, amount || 0, memoStr, {
+      return window.QCBridge.send(to, amt, memoStr, {
         idempotent: opts.idempotent,
         sender: (a, b, c) => mockSubmit(a, b, c),
       });
     }
-    return window.QCBridge.send(to, amount || 0, memoStr, { idempotent: opts.idempotent });
+    return window.QCBridge.send(to, amt, memoStr, { idempotent: opts.idempotent });
   }
   // App-owned local-ingest submit used in platform mock mode. Returns the txId.
   async function mockSubmit(to, amount, memoStr) {
