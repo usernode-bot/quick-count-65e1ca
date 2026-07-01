@@ -65,6 +65,9 @@
   <!-- Pure helpers for the off-chain working tally (CANDIDATES / aggregateVotes
        / voteShares) — shared with the in-app dashboard's workTallySection. -->
   <script src="/inline-entry.js"></script>
+  <!-- Working Tally PDF export. jsPDF is optional — degrades gracefully offline. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/results-pdf.js"></script>
 </head>
 <body class="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen">
   <div class="max-w-3xl mx-auto p-4 sm:p-6">
@@ -150,7 +153,8 @@
         ? '<p class="mt-3"><span class="text-xs inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">🛡️ '
           + proofCount + ' ballot proof' + (proofCount === 1 ? '' : 's') + ' attached &amp; validated ✓</span></p>'
         : '';
-      return wrap('<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-3">' + escapeHtml(reported) + '</p>' + bars + proofBadge);
+      const pdfBtnHtml = '<div class="mt-3"><button id="work-tally-pdf-btn" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed">Download PDF</button></div>';
+      return wrap('<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-3">' + escapeHtml(reported) + '</p>' + bars + proofBadge + pdfBtnHtml);
     }
 
     // ── Data loading + render ────────────────────────────────────────
@@ -189,6 +193,42 @@
       // The dashboard is now a single working-tally board headed by the election
       // name — no official chart, no per-station table, no lock/unlock paywall.
       document.getElementById('content').innerHTML = workTallySection(d);
+
+      // Wire the PDF download button (only present when working tally has data).
+      const pdfEl = document.getElementById('work-tally-pdf-btn');
+      if (pdfEl) {
+        if (!window.QCResultsPDF || !window.QCResultsPDF.available()) {
+          pdfEl.disabled = true;
+          pdfEl.title = 'PDF tools unavailable — open this page online to enable PDF export.';
+        } else {
+          pdfEl.onclick = () => {
+            const QC = window.QuickCountInline;
+            const saved = (d.workTally || []);
+            const votesList = saved.map((r) => r.votes || {});
+            const totals = QC.aggregateVotes(votesList);
+            const shares = QC.voteShares(totals);
+            const origLabel = pdfEl.textContent;
+            pdfEl.disabled = true;
+            pdfEl.textContent = 'Generating…';
+            try {
+              window.QCResultsPDF.generate({
+                electionName: d.election.name,
+                candidates: QC.CANDIDATES,
+                totals,
+                shares,
+                stationReported: saved.length,
+                stationTotal: (d.stations || []).length || saved.length,
+                exportedAt: new Date().toISOString(),
+              });
+              pdfEl.textContent = 'Results PDF downloaded ✓';
+              setTimeout(() => { pdfEl.textContent = origLabel; pdfEl.disabled = false; }, 2000);
+            } catch (e) {
+              pdfEl.textContent = origLabel;
+              pdfEl.disabled = false;
+            }
+          };
+        }
+      }
 
       const liveSuffix = liveOn ? ' · live ●' : ' · auto-refreshing';
       document.getElementById('updated').textContent = d.lastUpdated
