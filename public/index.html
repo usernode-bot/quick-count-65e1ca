@@ -74,6 +74,8 @@
   <script src="/evidence-fingerprint.js"></script>
   <script src="/evidence-pdf.js"></script>
   <script src="/evidence-verify.js"></script>
+  <!-- Working-tally results PDF export (reuses the jsPDF CDN load above). -->
+  <script src="/results-pdf.js"></script>
   <!-- App-side bridge resilience: classifier (pure) then retry/notice layer.
        Must load AFTER the hosted bridge tag above. -->
   <script src="/usernode-bridge-classify.js"></script>
@@ -132,6 +134,7 @@
     refreshTimer: null,
     me: null,           // last /api/me response
     lang: 'en',         // active UI language
+    chartType: 'bar_h', // vote-share chart style (bar_h | bar_stacked | pie)
     menuOpen: false,    // wallet dropdown menu open?
     txState: { sentTime: null, confirmStartTime: null, lastError: null, retryCount: 0 }, // transaction state tracking
   };
@@ -146,6 +149,10 @@
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
+  // Hex twins of COLORS (Tailwind v3 *-500), needed wherever a real CSS color
+  // value is required instead of a class name (the pie chart's conic-gradient).
+  const HEX_COLORS = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#f43f5e','#d946ef','#14b8a6'];
+  const CHART_TYPES = ['bar_h', 'bar_stacked', 'pie'];
 
   // ───────────────────────── i18n (full-app) ─────────────────────────
   // Mirrors lib/profile.js (LANGS + display-name regex). Translations are
@@ -182,7 +189,8 @@
       verify_verdict_verified_desc: 'The document is internally sound and matches what was recorded on-chain.', verify_verdict_offchain_desc: 'The document is internally sound; no live chain was reachable to cross-check.', verify_verdict_fail_desc: 'One or more checks did not pass — see the details below.',
       verify_fingerprint_label: 'Fingerprint', verify_status_pass: 'PASS', verify_status_fail: 'FAIL', verify_status_skip: 'SKIPPED', verify_error: 'Could not verify this file',
       method_latest: 'Latest submission', method_first: 'First submission', method_consensus: 'Consensus', method_median: 'Median', method_verified: 'Verified only',
-      dashboard_heading: 'Dashboard', dashboard_select_election: 'Select an election to view live results.', dashboard_export_csv: 'Export CSV', dashboard_export_json: 'Export JSON', dashboard_by_station: 'By station', dashboard_no_stations: 'No candidates.', dashboard_last_submission: 'Last submission', dashboard_auto_refreshing: 'auto-refreshing', dashboard_no_submissions: 'No submissions yet', dashboard_stations_reported: 'stations reported', dashboard_votes: 'votes',
+      chart_bar_h: 'Bars', chart_bar_stacked: 'Stacked bar', chart_pie: 'Pie chart',
+      dashboard_heading: 'Dashboard', dashboard_select_election: 'Select an election to view live results.', dashboard_export_csv: 'Export CSV', dashboard_export_pdf: 'Download PDF', dashboard_pdf_generating: 'Generating…', dashboard_pdf_unavailable: 'PDF tools unavailable — open this page online to enable PDF export.', dashboard_pdf_ready: 'Results PDF downloaded ✓', dashboard_export_json: 'Export JSON', dashboard_by_station: 'By station', dashboard_no_stations: 'No candidates.', dashboard_last_submission: 'Last submission', dashboard_auto_refreshing: 'auto-refreshing', dashboard_no_submissions: 'No submissions yet', dashboard_stations_reported: 'stations reported', dashboard_votes: 'votes',
       dashboard_working_tally: 'Working tally', dashboard_working_tally_desc: 'Entered by organizers in the workspace — separate from official results.', dashboard_working_tally_reported: '{reported} of {total} stations entered',
       elections_heading: 'Elections', elections_new: '+ New election', elections_no_elections: 'No elections yet.', elections_open_workspace: 'Open election workspace →',
       orgs_heading: 'Organizations', orgs_active_orgs: 'Active organizations', orgs_register_heading: 'Register your organization', orgs_register_desc: 'Registration pays a one-time fee of {fee} to the platform treasury. Until it confirms, your elections stay hidden.', orgs_register_button: 'Register & pay fee', orgs_pay_fee: 'Pay registration fee', orgs_name_placeholder: 'Organization name', orgs_jur_placeholder: 'Jurisdiction (optional)', orgs_active_badge: 'Active', orgs_pending_badge: 'Pending — fee not paid', orgs_connect_first: 'Connect your wallet first.', orgs_manage_elections: 'Your elections are live. Manage them under Elections.',
@@ -277,7 +285,8 @@
       not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
       tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa',
       method_latest: 'Laporan terbaru', method_first: 'Laporan pertama', method_consensus: 'Konsensus', method_median: 'Median', method_verified: 'Terverifikasi saja',
-      dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
+      chart_bar_h: 'Batang', chart_bar_stacked: 'Batang bertumpuk', chart_pie: 'Diagram lingkaran',
+      dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_pdf: 'Unduh PDF', dashboard_pdf_generating: 'Membuat dokumen…', dashboard_pdf_unavailable: 'Alat PDF tidak tersedia — buka halaman ini secara online untuk mengaktifkan ekspor PDF.', dashboard_pdf_ready: 'PDF hasil diunduh ✓', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
       dashboard_working_tally: 'Hitungan kerja', dashboard_working_tally_desc: 'Dimasukkan oleh penyelenggara di ruang kerja — terpisah dari hasil resmi.', dashboard_working_tally_reported: '{reported} dari {total} TPS dimasukkan',
       elections_heading: 'Pemilihan', elections_new: '+ Pemilihan baru', elections_no_elections: 'Belum ada pemilihan.', elections_open_workspace: 'Buka ruang kerja pemilihan →',
       orgs_heading: 'Organisasi', orgs_active_orgs: 'Organisasi aktif', orgs_register_heading: 'Daftarkan organisasi Anda', orgs_register_desc: 'Pendaftaran membayar biaya satu kali sebesar {fee} ke perbendaharaan platform. Hingga dikonfirmasi, pemilihan Anda disembunyikan.', orgs_register_button: 'Daftar & bayar biaya', orgs_pay_fee: 'Bayar biaya pendaftaran', orgs_name_placeholder: 'Nama organisasi', orgs_jur_placeholder: 'Yurisdiksi (opsional)', orgs_active_badge: 'Aktif', orgs_pending_badge: 'Menunggu — biaya belum dibayar', orgs_connect_first: 'Hubungkan dompet Anda terlebih dahulu.', orgs_manage_elections: 'Pemilihan Anda aktif. Kelola di tab Pemilihan.',
@@ -357,7 +366,8 @@
       not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
       tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议',
       method_latest: '最新提交', method_first: '首次提交', method_consensus: '共识', method_median: '中位数', method_verified: '仅已验证',
-      dashboard_heading: '仪表盘', dashboard_select_election: '选择一场选举以查看实时结果。', dashboard_export_csv: '导出 CSV', dashboard_export_json: '导出 JSON', dashboard_by_station: '按投票站', dashboard_no_stations: '暂无候选人。', dashboard_last_submission: '最后提交', dashboard_auto_refreshing: '自动刷新', dashboard_no_submissions: '暂无提交', dashboard_stations_reported: '个投票站已上报', dashboard_votes: '票',
+      chart_bar_h: '条形图', chart_bar_stacked: '堆叠条形图', chart_pie: '饼图',
+      dashboard_heading: '仪表盘', dashboard_select_election: '选择一场选举以查看实时结果。', dashboard_export_csv: '导出 CSV', dashboard_export_pdf: '下载 PDF', dashboard_pdf_generating: '生成中…', dashboard_pdf_unavailable: 'PDF 工具不可用 — 请在线打开此页面以启用 PDF 导出。', dashboard_pdf_ready: '结果 PDF 已下载 ✓', dashboard_export_json: '导出 JSON', dashboard_by_station: '按投票站', dashboard_no_stations: '暂无候选人。', dashboard_last_submission: '最后提交', dashboard_auto_refreshing: '自动刷新', dashboard_no_submissions: '暂无提交', dashboard_stations_reported: '个投票站已上报', dashboard_votes: '票',
       elections_heading: '选举', elections_new: '+ 新建选举', elections_no_elections: '暂无选举。', elections_open_workspace: '打开选举工作区 →',
       orgs_heading: '机构', orgs_active_orgs: '活跃机构', orgs_register_heading: '注册您的机构', orgs_register_desc: '注册需向平台财库缴纳一次性费用 {fee}。在确认之前，您的选举将保持隐藏。', orgs_register_button: '注册并缴费', orgs_pay_fee: '缴纳注册费', orgs_name_placeholder: '机构名称', orgs_jur_placeholder: '管辖区（可选）', orgs_active_badge: '活跃', orgs_pending_badge: '待审 — 费用未缴纳', orgs_connect_first: '请先连接钱包。', orgs_manage_elections: '您的选举已上线，请在"选举"标签页进行管理。',
       evidence_heading: '证据', evidence_upload_label: '证据（计票表）— 在本地哈希，文件不上传', evidence_submit: '验证文件是否匹配', evidence_no_evidence: '此次选举没有记录任何证据哈希。',
@@ -428,7 +438,8 @@
       not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
       tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas',
       method_latest: 'Último envío', method_first: 'Primer envío', method_consensus: 'Consenso', method_median: 'Mediana', method_verified: 'Solo verificados',
-      dashboard_heading: 'Panel', dashboard_select_election: 'Selecciona una elección para ver los resultados en vivo.', dashboard_export_csv: 'Exportar CSV', dashboard_export_json: 'Exportar JSON', dashboard_by_station: 'Por mesa', dashboard_no_stations: 'Sin candidatos.', dashboard_last_submission: 'Último envío', dashboard_auto_refreshing: 'actualización automática', dashboard_no_submissions: 'Sin envíos aún', dashboard_stations_reported: 'mesas reportadas', dashboard_votes: 'votos',
+      chart_bar_h: 'Barras', chart_bar_stacked: 'Barra apilada', chart_pie: 'Gráfico circular',
+      dashboard_heading: 'Panel', dashboard_select_election: 'Selecciona una elección para ver los resultados en vivo.', dashboard_export_csv: 'Exportar CSV', dashboard_export_pdf: 'Descargar PDF', dashboard_pdf_generating: 'Generando…', dashboard_pdf_unavailable: 'Herramientas PDF no disponibles — abra esta página en línea para habilitar la exportación PDF.', dashboard_pdf_ready: 'PDF de resultados descargado ✓', dashboard_export_json: 'Exportar JSON', dashboard_by_station: 'Por mesa', dashboard_no_stations: 'Sin candidatos.', dashboard_last_submission: 'Último envío', dashboard_auto_refreshing: 'actualización automática', dashboard_no_submissions: 'Sin envíos aún', dashboard_stations_reported: 'mesas reportadas', dashboard_votes: 'votos',
       elections_heading: 'Elecciones', elections_new: '+ Nueva elección', elections_no_elections: 'Sin elecciones aún.', elections_open_workspace: 'Abrir espacio de trabajo →',
       orgs_heading: 'Organizaciones', orgs_active_orgs: 'Organizaciones activas', orgs_register_heading: 'Registra tu organización', orgs_register_desc: 'El registro paga una cuota única de {fee} al tesoro de la plataforma. Hasta que se confirme, tus elecciones permanecerán ocultas.', orgs_register_button: 'Registrar y pagar', orgs_pay_fee: 'Pagar cuota de registro', orgs_name_placeholder: 'Nombre de la organización', orgs_jur_placeholder: 'Jurisdicción (opcional)', orgs_active_badge: 'Activa', orgs_pending_badge: 'Pendiente — cuota no pagada', orgs_connect_first: 'Conecta tu billetera primero.', orgs_manage_elections: 'Tus elecciones están activas. Gestiónelas en Elecciones.',
       evidence_heading: 'Evidencia', evidence_upload_label: 'Evidencia (acta de escrutinio) — hash local, el archivo no se sube', evidence_submit: 'Verificar un archivo contra esto', evidence_no_evidence: 'No hay hashes de evidencia registrados para esta elección.',
@@ -500,7 +511,8 @@
       not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
       tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद',
       method_latest: 'नवीनतम सबमिशन', method_first: 'पहला सबमिशन', method_consensus: 'सहमति', method_median: 'माध्यिका', method_verified: 'केवल सत्यापित',
-      dashboard_heading: 'डैशबोर्ड', dashboard_select_election: 'लाइव परिणाम देखने के लिए चुनाव चुनें।', dashboard_export_csv: 'CSV निर्यात करें', dashboard_export_json: 'JSON निर्यात करें', dashboard_by_station: 'बूथ के अनुसार', dashboard_no_stations: 'कोई उम्मीदवार नहीं।', dashboard_last_submission: 'अंतिम सबमिशन', dashboard_auto_refreshing: 'स्वतः ताज़ा हो रहा है', dashboard_no_submissions: 'अभी तक कोई सबमिशन नहीं', dashboard_stations_reported: 'बूथों ने रिपोर्ट किया', dashboard_votes: 'वोट',
+      chart_bar_h: 'बार', chart_bar_stacked: 'स्टैक्ड बार', chart_pie: 'पाई चार्ट',
+      dashboard_heading: 'डैशबोर्ड', dashboard_select_election: 'लाइव परिणाम देखने के लिए चुनाव चुनें।', dashboard_export_csv: 'CSV निर्यात करें', dashboard_export_pdf: 'PDF डाउनलोड करें', dashboard_pdf_generating: 'बना रहा है…', dashboard_pdf_unavailable: 'PDF टूल अनुपलब्ध — PDF निर्यात सक्षम करने के लिए इस पृष्ठ को ऑनलाइन खोलें।', dashboard_pdf_ready: 'परिणाम PDF डाउनलोड हुआ ✓', dashboard_export_json: 'JSON निर्यात करें', dashboard_by_station: 'बूथ के अनुसार', dashboard_no_stations: 'कोई उम्मीदवार नहीं।', dashboard_last_submission: 'अंतिम सबमिशन', dashboard_auto_refreshing: 'स्वतः ताज़ा हो रहा है', dashboard_no_submissions: 'अभी तक कोई सबमिशन नहीं', dashboard_stations_reported: 'बूथों ने रिपोर्ट किया', dashboard_votes: 'वोट',
       elections_heading: 'चुनाव', elections_new: '+ नया चुनाव', elections_no_elections: 'अभी तक कोई चुनाव नहीं।', elections_open_workspace: 'चुनाव कार्यक्षेत्र खोलें →',
       orgs_heading: 'संगठन', orgs_active_orgs: 'सक्रिय संगठन', orgs_register_heading: 'अपना संगठन पंजीकृत करें', orgs_register_desc: 'पंजीकरण के लिए प्लेटफ़ॉर्म कोषागार को {fee} का एकमुश्त शुल्क देना होगा। पुष्टि होने तक आपके चुनाव छिपे रहेंगे।', orgs_register_button: 'पंजीकरण करें और शुल्क दें', orgs_pay_fee: 'पंजीकरण शुल्क दें', orgs_name_placeholder: 'संगठन का नाम', orgs_jur_placeholder: 'क्षेत्राधिकार (वैकल्पिक)', orgs_active_badge: 'सक्रिय', orgs_pending_badge: 'लंबित — शुल्क नहीं दिया गया', orgs_connect_first: 'पहले अपना वॉलेट कनेक्ट करें।', orgs_manage_elections: 'आपके चुनाव सक्रिय हैं। चुनाव टैब में उन्हें प्रबंधित करें।',
       evidence_heading: 'साक्ष्य', evidence_upload_label: 'साक्ष्य (मतगणना पत्र) — स्थानीय रूप से हैश किया गया, फ़ाइल अपलोड नहीं होती', evidence_submit: 'इसके विरुद्ध फ़ाइल सत्यापित करें', evidence_no_evidence: 'इस चुनाव के लिए कोई साक्ष्य हैश दर्ज नहीं है।',
@@ -571,7 +583,8 @@
       not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
       tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات',
       method_latest: 'آخر تقرير', method_first: 'أول تقرير', method_consensus: 'إجماع', method_median: 'الوسيط', method_verified: 'الموثّق فقط',
-      dashboard_heading: 'لوحة التحكم', dashboard_select_election: 'اختر انتخابات لعرض النتائج الحية.', dashboard_export_csv: 'تصدير CSV', dashboard_export_json: 'تصدير JSON', dashboard_by_station: 'حسب مركز الاقتراع', dashboard_no_stations: 'لا يوجد مرشحون.', dashboard_last_submission: 'آخر تقرير', dashboard_auto_refreshing: 'تحديث تلقائي', dashboard_no_submissions: 'لا توجد تقارير بعد', dashboard_stations_reported: 'مراكز أبلغت', dashboard_votes: 'أصوات',
+      chart_bar_h: 'أعمدة', chart_bar_stacked: 'عمود مكدس', chart_pie: 'مخطط دائري',
+      dashboard_heading: 'لوحة التحكم', dashboard_select_election: 'اختر انتخابات لعرض النتائج الحية.', dashboard_export_csv: 'تصدير CSV', dashboard_export_pdf: 'تنزيل PDF', dashboard_pdf_generating: 'جارٍ الإنشاء…', dashboard_pdf_unavailable: 'أدوات PDF غير متاحة — افتح هذه الصفحة عبر الإنترنت لتمكين تصدير PDF.', dashboard_pdf_ready: 'تم تنزيل PDF النتائج ✓', dashboard_export_json: 'تصدير JSON', dashboard_by_station: 'حسب مركز الاقتراع', dashboard_no_stations: 'لا يوجد مرشحون.', dashboard_last_submission: 'آخر تقرير', dashboard_auto_refreshing: 'تحديث تلقائي', dashboard_no_submissions: 'لا توجد تقارير بعد', dashboard_stations_reported: 'مراكز أبلغت', dashboard_votes: 'أصوات',
       elections_heading: 'الانتخابات', elections_new: '+ انتخابات جديدة', elections_no_elections: 'لا توجد انتخابات بعد.', elections_open_workspace: 'فتح مساحة العمل →',
       orgs_heading: 'المنظمات', orgs_active_orgs: 'المنظمات النشطة', orgs_register_heading: 'سجّل منظمتك', orgs_register_desc: 'يتطلب التسجيل دفع رسوم لمرة واحدة قدرها {fee} إلى خزينة المنصة. حتى التأكيد، ستبقى انتخاباتك مخفية.', orgs_register_button: 'التسجيل ودفع الرسوم', orgs_pay_fee: 'دفع رسوم التسجيل', orgs_name_placeholder: 'اسم المنظمة', orgs_jur_placeholder: 'نطاق الاختصاص (اختياري)', orgs_active_badge: 'نشطة', orgs_pending_badge: 'قيد الانتظار — لم تُدفع الرسوم', orgs_connect_first: 'وصّل محفظتك أولاً.', orgs_manage_elections: 'انتخاباتك نشطة. أدِرها من تبويب الانتخابات.',
       evidence_heading: 'الأدلة', evidence_upload_label: 'دليل (ورقة الفرز) — يُحسب الهاش محلياً، لا يُرفع الملف', evidence_submit: 'تحقق من ملف مقابل هذا', evidence_no_evidence: 'لم يُسجَّل أي هاش دليل لهذه الانتخابات.',
@@ -642,7 +655,8 @@
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
       tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations',
       method_latest: 'Dernier envoi', method_first: 'Premier envoi', method_consensus: 'Consensus', method_median: 'Médiane', method_verified: 'Vérifiés seulement',
-      dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
+      chart_bar_h: 'Barres', chart_bar_stacked: 'Barre empilée', chart_pie: 'Diagramme circulaire',
+      dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_pdf: 'Télécharger PDF', dashboard_pdf_generating: 'Génération en cours…', dashboard_pdf_unavailable: "Outils PDF non disponibles — ouvrez cette page en ligne pour activer l'export PDF.", dashboard_pdf_ready: 'PDF des résultats téléchargé ✓', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
       elections_heading: 'Élections', elections_new: '+ Nouvelle élection', elections_no_elections: "Pas encore d'élections.", elections_open_workspace: "Ouvrir l'espace de travail →",
       orgs_heading: 'Organisations', orgs_active_orgs: 'Organisations actives', orgs_register_heading: 'Enregistrez votre organisation', orgs_register_desc: "L'enregistrement nécessite le paiement d'une cotisation unique de {fee} à la trésorerie de la plateforme. Jusqu'à confirmation, vos élections restent masquées.", orgs_register_button: "S'inscrire et payer", orgs_pay_fee: "Payer la cotisation d'inscription", orgs_name_placeholder: "Nom de l'organisation", orgs_jur_placeholder: 'Juridiction (facultatif)', orgs_active_badge: 'Active', orgs_pending_badge: 'En attente — cotisation non payée', orgs_connect_first: 'Connectez votre portefeuille en premier.', orgs_manage_elections: 'Vos élections sont en ligne. Gérez-les dans Élections.',
       evidence_heading: 'Preuves', evidence_upload_label: "Preuve (feuille de dépouillement) — hachée localement, le fichier n'est pas envoyé", evidence_submit: 'Vérifier un fichier contre ceci', evidence_no_evidence: 'Aucune empreinte de preuve enregistrée pour cette élection.',
@@ -844,13 +858,14 @@
     if (prefs && typeof prefs === 'object') {
       if (prefs.theme === 'dark' || prefs.theme === 'light') applyTheme(prefs.theme === 'dark');
       if (App.cfg && App.cfg.methods && App.cfg.methods.indexOf(prefs.method) !== -1) App.method = prefs.method;
+      if (CHART_TYPES.indexOf(prefs.chartType) !== -1) App.chartType = prefs.chartType;
     }
   }
   let _prefsSaveTimer = null;
   function savePrefs() {
     if (!App.wallet.connected) return; // only signed-in users have a profile to write to
     const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    const prefs = { theme, method: App.method };
+    const prefs = { theme, method: App.method, chartType: App.chartType };
     if (App.me && App.me.profile) App.me.profile.prefs = prefs;
     clearTimeout(_prefsSaveTimer);
     _prefsSaveTimer = setTimeout(() => { putProfile({ prefs }).catch(() => {}); }, 400);
@@ -1227,7 +1242,7 @@
     const results = Array.isArray(entry.sent) ? entry.sent.slice() : [];
     for (let i = results.length; i < steps.length; i++) {
       const spec = steps[i].build(results);
-      const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+      const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent, exactAmount: spec.exactAmount });
       if (spec.require && !r) throw new Error(spec.require);
       results[i] = r;
       entry.sent = results.slice();
@@ -1444,7 +1459,7 @@
       try {
         App.txState.sentTime = Date.now();
         console.log('[QCTx] sendTx step ' + (i + 1) + '/' + steps.length + ': to=' + spec.to.slice(0, 20) + '..., amount=' + spec.amount + ', idempotent=' + spec.idempotent);
-        r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+        r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent, exactAmount: spec.exactAmount });
         if (spec.require && !r) throw new Error(spec.require);
         console.log('[QCTx] sendTx step ' + (i + 1) + ' succeeded: txId=' + (r ? r.slice(0, 20) + '...' : 'none'));
       } catch (e) {
@@ -1552,8 +1567,13 @@
       throw e;
     }
     const memoStr = JSON.stringify(memoObj);
+    // Placeholder sends (amount: 0 — the payload lives in the memo) still need a
+    // nonzero on-chain amount to be relayed by some bridges, so floor to 1 token
+    // unless the caller explicitly opts into sending the literal configured amount
+    // (e.g. a $0 org fee must send 0, not 1).
+    const sendAmount = opts.exactAmount ? (amount || 0) : Math.max(1, amount || 0);
     if (App.cfg.localDev) {
-      return window.QCBridge.send(to, amount, memoStr, {
+      return window.QCBridge.send(to, sendAmount, memoStr, {
         idempotent: opts.idempotent,
         sender: (a, b, c) => window.QCMock.send(a, b, c),
       });
@@ -1565,12 +1585,12 @@
     // real user and the server can prefer req.user over the body. The server still
     // resolves `from` from req.user when authenticated, so this is spoof-resistant.
     if (App.cfg.mockMode) {
-      return window.QCBridge.send(to, amount || 0, memoStr, {
+      return window.QCBridge.send(to, sendAmount, memoStr, {
         idempotent: opts.idempotent,
         sender: (a, b, c) => mockSubmit(a, b, c),
       });
     }
-    return window.QCBridge.send(to, amount || 0, memoStr, { idempotent: opts.idempotent });
+    return window.QCBridge.send(to, sendAmount, memoStr, { idempotent: opts.idempotent });
   }
   // App-owned local-ingest submit used in platform mock mode. Returns the txId.
   async function mockSubmit(to, amount, memoStr) {
@@ -1680,6 +1700,9 @@
       <select id="method-picker" class="w-full sm:w-auto px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
         ${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}
       </select>
+      <select id="chart-picker" class="w-full sm:w-auto px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
+        ${CHART_TYPES.map((ct) => `<option value="${ct}" ${ct === App.chartType ? 'selected' : ''}>${t('chart_' + ct) || ct}</option>`).join('')}
+      </select>
     </div>`;
   }
   function wirePickers() {
@@ -1687,21 +1710,57 @@
     if (ep) ep.onchange = () => { App.eid = ep.value; refresh(); };
     const mp = document.getElementById('method-picker');
     if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
+    const cp = document.getElementById('chart-picker');
+    if (cp) cp.onchange = () => { App.chartType = cp.value; savePrefs(); refresh(); };
   }
 
   // ───────────────────────── Dashboard ─────────────────────────
+  // Shared vote-share chart renderer. `rows` is [{ name, votes, colorClass,
+  // colorIdx }], already representing one bar/segment/slice per candidate;
+  // sorting by votes descending is this function's job so every chart style
+  // agrees on ordering. `bar_stacked` and `pie` both need their segment widths
+  // to sum to exactly 100 (a stacked bar with a gap, or a pie with an overlap/
+  // undershoot, looks broken) — adjustSharesTo100() is the single place that
+  // rounding-remainder fix lives, so the two chart styles can't drift apart.
+  function renderBars(rows, chartType) {
+    const sorted = rows.slice().sort((a, b) => b.votes - a.votes);
+    if (chartType === 'bar_stacked') {
+      const pcts = QuickCountInline.adjustSharesTo100(sorted.map((r) => r.votes));
+      const segs = sorted.map((r, i) => `<div class="h-full ${r.colorClass}" style="width:${pcts[i]}%" title="${esc(r.name)}: ${pcts[i]}%"></div>`).join('');
+      const legend = sorted.map((r, i) => `<div class="flex items-center justify-between text-sm mb-1">
+        <span class="inline-flex items-center gap-2"><span class="inline-block w-3 h-3 rounded-sm ${r.colorClass}"></span>${esc(r.name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300">${r.votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pcts[i]}%)</span></span>
+      </div>`).join('');
+      return `<div class="h-4 rounded overflow-hidden flex mb-3 bg-slate-200 dark:bg-slate-800">${segs}</div>${legend}`;
+    }
+    if (chartType === 'pie') {
+      const pcts = QuickCountInline.adjustSharesTo100(sorted.map((r) => r.votes));
+      let acc = 0;
+      const stops = sorted.map((r, i) => {
+        const start = acc, end = acc + pcts[i];
+        acc = end;
+        return `${HEX_COLORS[r.colorIdx % HEX_COLORS.length]} ${start}% ${end}%`;
+      }).join(', ');
+      const legend = sorted.map((r, i) => `<div class="flex items-center justify-between text-sm mb-1">
+        <span class="inline-flex items-center gap-2"><span class="inline-block w-3 h-3 rounded-sm ${r.colorClass}"></span>${esc(r.name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300">${r.votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pcts[i]}%)</span></span>
+      </div>`).join('');
+      return `<div class="flex items-center gap-4 mb-3"><div class="w-24 h-24 rounded-full shrink-0" style="background:conic-gradient(${stops})"></div><div class="flex-1">${legend}</div></div>`;
+    }
+    // Default: bar_h — one independently-rounded horizontal bar per row.
+    const total = sorted.reduce((s, r) => s + r.votes, 0) || 1;
+    return sorted.map((r) => {
+      const pct = Math.round((r.votes / total) * 100);
+      return `<div class="mb-3">
+        <div class="flex justify-between text-sm mb-1"><span>${esc(r.name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300">${r.votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${r.colorClass}" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+  }
   function tallyBars(d) {
-    const total = Object.values(d.tally).reduce((s, n) => s + n, 0) || 1;
-    return d.candidates.map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
-      .sort((a, b) => b.votes - a.votes)
-      .map(({ c, i, votes }) => {
-        const pct = Math.round((votes / total) * 100);
-        return `<div class="mb-3">
-          <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-          <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
-          <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
-        </div>`;
-      }).join('');
+    const rows = d.candidates.map((c, i) => ({ name: c.name, votes: d.tally[c.cid] || 0, colorClass: COLORS[i % COLORS.length], colorIdx: i }));
+    return renderBars(rows, App.chartType);
   }
   // ── Inline TPS vote-entry (off-chain working tally) ──
   // Working tally entered straight on a station row in the election workspace.
@@ -1846,7 +1905,6 @@
       .map((k) => inlineEntry[k]);
     const saved = inlineSavedVotes();
     const totals = QC.aggregateVotes(saved);
-    const shares = QC.voteShares(totals);
     const cands = QC.CANDIDATES;
 
     if (reportLine) {
@@ -1856,22 +1914,33 @@
     }
 
     if (bars) {
-      const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length;
-      if (needBuild) {
-        bars.innerHTML = cands.map((c, i) => `<div class="mb-3" data-inl-bar="${c.key}">
-          <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-          <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
-          <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${COLORS[i % COLORS.length]} transition-all duration-500 ease-out" style="width:0%"></div></div>
-        </div>`).join('');
+      if (App.chartType === 'bar_h') {
+        // In-place DOM diffing (rather than a full innerHTML rebuild) so the
+        // width transition animates from the previous value on every refresh.
+        const shares = QC.voteShares(totals);
+        const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length;
+        if (needBuild) {
+          bars.innerHTML = cands.map((c, i) => `<div class="mb-3" data-inl-bar="${c.key}">
+            <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+            <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
+            <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${COLORS[i % COLORS.length]} transition-all duration-500 ease-out" style="width:0%"></div></div>
+          </div>`).join('');
+        }
+        cands.forEach((c) => {
+          const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
+          if (!block) return;
+          const pct = shares[c.key] || 0;
+          block.querySelector('[data-inl-bar-total]').textContent = (totals[c.key] || 0).toLocaleString();
+          block.querySelector('[data-inl-bar-pct]').textContent = pct;
+          block.querySelector('[data-inl-bar-fill]').style.width = pct + '%';
+        });
+      } else {
+        // bar_stacked / pie don't animate a single fill width, so a full
+        // rebuild through the shared renderBars() helper is simplest — it's
+        // also what keeps their rounding-remainder fix in one place.
+        const rows = cands.map((c, i) => ({ name: c.name, votes: totals[c.key] || 0, colorClass: COLORS[i % COLORS.length], colorIdx: i }));
+        bars.innerHTML = renderBars(rows, App.chartType);
       }
-      cands.forEach((c) => {
-        const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
-        if (!block) return;
-        const pct = shares[c.key] || 0;
-        block.querySelector('[data-inl-bar-total]').textContent = (totals[c.key] || 0).toLocaleString();
-        block.querySelector('[data-inl-bar-pct]').textContent = pct;
-        block.querySelector('[data-inl-bar-fill]').style.width = pct + '%';
-      });
     }
   }
   function wireStationRows(scope) {
@@ -1964,16 +2033,10 @@
     if (!saved.length) return '';
     const votesList = saved.map((r) => r.votes || {});
     const totals = QC.aggregateVotes(votesList);
-    const shares = QC.voteShares(totals);
     const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
     if (grand <= 0) return '';
-    const bars = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
-      .sort((a, b) => b.votes - a.votes)
-      .map(({ c, i, votes, pct }) => `<div class="mb-3">
-        <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-        <span class="font-mono text-slate-700 dark:text-slate-300">${votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
-        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${COLORS[i % COLORS.length]}" style="width:${pct}%"></div></div>
-      </div>`).join('');
+    const rows = QC.CANDIDATES.map((c, i) => ({ name: c.name, votes: totals[c.key] || 0, colorClass: COLORS[i % COLORS.length], colorIdx: i }));
+    const bars = renderBars(rows, App.chartType);
     const reported = t('dashboard_working_tally_reported')
       .replace('{reported}', saved.length)
       .replace('{total}', (d.stations || []).length || saved.length);
@@ -2009,12 +2072,50 @@
     // headed by the active election's name. Official results, the lead-margin
     // box, and the per-station table live on the election workspace instead.
     const workTally = workTallySection(d);
+    const hasTally = !!workTally;
+    const pdfAvail = hasTally && window.QCResultsPDF && window.QCResultsPDF.available();
+    const pdfBtnHtml = hasTally
+      ? `<button id="dash-pdf-btn"${pdfAvail ? '' : ` disabled title="${esc(t('dashboard_pdf_unavailable'))}"`} class="inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed">${esc(t('dashboard_export_pdf'))}</button>`
+      : '';
     body.innerHTML =
       `<h2 class="text-lg font-semibold mb-1">${esc(d.election.name)}</h2>
       ${workTally || `<p class="text-slate-600 dark:text-slate-500 text-sm">${t('dashboard_no_submissions')}</p>`}
       <p class="mt-4 text-xs text-slate-700 dark:text-slate-600">${d.lastUpdated ? t('dashboard_last_submission') + ' ' + timeAgo(d.lastUpdated) + ' · ' + t('dashboard_auto_refreshing') : t('dashboard_no_submissions')}</p>
-      <a class="mt-3 inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>`;
+      <div class="mt-3 flex flex-wrap gap-2 items-center">
+        ${pdfBtnHtml}
+        <a class="inline-flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-indigo-400" href="#/election/${d.election.eid}">${t('elections_open_workspace')}</a>
+      </div>`;
     wireEvidencePdf();
+    if (pdfAvail) {
+      const btn = document.getElementById('dash-pdf-btn');
+      if (btn) btn.onclick = () => {
+        const QC = window.QuickCountInline;
+        const saved = (d.workTally || []);
+        const votesList = saved.map((r) => r.votes || {});
+        const totals = QC.aggregateVotes(votesList);
+        const shares = QC.voteShares(totals);
+        const origLabel = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = t('dashboard_pdf_generating');
+        try {
+          window.QCResultsPDF.generate({
+            electionName: d.election.name,
+            candidates: QC.CANDIDATES,
+            totals,
+            shares,
+            stationReported: saved.length,
+            stationTotal: (d.stations || []).length || saved.length,
+            exportedAt: new Date().toISOString(),
+            lang: App.lang,
+          });
+          btn.textContent = t('dashboard_pdf_ready');
+          setTimeout(() => { btn.textContent = origLabel; btn.disabled = false; }, 2000);
+        } catch (e) {
+          btn.textContent = origLabel;
+          btn.disabled = false;
+        }
+      };
+    }
   }
   // One row per candidate (Rank, Candidate, Votes, Share %), sorted by votes
   // descending. The CSV string itself — including escaping and the UTF-8 BOM —
@@ -2124,7 +2225,8 @@
     workEditable = canEditWorkTally(d.election.orgAddr);
     hydrateInlineFromWorkTally(d);
     subscribeLive(d.election.eid); // live-update this election's screen
-    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
+    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>
+      <select id="chart-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${CHART_TYPES.map((ct) => `<option value="${ct}" ${ct === App.chartType ? 'selected' : ''}>${t('chart_' + ct) || ct}</option>`).join('')}</select>`;
 
     v.innerHTML = `
       <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
@@ -2139,6 +2241,7 @@
       <div id="station-table-wrap">${stationTable(d, { inlineEntry: true, editable: workEditable })}</div>
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
+    const cp = document.getElementById('chart-picker'); if (cp) cp.onchange = () => { App.chartType = cp.value; savePrefs(); refresh(); };
     const wsOrgBtn = document.getElementById('ws-org-manage');
     if (wsOrgBtn) wsOrgBtn.onclick = () => { App.orgView = wsOrgBtn.dataset.addr; location.hash = '#/orgs'; };
 
@@ -2289,7 +2392,10 @@
         // Capture the form values up front so Try-again resends exactly these.
         const sid = Number(p.querySelector('#ob-station').value);
         const votes = {}; p.querySelectorAll('.ob-v').forEach((i) => votes[i.dataset.cid] = Number(i.value) || 0);
-        const tot = p.querySelector('#ob-tot').value, inv = p.querySelector('#ob-inv').value;
+        // Blank means "not reported" (omitted from the memo), NOT zero — an
+        // explicit "0" must still save as 0, so only trim-empty is undefined.
+        const totRaw = p.querySelector('#ob-tot').value, invRaw = p.querySelector('#ob-inv').value;
+        const tot = totRaw.trim() === '' ? undefined : totRaw, inv = invRaw.trim() === '' ? undefined : invRaw;
         // Result submission is latest-wins (the aggregate methods collapse
         // repeats), so it is safe to auto-retry an ambiguous relay timeout.
         runTx({ to: d.election.orgAddr, amount: 0, memo: QC.res(d.election.eid, sid, votes, tot, inv, evHash), idempotent: true },
@@ -3218,11 +3324,11 @@
     if (!name) return toast(t('toast_enter_org_name'), 'warn');
     // Fee payment is NOT idempotent — a relay timeout shows Try-again, never a
     // silent re-charge.
-    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, memo: QC.org(name, jur) },
+    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, exactAmount: true, memo: QC.org(name, jur) },
       { loading: t('loading_registering'), success: () => { txSuccessToast('toast_org_registered'); refreshSoon(); } });
   }
   function payOrgFee() {
-    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, memo: QC.org(App.role.org.name, App.role.org.jur || '') },
+    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, exactAmount: true, memo: QC.org(App.role.org.name, App.role.org.jur || '') },
       { loading: t('loading_paying'), success: () => { txSuccessToast('toast_fee_paid'); refreshSoon(); } });
   }
 
