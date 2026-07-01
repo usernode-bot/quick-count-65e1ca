@@ -10,6 +10,7 @@ const {
   voteShares,
   reportedCount,
   CANDIDATES,
+  adjustSharesTo100,
 } = require('../public/inline-entry.js');
 
 test('sanitizeCount: empty / blank / null default to 0', () => {
@@ -114,4 +115,27 @@ test('reportedCount: counts only saved entries', () => {
   assert.strictEqual(reportedCount([]), 0);
   assert.strictEqual(reportedCount(null), 0);
   assert.strictEqual(reportedCount([null, undefined, { saved: true }]), 1);
+});
+
+test('adjustSharesTo100: three-way tie always sums to exactly 100', () => {
+  const pcts = adjustSharesTo100([1, 1, 1]);
+  assert.strictEqual(pcts.reduce((a, b) => a + b, 0), 100);
+  // naive rounding would give 33/33/33 = 99; the gap goes to the earliest tie
+  assert.deepStrictEqual(pcts, [34, 33, 33]);
+});
+
+test('adjustSharesTo100: excess remainder is trimmed from the largest share', () => {
+  // 2/7 ≈ 28.57 (round 29) three times = 87, plus 1/7 ≈ 14.29 (round 14) = 101
+  const pcts = adjustSharesTo100([2, 2, 2, 1]);
+  assert.strictEqual(pcts.reduce((a, b) => a + b, 0), 100);
+});
+
+test('adjustSharesTo100: all-zero / empty input never divides by zero', () => {
+  assert.deepStrictEqual(adjustSharesTo100([0, 0, 0]), [0, 0, 0]);
+  assert.deepStrictEqual(adjustSharesTo100([]), []);
+  assert.deepStrictEqual(adjustSharesTo100(null), []);
+});
+
+test('adjustSharesTo100: exact division needs no adjustment', () => {
+  assert.deepStrictEqual(adjustSharesTo100([1, 1, 1, 1]), [25, 25, 25, 25]);
 });
