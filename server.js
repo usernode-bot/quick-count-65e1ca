@@ -22,11 +22,6 @@ const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
-let PDFDocument = null;
-try { PDFDocument = require('pdfkit'); } catch { /* pdfkit optional */ }
-let QRCode = null;
-try { QRCode = require('qrcode'); } catch { /* qrcode optional */ }
-
 const { normalizeTx, QuickCountIndexer } = require('./lib/indexer');
 const memo = require('./lib/memo');
 const mock = require('./lib/mockledger');
@@ -37,6 +32,10 @@ const { isValidDisplayName, isValidBio, isSupportedLang } = require('./lib/profi
 
 let Pool = null;
 try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
+let PDFDocument = null;
+try { PDFDocument = require('pdfkit'); } catch { /* pdfkit optional */ }
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch { /* qrcode optional */ }
 
 // ── Configuration ───────────────────────────────────────────────────────────
 const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
@@ -70,6 +69,7 @@ const ORG_FEE = Number(process.env.ORG_FEE) || 100;
 // Secrets now and it is reserved for future app-signed operations.
 const APP_PUBKEY = process.env.APP_PUBKEY || '';
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY || '';
+const C1KWK_HMAC_SECRET = process.env.C1KWK_HMAC_SECRET || APP_SECRET_KEY || 'quickcount-c1kwk-dev';
 // Poll / auto-refresh cadence (ms). Floored at 1000 so a stray small value
 // can't hammer the chain read source or the client. Surfaced to the SPA via
 // /__quickcount/config so the browser auto-refresh uses the same interval.
