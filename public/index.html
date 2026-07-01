@@ -80,6 +80,8 @@
   <script src="/usernode-resilience.js"></script>
   <!-- Local-first election-creation queue (pure helpers; DOM/timer wiring below). -->
   <script src="/election-queue.js"></script>
+  <!-- Local-first vote-count save queue (worktally + result); pure helpers, DOM/timer wiring below. -->
+  <script src="/vote-queue.js"></script>
   <style>
     .tab-on { background:#4f46e5; color:#fff; }
     .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
@@ -1334,6 +1336,188 @@
     renderElq();
     kickElq();
   }
+  // ── Local-first vote-count save queue (worktally + on-chain result) ────────
+  // A failed-or-unconfirmed working-tally save or QC.res result submission is
+  // held in localStorage and retried automatically while the backend is
+  // reachable — no manual "Try again" click required. Two kinds share one
+  // queue, keyed per (kind, election, station) with latest-wins semantics (a
+  // fresh save for the same station supersedes any entry still queued for it):
+  //   'worktally' — the off-chain PUT behind saveWorkTally / the inline table
+  //   'result'    — the on-chain QC.res send behind the observer submit form
+  // Pure helpers (entry shape, entryKey, backoff, (de)serialization) live in
+  // window.QCVoteQueue (public/vote-queue.js); the DOM/timer/fetch/tx wiring —
+  // mirroring the election-creation queue above — is here.
+  const VQ = window.QCVoteQueue;
+  App.vq = App.vq || [];
+  let _vqRunning = false;
+
+  function vqKey() {
+    const id = (App.user && App.user.username) || App.wallet.address || 'anon';
+    return 'qc_vote_queue::' + id;
+  }
+  function persistVq() {
+    try { localStorage.setItem(vqKey(), VQ.serialize(App.vq || [])); } catch (_) {}
+  }
+  function vqEntryFor(kind, eid, sid) {
+    const key = kind + ':' + eid + ':' + sid;
+    return (App.vq || []).find((e) => VQ.entryKey(e) === key);
+  }
+  // Enqueue a save, replacing any existing queued entry for the same
+  // (kind, eid, sid) — latest-wins, matching the write semantics of both the
+  // worktally PUT and the QC.res submission (a resend simply overwrites).
+  function enqueueVq(input) {
+    const key = (input.kind === 'result' ? 'result' : 'worktally') + ':' + input.eid + ':' + input.sid;
+    App.vq = (App.vq || []).filter((e) => VQ.entryKey(e) !== key);
+    const entry = VQ.makeEntry(input);
+    App.vq.push(entry);
+    persistVq();
+    kickVq();
+    return entry;
+  }
+  function removeVq(id) {
+    App.vq = (App.vq || []).filter((e) => e.id !== id);
+    persistVq();
+  }
+  // Reflect the current queue state (or its absence) for the observer result
+  // form's currently-selected station. Called on station-select change, right
+  // after enqueueing a submit, and whenever the driver advances a 'result'
+  // entry — so the "saved locally / offline" text tracks the live queue
+  // without needing to rebuild the whole panel.
+  function refreshObStatus() {
+    const el = document.getElementById('ob-status');
+    const sel = document.getElementById('ob-station');
+    const cur = App.state && App.state.detail;
+    if (!el || !sel || !cur) return;
+    const entry = vqEntryFor('result', cur.election.eid, Number(sel.value));
+    el.textContent = entry ? (entry.offline ? t('queue_saved_offline') : t('queue_saved_locally')) : '';
+  }
+  // One persistence attempt for a queued working-tally save. Returns
+  // 'confirmed', 'terminal' (bad input/permission — drop it), or 'pending'
+  // (recoverable — keep and retry).
+  async function attemptWorktallyVq(entry) {
+    entry.attempts = (entry.attempts || 0) + 1;
+    persistVq();
+    try {
+      const r = await fetch('/api/elections/' + encodeURIComponent(entry.eid) + '/worktally/' + encodeURIComponent(entry.sid), {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ votes: entry.votes }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) {
+        entry.lastError = j.error || ('HTTP ' + r.status);
+        persistVq();
+        return VQ.classifyFetchStatus(r.status) === 'terminal' ? 'terminal' : 'pending';
+      }
+      return 'confirmed';
+    } catch (e) {
+      // A thrown fetch (no response at all) is a network failure — transient.
+      entry.lastError = (e && e.message) || String(e);
+      persistVq();
+      return 'pending';
+    }
+  }
+  // One persistence attempt for a queued on-chain result submission. Sends the
+  // (idempotent — the aggregate is latest-wins) QC.res tx and waits for chain
+  // inclusion, mirroring runQueuedSteps's single-step case.
+  async function attemptResultVq(entry) {
+    entry.attempts = (entry.attempts || 0) + 1;
+    persistVq();
+    try {
+      const r = await sendTx(entry.orgAddr, 0, QC.res(entry.eid, entry.sid, entry.votes, entry.tot, entry.inv, entry.evHash), { idempotent: true });
+      if (r) {
+        const pid = addPending(t('loading_submitting'), { txId: r, to: entry.orgAddr });
+        try { await confirmTx(r, { to: entry.orgAddr }); } finally { removePending(pid); }
+      }
+      entry.lastTxId = r || null;
+      return 'confirmed';
+    } catch (e) {
+      entry.lastError = (e && e.message) || String(e);
+      persistVq();
+      return (elqClassify(e) === 'terminal') ? 'terminal' : 'pending';
+    }
+  }
+  function attemptVq(entry) {
+    return entry.kind === 'result' ? attemptResultVq(entry) : attemptWorktallyVq(entry);
+  }
+  function onVqConfirmed(entry) {
+    if (entry.kind === 'worktally') {
+      const k = entry.eid + ':' + entry.sid;
+      if (inlineEntry[k]) inlineEntry[k].saved = true;
+      if (App.eid === entry.eid) { rerenderStations(); rerenderInlineSummary(); }
+    } else {
+      toast(t('toast_submit_result'));
+      refreshSoon();
+      const cur = App.state && App.state.detail;
+      if (cur && cur.election.eid === entry.eid) {
+        offerSubmitPdf(cur, entry.sid, entry.votes, entry.tot, entry.inv, entry.evHash, entry.lastTxId);
+      }
+      refreshObStatus();
+    }
+  }
+  function onVqTerminal(entry) {
+    toast(t('toast_failed') + ' ' + (entry.lastError || ''), 'error');
+    if (entry.kind === 'worktally' && App.eid === entry.eid) { rerenderStations(); rerenderInlineSummary(); }
+    else if (entry.kind === 'result') refreshObStatus();
+  }
+  function onVqStateChanged(entry) {
+    if (entry.kind === 'worktally') { if (App.eid === entry.eid) rerenderStations(); }
+    else refreshObStatus();
+  }
+  // Single recursive driver, mirroring driveElq: process the head drivable
+  // entry to a verdict, then either remove it (confirmed/terminal) or back off
+  // and retry. Self-stops when the drivable queue empties or the device goes
+  // offline (the 'online' listener below re-kicks). Entries that exhaust
+  // MAX_ATTEMPTS are parked offline and skipped.
+  async function driveVq() {
+    if (_vqRunning) return;
+    _vqRunning = true;
+    try {
+      while (true) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) break;
+        const entry = (App.vq || []).find((e) => !e.demo && !e.offline);
+        if (!entry) break;
+        const verdict = await attemptVq(entry);
+        if (verdict === 'confirmed') {
+          removeVq(entry.id);
+          onVqConfirmed(entry);
+        } else if (verdict === 'terminal') {
+          removeVq(entry.id);
+          onVqTerminal(entry);
+        } else if (VQ.isExhausted(entry)) {
+          entry.offline = true;
+          persistVq();
+          onVqStateChanged(entry);
+          continue; // the find() above now skips this entry → next drivable / break
+        } else {
+          onVqStateChanged(entry);
+          await new Promise((res) => setTimeout(res, VQ.nextBackoff(entry.attempts)));
+        }
+      }
+    } finally {
+      _vqRunning = false;
+    }
+  }
+  function kickVq() {
+    if (!App.vq || !App.vq.some((e) => !e.demo && !e.offline)) return;
+    if (_vqRunning) return;
+    driveVq();
+  }
+  // Resume the queue on boot/connect: rehydrate from localStorage and re-seed
+  // inlineEntry for any restored worktally entry so a reload doesn't lose the
+  // "saved locally, syncing…" row state (mirrors restoreElectionQueue).
+  async function restoreVoteQueue() {
+    let saved = [];
+    try { saved = VQ.deserialize(localStorage.getItem(vqKey()) || '[]'); } catch (_) { saved = []; }
+    App.vq = Array.isArray(saved) ? saved : [];
+    App.vq.forEach((entry) => {
+      if (entry.kind !== 'worktally') return;
+      const k = entry.eid + ':' + entry.sid;
+      if (!inlineEntry[k]) inlineEntry[k] = { open: false, draft: Object.assign({}, entry.votes || {}), votes: entry.votes || {}, saved: false };
+    });
+    kickVq();
+  }
+
   if (typeof window !== 'undefined' && window.addEventListener) {
     // Regaining connectivity is the natural reset point: clear the offline cap
     // and attempt counter on real (non-demo) parked entries so the queue retries
@@ -1346,6 +1530,16 @@
       });
       if (changed) { persistElq(); renderElq(); }
       kickElq();
+      let vqChanged = false;
+      (App.vq || []).forEach(function (e) {
+        if (!e.demo && (e.offline || e.attempts)) { e.offline = false; e.attempts = 0; vqChanged = true; }
+      });
+      if (vqChanged) {
+        persistVq();
+        if (App.eid) { rerenderStations(); rerenderInlineSummary(); }
+        refreshObStatus();
+      }
+      kickVq();
     });
   }
 
@@ -1536,6 +1730,7 @@
     restorePrefs();
     await restorePending();
     await restoreElectionQueue();
+    await restoreVoteQueue();
     await refresh();
     renderChrome();
   }
@@ -1765,12 +1960,19 @@
     const rows = d.stations.map((s) => {
       const entry = inline ? inlineEntry[inlineKey(s.sid)] : null;
       const saved = !!(entry && entry.saved);
+      // A queued-but-unconfirmed save for this station (if any) — drives the
+      // "saved locally, syncing…" / "Saved Locally (Offline)" badge below.
+      // `saved` is only ever true once the server has confirmed the write, so
+      // the two states never render together for the same row.
+      const vqEntry = inline ? vqEntryFor('worktally', App.eid, s.sid) : null;
       const badges = [];
       if (s.invalid) badges.push(`<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>`);
       else if (s.disputed) badges.push(`<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('station_badge_disputed')}</span>`);
       if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">${t('station_badge_review')}</span>`);
       if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
       if (saved) badges.push(`<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('inline_done_badge')} · ${QuickCountInline.totalVotes(entry.votes).toLocaleString()}</span>`);
+      else if (vqEntry && vqEntry.offline) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('queue_saved_offline')}</span>`);
+      else if (vqEntry) badges.push(`<span class="badge bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">${t('queue_saved_locally')}</span>`);
       const open = !!(editable && entry && entry.open);
       // Active-row highlight: lighter sticky-cell tone + a left accent bar that
       // lines up with the form panel below. A transparent border in the closed
@@ -1790,7 +1992,7 @@
       const formRow = open ? inlineFormRow(d, s.sid, entry) : '';
       let main;
       if (!s.reported) {
-        const cell = saved
+        const cell = (saved || vqEntry)
           ? `<td class="py-3 font-mono text-slate-700 dark:text-slate-300" colspan="${d.candidates.length + 1}">${esc(QuickCountInline.formatVoteSummary(entry.votes))}</td>`
           : `<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td>`;
         main = `<tr${rowAttrs}>${label}${cell}${chevCell}</tr>`;
@@ -1918,31 +2120,17 @@
           draft[key] = inp.value;
           votes[key] = QuickCountInline.sanitizeCount(inp.value);
         });
-        // Optimistic local update + re-render, then persist to Postgres so the
-        // entry survives reload and reaches the dashboard.
-        inlineEntry[k] = { open: true, draft: draft, votes: votes, saved: true };
-        toast(t('inline_done_badge') + ' · ' + QuickCountInline.totalVotes(votes).toLocaleString());
+        // `saved` stays false until the server confirms the write (via the
+        // vote-count save queue below) — the "done" badge is no longer shown
+        // optimistically. The row now shows a "saved locally, syncing…" badge
+        // while the save queue works, matching the election-creation queue.
+        inlineEntry[k] = { open: true, draft: draft, votes: votes, saved: false };
+        toast(t('queue_saved_locally'));
         rerenderStations();
         rerenderInlineSummary();
-        saveWorkTally(sid, votes);
+        enqueueVq({ kind: 'worktally', eid: App.eid, sid: Number(sid), votes: votes });
       });
     });
-  }
-  // Persist one station's working tally. Token-forwarded like putProfile; the
-  // server enforces the owner/admin/mod guard. A failure surfaces the shared
-  // recoverable-error notice (the optimistic local state is kept).
-  async function saveWorkTally(sid, votes) {
-    try {
-      const r = await fetch('/api/elections/' + encodeURIComponent(App.eid) + '/worktally/' + encodeURIComponent(sid), {
-        method: 'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ votes: votes }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
-    } catch (err) {
-      handleTxFailure(err, { onRetry: () => saveWorkTally(sid, votes) });
-    }
   }
   function marginBanner(d) {
     const m = d.margin;
@@ -2277,7 +2465,8 @@
       <label class="block text-xs mb-1 text-slate-500 dark:text-slate-400">${t('evidence_upload_label')}</label>
       <input id="ob-file" type="file" class="w-full mb-1 text-xs text-slate-600 dark:text-slate-400">
       <p id="ob-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all mb-3 font-mono"></p>
-      <button id="ob-submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm">${t('election_observer_submit_btn')}</button>`;
+      <button id="ob-submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm">${t('election_observer_submit_btn')}</button>
+      <p id="ob-status" class="text-xs mt-2 text-slate-600 dark:text-slate-500"></p>`;
     const p = panel(t('election_observer_title') + (myObs.sid != null ? ' ' + t('election_observer_your_station') : ''), inner);
     setTimeout(() => {
       let evHash = '';
@@ -2285,15 +2474,19 @@
         const f = e.target.files[0]; if (!f) { evHash = ''; p.querySelector('#ob-hash').textContent = ''; return; }
         evHash = await sha256File(f); p.querySelector('#ob-hash').textContent = 'sha256: ' + evHash;
       };
+      p.querySelector('#ob-station').addEventListener('change', refreshObStatus);
+      refreshObStatus();
       p.querySelector('#ob-submit').onclick = () => {
-        // Capture the form values up front so Try-again resends exactly these.
+        // Capture the form values up front, then hand the whole submission to
+        // the local-first vote queue. Result submission is latest-wins (the
+        // aggregate methods collapse repeats), so it is safe to enqueue,
+        // auto-retry, and resume across a reload without ever double-counting.
         const sid = Number(p.querySelector('#ob-station').value);
         const votes = {}; p.querySelectorAll('.ob-v').forEach((i) => votes[i.dataset.cid] = Number(i.value) || 0);
         const tot = p.querySelector('#ob-tot').value, inv = p.querySelector('#ob-inv').value;
-        // Result submission is latest-wins (the aggregate methods collapse
-        // repeats), so it is safe to auto-retry an ambiguous relay timeout.
-        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.res(d.election.eid, sid, votes, tot, inv, evHash), idempotent: true },
-          { loading: t('loading_submitting'), success: (results) => { toast(t('toast_submit_result')); refreshSoon(); offerSubmitPdf(d, sid, votes, tot, inv, evHash, results && results[0]); } });
+        enqueueVq({ kind: 'result', eid: d.election.eid, sid: sid, votes: votes, tot: tot, inv: inv, evHash: evHash, orgAddr: d.election.orgAddr });
+        toast(t('queue_saved_locally'));
+        refreshObStatus();
       };
     });
     return p;
@@ -4055,6 +4248,7 @@
       restorePrefs();
       await restorePending();
       await restoreElectionQueue();
+      await restoreVoteQueue();
 
       // Staging-only reviewable "pending" pill (no DB; strict no-op elsewhere).
       if (App.cfg.staging && new URLSearchParams(location.search).get('demo') === '1') {
