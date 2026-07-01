@@ -342,3 +342,186 @@ test('the owner can still pay (top-up) or delete a pending org', () => {
   assert.strictEqual(pay.orgs.get(OWNER).active, true);
   assert.strictEqual(pay.orgRole(OWNER, MEMBER_M), 'member', 'member added after payment');
 });
+
+// ── Ownership transfer (oxfer / oxacc) ──────────────────────────────────────
+test('oxfer/oxacc memo round-trip', () => {
+  assert.deepStrictEqual(memo.decode(memo.encode(memo.transferOfferMemo('O', 'W'))),
+    { app: 'quickcount', v: 1, t: 'oxfer', org: 'O', to: 'W' });
+  assert.deepStrictEqual(memo.decode(memo.encode(memo.transferAcceptMemo('O'))),
+    { app: 'quickcount', v: 1, t: 'oxacc', org: 'O' });
+});
+
+test('decode rejects malformed oxfer/oxacc memos', () => {
+  assert.strictEqual(memo.decode(JSON.stringify({ app: 'quickcount', v: 1, t: 'oxfer', org: 'O' })), null); // no to
+  assert.strictEqual(memo.decode(JSON.stringify({ app: 'quickcount', v: 1, t: 'oxfer', to: 'W' })), null); // no org
+  assert.strictEqual(memo.decode(JSON.stringify({ app: 'quickcount', v: 1, t: 'oxacc' })), null); // no org
+});
+
+const NEW_OWNER = 'newOwner';
+
+test('only owner can offer a transfer', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('m1', OWNER, 'x', 0, memo.memberMemo('orgOwner', ADMIN_M, 'admin')),
+    mk('xf1', ADMIN_M, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)), // admin cannot offer
+    mk('xf2', MEMBER_M, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)), // member cannot offer
+    mk('xf3', OUTSIDER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)), // outsider cannot offer
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).pendingOwner, null);
+});
+
+test('owner can offer a transfer; pendingOwner is set', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).pendingOwner, NEW_OWNER);
+});
+
+test('offering to current owner cancels a pending offer', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xf2', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', OWNER)), // offer to self = cancel
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).pendingOwner, null);
+});
+
+test('only pendingOwner can accept; random wallet cannot', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xa1', OUTSIDER, 'x', 0, memo.transferAcceptMemo('orgOwner')), // wrong wallet
+  ]));
+  assert.strictEqual(ix.orgs.get(OWNER).ownerAddr, OWNER); // unchanged
+  assert.strictEqual(ix.orgs.get(OWNER).pendingOwner, NEW_OWNER); // still pending
+});
+
+test('accept transfers ownership: new owner is owner, old owner becomes admin', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xa1', NEW_OWNER, 'x', 0, memo.transferAcceptMemo('orgOwner')),
+  ]));
+  const org = ix.orgs.get(OWNER);
+  assert.strictEqual(org.ownerAddr, NEW_OWNER);
+  assert.strictEqual(org.pendingOwner, null);
+  assert.strictEqual(ix.orgRole(OWNER, NEW_OWNER), 'owner');
+  assert.strictEqual(ix.orgRole(OWNER, OWNER), 'admin');   // old owner demoted
+  assert.strictEqual(org.members.has(NEW_OWNER), false);   // new owner not in members map
+  assert.strictEqual(org.addr, OWNER);                      // addr (stable identity) unchanged
+});
+
+test('isOwner() reflects ownerAddr after transfer', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xa1', NEW_OWNER, 'x', 0, memo.transferAcceptMemo('orgOwner')),
+  ]));
+  assert.strictEqual(ix.isOwner(OWNER, NEW_OWNER), true);
+  assert.strictEqual(ix.isOwner(OWNER, OWNER), false); // old owner no longer owner
+});
+
+test('post-transfer owner immutability check uses isOwner()', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xa1', NEW_OWNER, 'x', 0, memo.transferAcceptMemo('orgOwner')),
+    // new owner tries to target old owner (now admin) for removal — allowed
+    mk('rem1', NEW_OWNER, 'x', 0, memo.removeMemberMemo('orgOwner', OWNER)),
+    // new owner tries to target itself — rejected (owner immutable)
+    mk('rem2', NEW_OWNER, 'x', 0, memo.removeMemberMemo('orgOwner', NEW_OWNER)),
+  ]));
+  assert.strictEqual(ix.orgRole(OWNER, OWNER), null);    // removed successfully
+  assert.strictEqual(ix.orgRole(OWNER, NEW_OWNER), 'owner'); // still owner
+});
+
+test('viewerRole._ownedOrgs follows ownerAddr after transfer', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xa1', NEW_OWNER, 'x', 0, memo.transferAcceptMemo('orgOwner')),
+  ]));
+  const roleNew = ix.viewerRole(NEW_OWNER);
+  assert.strictEqual(roleNew.orgsOwned.length, 1);
+  assert.strictEqual(roleNew.orgsOwned[0].addr, OWNER); // stable addr
+
+  const roleOld = ix.viewerRole(OWNER);
+  assert.strictEqual(roleOld.orgsOwned.length, 0); // old addr is no longer owner
+  assert.strictEqual(roleOld.orgsMember.length, 1); // but is now a member (admin)
+});
+
+test('_pendingOwnerOrgs shows orgs with pending offer for viewer', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+  ]));
+  const role = ix.viewerRole(NEW_OWNER);
+  assert.strictEqual(role.orgsPendingOwner.length, 1);
+  assert.strictEqual(role.orgsPendingOwner[0].addr, OWNER);
+
+  const roleOther = ix.viewerRole(OUTSIDER);
+  assert.strictEqual(roleOther.orgsPendingOwner.length, 0);
+});
+
+test('orgDetail includes pendingOwner and is visible to pendingOwner', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+  ]));
+  const detail = ix.orgDetail(OWNER, NEW_OWNER);
+  assert.ok(detail, 'pending owner can see org');
+  assert.strictEqual(detail.pendingOwner, NEW_OWNER);
+  assert.strictEqual(detail.viewerRole, null); // not a member yet
+  assert.strictEqual(detail.members.length, 0); // members hidden (no role)
+
+  // after acceptance pendingOwner clears
+  ix.apply(mk('xa1', NEW_OWNER, 'x', 0, memo.transferAcceptMemo('orgOwner')));
+  const detail2 = ix.orgDetail(OWNER, NEW_OWNER);
+  assert.strictEqual(detail2.pendingOwner, null);
+  assert.strictEqual(detail2.viewerRole, 'owner');
+});
+
+test('visibleElections: new owner can see org elections; old founding addr cannot as owner', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('el1', OWNER, OWNER, 0, memo.electionMemo('E1')),
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xa1', NEW_OWNER, 'x', 0, memo.transferAcceptMemo('orgOwner')),
+  ]));
+  // New owner sees org's election as owner
+  const visNew = ix.visibleElections({ viewer: NEW_OWNER });
+  assert.strictEqual(visNew.length, 1);
+  // Old addr still sees it (as member/admin) — org is active and public
+  const visOld = ix.visibleElections({ viewer: OWNER });
+  assert.strictEqual(visOld.length, 1);
+  // orgRole for election is now new owner
+  assert.strictEqual(ix.orgRole(OWNER, NEW_OWNER), 'owner');
+  assert.strictEqual(ix.orgRole(OWNER, OWNER), 'admin');
+});
+
+test('auditEntries populated on transfer offer and accept', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+    mk('xa1', NEW_OWNER, 'x', 0, memo.transferAcceptMemo('orgOwner')),
+  ]));
+  const entries = ix.auditEntries.get(OWNER) || [];
+  assert.ok(entries.some((e) => e.action === 'ownership_offered' && e.actor === OWNER && e.target === NEW_OWNER));
+  assert.ok(entries.some((e) => e.action === 'ownership_transferred' && e.actor === NEW_OWNER && e.target === OWNER));
+});
+
+test('orgDetail audit array visible to owner and admin, not to member', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild(baseOrg([
+    mk('m1', OWNER, 'x', 0, memo.memberMemo('orgOwner', ADMIN_M, 'admin')),
+    mk('m2', OWNER, 'x', 0, memo.memberMemo('orgOwner', MEMBER_M, 'member')),
+    mk('xf1', OWNER, 'x', 0, memo.transferOfferMemo('orgOwner', NEW_OWNER)),
+  ]));
+  const ownerView = ix.orgDetail(OWNER, OWNER);
+  assert.ok(Array.isArray(ownerView.audit), 'owner sees audit');
+  const adminView = ix.orgDetail(OWNER, ADMIN_M);
+  assert.ok(Array.isArray(adminView.audit), 'admin sees audit');
+  const memberView = ix.orgDetail(OWNER, MEMBER_M);
+  assert.strictEqual(memberView.audit, undefined, 'member does not see audit');
+});

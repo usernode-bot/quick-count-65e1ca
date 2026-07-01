@@ -248,6 +248,13 @@
       tab_heatmap: 'Heatmap', heatmap_heading: 'Voter Turnout by Region', heatmap_select_election: 'Select an election to view turnout by region.', heatmap_no_regions: 'No regions are defined. Add a label to each station in the election workspace.', heatmap_col_region: 'Region', heatmap_col_stations: 'Stations', heatmap_col_ballots: 'Ballots cast', heatmap_col_valid_rate: 'Valid ballots', heatmap_col_invalid: 'Blank / invalid', heatmap_unlabeled: '(No region)', heatmap_summary: '{reported} of {total} stations reported · {regions} regions',
       geo_heading: 'Area Hierarchy', geo_level_1: 'Province', geo_level_2: 'Regency / City', geo_level_3: 'District (Kecamatan)', geo_level_4: 'Village / Ward', geo_level_5: 'TPS', geo_pick_from_hierarchy: 'Pick from area hierarchy', geo_select_placeholder: '— select {level} —', geo_add_placeholder: 'Add new {level}…', geo_add_btn: 'Add', geo_delete_confirm: 'Delete "{name}" and all its sub-entries? This cannot be undone.', toast_geo_added: 'Added ✓', toast_geo_deleted: 'Deleted ✓', geo_empty: 'No entries yet.', geo_tps_select: 'Select', geo_loading: 'Loading…',
       c1kwk_panel_title: 'C1-KWK — Ballot Count Certificate', c1kwk_download_btn: 'Download Signed PDF', c1kwk_generating: 'Generating…', c1kwk_wallet_required: 'A linked wallet is required to sign the form.', c1kwk_province: 'Province', c1kwk_regency: 'Regency / City', c1kwk_subdistrict: 'Subdistrict', c1kwk_village: 'Village / Kelurahan', c1kwk_tps_number: 'TPS No.', c1kwk_valid_votes: 'Valid Votes (by candidate)', c1kwk_invalid_votes: 'Invalid / Blank Votes', c1kwk_total_votes: 'Total Votes (auto)', c1kwk_dpt: 'DPT (Registered Voters)', c1kwk_verify_title: 'Verify C1-KWK Signature', c1kwk_sig_valid: '✓ Signature valid — document has not been altered.', c1kwk_sig_invalid: '✗ Signature invalid — document may have been altered.',
+      orgs_pending_owner_heading: 'Pending ownership offers', orgs_pending_owner_desc: 'You have been offered ownership of these organizations.',
+      org_transfer_heading: 'Transfer ownership', org_transfer_desc: 'Transfer ownership of this organization to another wallet. The recipient must accept before the transfer takes effect.', org_transfer_addr_ph: 'Recipient wallet address (ut1…)', org_transfer_offer_btn: 'Offer transfer', org_transfer_cancel_btn: 'Cancel transfer offer', org_transfer_pending_note: 'Transfer pending — waiting for {addr} to accept.',
+      org_transfer_accept_heading: 'Accept ownership offer', org_transfer_accept_desc: 'You have been offered ownership of {name}. Accepting makes you the Owner and demotes the current Owner to Administrator.', org_transfer_accept_btn: 'Accept ownership',
+      toast_transfer_offered: 'Ownership transfer offered ✓', toast_transfer_cancelled: 'Transfer offer cancelled ✓', toast_transfer_accepted: 'Ownership accepted ✓',
+      loading_offering_transfer: 'Offering transfer…', loading_cancelling_transfer: 'Cancelling transfer…', loading_accepting_transfer: 'Accepting ownership…',
+      org_audit_heading: 'Activity & Audit log', org_audit_empty: 'No recorded activity yet.',
+      org_audit_action_org_edited: 'Updated organization details to "{detail}"', org_audit_action_visibility_changed: 'Changed visibility to {detail}', org_audit_action_admin_assigned: 'Assigned {target} as Administrator', org_audit_action_member_removed: 'Removed {target} ({detail})', org_audit_action_org_deleted: 'Deleted organization', org_audit_action_ownership_offered: 'Offered ownership to {target}', org_audit_action_ownership_transferred: 'Accepted ownership (from {target})',
       evidence_sheet_download: 'Download Evidence Sheet', evidence_sheet_generating: 'Generating PDF…', evidence_sheet_checking: 'Checking…', evidence_sheet_valid: '✓ Certificate valid — document has not been altered.', evidence_sheet_invalid: '✗ Certificate invalid — signature did not match.', evidence_sheet_doc_changed: '⚠ Document changed — election data has been modified since download.', evidence_sheet_not_found: '⚠ Certificate not found — this document was not issued by this platform.', evidence_sheet_revoked: '✗ Certificate revoked.', evidence_sheet_meta_downloader: 'Downloaded by', evidence_sheet_meta_timestamp: 'Downloaded at', evidence_sheet_meta_hash: 'Document hash',
     },
     id: {
@@ -321,6 +328,13 @@
       tab_heatmap: 'Peta Panas', heatmap_heading: 'Partisipasi Pemilih per Wilayah', heatmap_select_election: 'Pilih pemilihan untuk melihat partisipasi per wilayah.', heatmap_no_regions: 'Tidak ada wilayah yang ditentukan. Tambahkan label ke setiap TPS di ruang kerja pemilihan.', heatmap_col_region: 'Wilayah', heatmap_col_stations: 'TPS', heatmap_col_ballots: 'Surat suara masuk', heatmap_col_valid_rate: 'Surat suara sah', heatmap_col_invalid: 'Kosong / tidak sah', heatmap_unlabeled: '(Tanpa wilayah)', heatmap_summary: '{reported} dari {total} TPS dilaporkan · {regions} wilayah',
       geo_heading: 'Hierarki Wilayah', geo_level_1: 'Provinsi', geo_level_2: 'Kabupaten / Kota', geo_level_3: 'Kecamatan', geo_level_4: 'Kelurahan / Desa', geo_level_5: 'TPS', geo_pick_from_hierarchy: 'Pilih dari hierarki wilayah', geo_select_placeholder: '— pilih {level} —', geo_add_placeholder: 'Tambah {level} baru…', geo_add_btn: 'Tambah', geo_delete_confirm: 'Hapus "{name}" beserta semua sub-entri? Tidak dapat dibatalkan.', toast_geo_added: 'Ditambahkan ✓', toast_geo_deleted: 'Dihapus ✓', geo_empty: 'Belum ada data.', geo_tps_select: 'Pilih', geo_loading: 'Memuat…',
       c1kwk_panel_title: 'C1-KWK — Catatan Hasil Penghitungan Suara', c1kwk_download_btn: 'Unduh PDF Tertandatangan', c1kwk_generating: 'Membuat dokumen…', c1kwk_wallet_required: 'Dompet tertaut diperlukan untuk menandatangani formulir.', c1kwk_province: 'Provinsi', c1kwk_regency: 'Kabupaten / Kota', c1kwk_subdistrict: 'Kecamatan', c1kwk_village: 'Kelurahan / Desa', c1kwk_tps_number: 'No. TPS', c1kwk_valid_votes: 'Suara Sah (per pasangan)', c1kwk_invalid_votes: 'Suara Tidak Sah / Kosong', c1kwk_total_votes: 'Jumlah Suara (otomatis)', c1kwk_dpt: 'DPT (Pemilih Terdaftar)', c1kwk_verify_title: 'Verifikasi Tanda Tangan C1-KWK', c1kwk_sig_valid: '✓ Tanda tangan valid — dokumen belum diubah.', c1kwk_sig_invalid: '✗ Tanda tangan tidak valid — dokumen mungkin telah diubah.',
+      orgs_pending_owner_heading: 'Tawaran kepemilikan tertunda', orgs_pending_owner_desc: 'Anda telah ditawari kepemilikan organisasi berikut.',
+      org_transfer_heading: 'Alihkan kepemilikan', org_transfer_desc: 'Alihkan kepemilikan organisasi ini ke dompet lain. Penerima harus menerima sebelum pengalihan berlaku.', org_transfer_addr_ph: 'Alamat dompet penerima (ut1…)', org_transfer_offer_btn: 'Tawarkan pengalihan', org_transfer_cancel_btn: 'Batalkan tawaran pengalihan', org_transfer_pending_note: 'Pengalihan tertunda — menunggu {addr} menerima.',
+      org_transfer_accept_heading: 'Terima tawaran kepemilikan', org_transfer_accept_desc: 'Anda telah ditawari kepemilikan {name}. Menerima akan menjadikan Anda Pemilik dan menurunkan Pemilik saat ini menjadi Administrator.', org_transfer_accept_btn: 'Terima kepemilikan',
+      toast_transfer_offered: 'Tawaran pengalihan kepemilikan dikirim ✓', toast_transfer_cancelled: 'Tawaran pengalihan dibatalkan ✓', toast_transfer_accepted: 'Kepemilikan diterima ✓',
+      loading_offering_transfer: 'Mengirim tawaran…', loading_cancelling_transfer: 'Membatalkan tawaran…', loading_accepting_transfer: 'Menerima kepemilikan…',
+      org_audit_heading: 'Log Aktivitas & Audit', org_audit_empty: 'Belum ada aktivitas yang tercatat.',
+      org_audit_action_org_edited: 'Memperbarui detail organisasi menjadi "{detail}"', org_audit_action_visibility_changed: 'Mengubah visibilitas menjadi {detail}', org_audit_action_admin_assigned: 'Menetapkan {target} sebagai Administrator', org_audit_action_member_removed: 'Menghapus {target} ({detail})', org_audit_action_org_deleted: 'Menghapus organisasi', org_audit_action_ownership_offered: 'Menawarkan kepemilikan kepada {target}', org_audit_action_ownership_transferred: 'Menerima kepemilikan (dari {target})',
       evidence_sheet_download: 'Unduh Lembar Bukti', evidence_sheet_generating: 'Membuat PDF…', evidence_sheet_checking: 'Memeriksa…', evidence_sheet_valid: '✓ Sertifikat valid — dokumen belum diubah.', evidence_sheet_invalid: '✗ Sertifikat tidak valid — tanda tangan tidak cocok.', evidence_sheet_doc_changed: '⚠ Dokumen berubah — data pemilihan telah dimodifikasi sejak diunduh.', evidence_sheet_not_found: '⚠ Sertifikat tidak ditemukan — dokumen ini tidak diterbitkan oleh platform ini.', evidence_sheet_revoked: '✗ Sertifikat dicabut.', evidence_sheet_meta_downloader: 'Diunduh oleh', evidence_sheet_meta_timestamp: 'Diunduh pada', evidence_sheet_meta_hash: 'Hash dokumen',
     },
     'zh-Hans': {
@@ -886,6 +900,8 @@
     odel: (org) => ({ app: APP, v: V, t: 'odel', org }),
     ecl: (eid) => ({ app: APP, v: V, t: 'ecl', eid: String(eid) }),
     oedit: (org, name, jur) => ({ app: APP, v: V, t: 'oedit', org, name: String(name == null ? '' : name).slice(0, 120), jur: String(jur == null ? '' : jur).slice(0, 80) }),
+    oxfer: (org, to) => ({ app: APP, v: V, t: 'oxfer', org: String(org || ''), to: String(to || '') }),
+    oxacc: (org) => ({ app: APP, v: V, t: 'oxacc', org: String(org || '') }),
   };
 
   // ───────────────────────── Helpers ─────────────────────────
@@ -1025,6 +1041,10 @@
         return typeof m.eid === 'string' && m.eid.length > 0;
       case 'oedit':
         return typeof m.org === 'string' && m.org.length > 0 && typeof m.name === 'string' && m.name.trim().length > 0;
+      case 'oxfer':
+        return typeof m.org === 'string' && m.org.length > 0 && typeof m.to === 'string' && m.to.length > 0;
+      case 'oxacc':
+        return typeof m.org === 'string' && m.org.length > 0;
       default:
         return false;
     }
@@ -2767,8 +2787,10 @@
       </div>`;
     }
 
-    // Member-of list.
-    const memberOrgs = myOrgs.filter((o) => o.viewerRole !== 'owner');
+    // Member-of list (excludes owned org and pending-offer orgs).
+    const viewerAddr = App.role.addr;
+    const pendingOwnerOrgs = myOrgs.filter((o) => o.viewerRole === null && o.pendingOwner === viewerAddr);
+    const memberOrgs = myOrgs.filter((o) => o.viewerRole !== 'owner' && o.viewerRole !== null);
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 mt-6">${t('orgs_member_heading')}</h3>`;
     html += memberOrgs.length
       ? '<div class="space-y-2 mb-6">' + memberOrgs.map((o) => `
@@ -2777,6 +2799,17 @@
           <button class="org-manage px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold" data-addr="${esc(o.addr)}">${t('org_manage')}</button>
         </div>`).join('') + '</div>'
       : `<p class="text-slate-600 dark:text-slate-500 text-sm mb-6">${t('orgs_none_member')}</p>`;
+
+    // Pending ownership offers.
+    if (pendingOwnerOrgs.length) {
+      html += `<h3 class="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1 mt-2">${t('orgs_pending_owner_heading')}</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">${t('orgs_pending_owner_desc')}</p>
+        <div class="space-y-2 mb-6">` + pendingOwnerOrgs.map((o) => `
+        <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30 text-sm flex items-center justify-between gap-2 flex-wrap">
+          <span class="flex items-center gap-2"><span class="font-medium">${esc(o.name)}</span>${orgVisBadge(o.visibility || 'public')}</span>
+          <button class="org-manage px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold" data-addr="${esc(o.addr)}">${t('org_transfer_accept_btn')}</button>
+        </div>`).join('') + '</div>';
+    }
     html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('orgs_active_orgs')}</h3>`;
     // Authoritative list of active orgs from the indexer — independent of whether
     // an org has published elections, so a just-registered org shows instantly.
@@ -2951,6 +2984,7 @@
   // Org management workspace: roster + role-gated controls.
   function renderOrgWorkspace(v, org) {
     const vr = org.viewerRole;
+    const isPendingOwner = !vr && org.pendingOwner === App.role.addr;
 
     // Paid gate: management unlocks only for owners/founders (and their
     // delegates) once the org has paid its fee (org.active). A pending org's
@@ -2986,10 +3020,20 @@
     const canSetVisibility = vr === 'owner' || vr === 'admin';
     const canDelete = vr === 'owner';
     const canAssignAdmin = vr === 'owner';
+    const canSeeAudit = vr === 'owner' || vr === 'admin';
 
     let html = `<button id="org-back" class="text-sm text-indigo-500 hover:underline mb-3">${t('org_back')}</button>
       <div class="flex items-center gap-2 flex-wrap mb-1"><h2 class="text-lg font-semibold">${esc(org.name)}</h2>${orgRoleBadge(vr)}${orgVisBadge(org.visibility || 'public')}</div>
       <p class="text-xs text-slate-600 dark:text-slate-500 mb-5 font-mono">${esc(org.addr)}</p>`;
+
+    // Accept ownership banner (pending-owner viewer only).
+    if (isPendingOwner) {
+      html += `<div class="p-4 mb-4 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10">
+        <h3 class="font-semibold mb-2 text-amber-700 dark:text-amber-300">${t('org_transfer_accept_heading')}</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">${t('org_transfer_accept_desc')}</p>
+        <button id="org-accept-ownership" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">${t('org_transfer_accept_btn')}</button>
+      </div>`;
+    }
 
     // Organization details (owner only) — edit name and jurisdiction.
     if (canDelete) {
@@ -3003,22 +3047,25 @@
       </div>`;
     }
 
-    // Members roster.
-    html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('org_members_heading')} (${org.members.length})</h3>
-      <div class="space-y-2 mb-4">`;
     const roleOpts = (sel) => ['member', 'mod'].concat(canAssignAdmin ? ['admin'] : [])
       .map((r) => `<option value="${r}" ${r === sel ? 'selected' : ''}>${orgRoleLabel(r)}</option>`).join('');
-    for (const m of org.members) {
-      const manageable = canManageMembers && canManageTarget(vr, m.role);
-      html += `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex items-center justify-between gap-2 flex-wrap">
-        <span class="flex items-center gap-2">${userLink(m.addr)}${orgRoleBadge(m.role)}</span>
-        ${manageable ? `<span class="flex items-center gap-2">
-          <select class="org-role-sel px-2 py-1 rounded bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-xs" data-addr="${esc(m.addr)}" data-cur="${m.role}">${roleOpts(m.role)}</select>
-          <button class="org-remove px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold" data-addr="${esc(m.addr)}">${t('org_remove')}</button>
-        </span>` : ''}
-      </div>`;
+
+    // Members roster (not shown to pending-owner viewers with no role).
+    if (org.members) {
+      html += `<h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">${t('org_members_heading')} (${org.members.length})</h3>
+        <div class="space-y-2 mb-4">`;
+      for (const m of org.members) {
+        const manageable = canManageMembers && canManageTarget(vr, m.role);
+        html += `<div class="p-3 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-sm flex items-center justify-between gap-2 flex-wrap">
+          <span class="flex items-center gap-2">${userLink(m.addr)}${orgRoleBadge(m.role)}</span>
+          ${manageable ? `<span class="flex items-center gap-2">
+            <select class="org-role-sel px-2 py-1 rounded bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 text-xs" data-addr="${esc(m.addr)}" data-cur="${m.role}">${roleOpts(m.role)}</select>
+            <button class="org-remove px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold" data-addr="${esc(m.addr)}">${t('org_remove')}</button>
+          </span>` : ''}
+        </div>`;
+      }
+      html += '</div>';
     }
-    html += '</div>';
 
     // Add member.
     if (canManageMembers) {
@@ -3052,11 +3099,41 @@
       </div>`;
     }
 
-    // Danger zone — delete (Owner only).
+    // Danger zone — transfer ownership + delete (Owner only).
     if (canDelete) {
+      const pendingNote = org.pendingOwner
+        ? `<p class="text-xs text-amber-700 dark:text-amber-300 mb-3">${t('org_transfer_pending_note').replace('{addr}', esc(org.pendingOwner))}</p>
+          <button id="org-transfer-cancel" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold">${t('org_transfer_cancel_btn')}</button>`
+        : `<input id="org-transfer-addr" placeholder="${t('org_transfer_addr_ph')}" class="w-full mb-2 px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none font-mono text-sm">
+          <button id="org-transfer-offer" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold">${t('org_transfer_offer_btn')}</button>`;
       html += `<div class="p-4 mb-4 rounded-xl border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10">
-        <h3 class="font-semibold mb-2 text-rose-700 dark:text-rose-300">${t('org_danger_heading')}</h3>
-        <button id="org-del" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">${t('org_delete')}</button>
+        <h3 class="font-semibold mb-3 text-rose-700 dark:text-rose-300">${t('org_danger_heading')}</h3>
+        <p class="text-sm font-medium mb-1 text-rose-800 dark:text-rose-200">${t('org_transfer_heading')}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-400 mb-3">${t('org_transfer_desc')}</p>
+        ${pendingNote}
+        <div class="mt-4 pt-4 border-t border-rose-200 dark:border-rose-500/30">
+          <button id="org-del" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold">${t('org_delete')}</button>
+        </div>
+      </div>`;
+    }
+
+    // Activity & Audit log (owner/admin only).
+    if (canSeeAudit && org.audit) {
+      const auditRows = org.audit.length
+        ? org.audit.map((e) => {
+            const actionKey = 'org_audit_action_' + e.action;
+            const label = t(actionKey) || e.action;
+            const who = e.actor ? `<span class="font-mono text-xs">${esc(e.actor.slice(0, 12))}…</span>` : '';
+            const target = e.target ? ` → <span class="font-mono text-xs">${esc(e.target.slice(0, 12))}…</span>` : '';
+            const when = e.createdAt ? `<span class="text-slate-400 text-xs">${new Date(e.createdAt).toLocaleString()}</span>` : '';
+            return `<div class="py-2 border-b border-slate-200 dark:border-slate-800 last:border-0 text-sm flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span class="font-medium">${esc(label)}</span>${who}${target}${when}
+            </div>`;
+          }).join('')
+        : `<p class="text-sm text-slate-500 dark:text-slate-400">${t('org_audit_empty')}</p>`;
+      html += `<div class="p-4 mb-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+        <h3 class="font-semibold mb-3">${t('org_audit_heading')}</h3>
+        ${auditRows}
       </div>`;
     }
 
@@ -3080,6 +3157,12 @@
     if (visBtn) visBtn.onclick = () => setOrgVisibility(org.addr, visBtn.dataset.next);
     const delBtn = document.getElementById('org-del');
     if (delBtn) delBtn.onclick = () => deleteOrg(org.addr);
+    const acceptOwnerBtn = document.getElementById('org-accept-ownership');
+    if (acceptOwnerBtn) acceptOwnerBtn.onclick = () => acceptOwnerTransfer(org.addr);
+    const offerBtn = document.getElementById('org-transfer-offer');
+    if (offerBtn) offerBtn.onclick = () => offerOwnerTransfer(org.addr);
+    const cancelOfferBtn = document.getElementById('org-transfer-cancel');
+    if (cancelOfferBtn) cancelOfferBtn.onclick = () => cancelOwnerTransfer(org.addr);
   }
 
   function addOrgMember(orgAddr) {
@@ -3113,6 +3196,20 @@
     if (!name) return toast(t('toast_enter_org_name'), 'warn');
     runTx({ to: orgAddr, amount: 0, memo: QC.oedit(orgAddr, name, jur), idempotent: true },
       { loading: t('loading_updating_details'), success: () => { toast(t('toast_details_updated')); refreshSoon(); } });
+  }
+  function offerOwnerTransfer(orgAddr) {
+    const to = (document.getElementById('org-transfer-addr').value || '').trim();
+    if (!to) return toast(t('org_transfer_addr_ph'), 'warn');
+    runTx({ to: orgAddr, amount: 0, memo: QC.oxfer(orgAddr, to), idempotent: true },
+      { loading: t('loading_offering_transfer'), success: () => { toast(t('toast_transfer_offered')); refreshSoon(); } });
+  }
+  function cancelOwnerTransfer(orgAddr) {
+    runTx({ to: orgAddr, amount: 0, memo: QC.oxfer(orgAddr, App.role.addr), idempotent: true },
+      { loading: t('loading_cancelling_transfer'), success: () => { toast(t('toast_transfer_cancelled')); refreshSoon(); } });
+  }
+  function acceptOwnerTransfer(orgAddr) {
+    runTx({ to: orgAddr, amount: 0, memo: QC.oxacc(orgAddr), idempotent: true },
+      { loading: t('loading_accepting_transfer'), success: () => { toast(t('toast_transfer_accepted')); refreshSoon(); } });
   }
   async function registerOrg() {
     if (!App.wallet.connected) { await connectWallet(); if (!App.wallet.connected) return; }
