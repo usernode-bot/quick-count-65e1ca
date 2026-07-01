@@ -41,14 +41,26 @@ try { QRCode = require('qrcode'); } catch { /* qrcode optional */ }
 const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const IS_DEMO = LOCAL_DEV || IS_STAGING; // seed obviously-fake data so every screen renders
-// Always-on local-ingest ("mock") transaction flow. When true (the default in
-// EVERY environment), submissions are ingested directly into the event log via
-// /__mock/submit → ingestRaw → rebuild, with NO dependence on NODE_RPC_URL /
-// EXPLORER_API_URL / chain polling / chain read-back. Kept deliberately separate
-// from LOCAL_DEV and IS_DEMO so the developer-only affordances (persona switcher,
-// `viewer` identity override, demo seeding) stay gated on those and are NOT
-// enabled in staging/production. Set MOCK_TX_FLOW=false to restore real-chain reads.
-const MOCK_TX_FLOW = process.env.MOCK_TX_FLOW !== 'false';
+// Local-ingest ("mock") transaction flow. When true, submissions are ingested
+// directly into the event log via /__mock/submit → ingestRaw → rebuild, with NO
+// dependence on NODE_RPC_URL / EXPLORER_API_URL / chain polling / chain read-back.
+//
+// REAL on-chain mode is the genuine DEFAULT everywhere: an unset (or any value
+// other than the literal 'true') MOCK_TX_FLOW means real — the hosted bridge
+// signs/broadcasts per-user and the indexer reads transactions back from the
+// configured chain read source (pollOnce takes its else branch). Mock is opt-in.
+//
+// Two environments FORCE mock on regardless of the flag, so neither can ever
+// broadcast or read the real chain:
+//   • LOCAL_DEV — offline dev must keep using QCMock + the /__mock/* surface.
+//   • IS_STAGING — platform rule: "never broadcast real on-chain transactions
+//     from staging." Defense-in-depth on top of dapp.json's staging_default,
+//     so the staging preview always runs the seeded demo without a real wallet.
+// Kept deliberately separate from the developer-only affordances (persona
+// switcher, `viewer` identity override, demo seeding) which stay gated on
+// LOCAL_DEV / IS_DEMO. Set MOCK_TX_FLOW=true to opt a standalone/dev run into
+// local-ingest; leave it unset (or 'false') for real-chain reads and writes.
+const MOCK_TX_FLOW = LOCAL_DEV || IS_STAGING || process.env.MOCK_TX_FLOW === 'true';
 const PORT = process.env.PORT || 3000;
 const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
 // Canonical chain read path: the public block explorer, addressed per-chain as
@@ -2125,11 +2137,15 @@ async function start() {
   // a neutral "submitted — awaiting on-chain sync" notice instead of a false
   // success toast. We still log here so operators see it in container logs.
   if (MOCK_TX_FLOW && !LOCAL_DEV) {
+    // Reached in staging (forced on) or when a standalone/dev run explicitly
+    // opted in with MOCK_TX_FLOW=true. Real on-chain mode is the default
+    // everywhere else, so this is no longer the production path.
     console.log(
-      '[QuickCount] running in self-contained local-ingest mode (MOCK_TX_FLOW) — ' +
+      '[QuickCount] running in self-contained local-ingest mode (MOCK_TX_FLOW' +
+      (IS_STAGING ? ', forced on in staging' : '=true') + ') — ' +
       'submissions are recorded directly into the event log via /__mock/submit and ' +
       'persisted to chain_txs when DATABASE_URL is set; no chain broadcast/read-back. ' +
-      'Set MOCK_TX_FLOW=false to restore real-chain reads.'
+      'Unset MOCK_TX_FLOW (the default) for real-chain reads and writes.'
     );
   } else if (source.backend === 'none' && !LOCAL_DEV) {
     console.warn(
