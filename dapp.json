@@ -36,13 +36,6 @@
       "default": "100"
     },
     {
-      "key": "ADMIN_ADDRS",
-      "description": "Comma-separated platform-admin wallet addresses (fee waivers + admin dashboard). Public identifiers.",
-      "required": false,
-      "private": false,
-      "default": ""
-    },
-    {
       "key": "UNLOCK_RECIPIENT_ADDRESS",
       "description": "Wallet address that pay-to-unlock payments are sent to. Currently a test/mock-token network — set this to the real mainnet wallet to go live. Defaults to an internal testing placeholder so the deploy never blocks.",
       "required": false,
@@ -256,6 +249,11 @@
       "expectText": "Member of"
     },
     {
+      "name": "Unpaid org owner sees the pay-fee prompt (management gated on payment)",
+      "path": "/?viewer=ut1demounpaidorg000000000000000000000000000#/orgs",
+      "expectText": "Pay registration fee"
+    },
+    {
       "name": "Orgs endpoint returns the seeded owner roster",
       "path": "/__quickcount/orgs?viewer=ut1democitizenscount0000000000000000000000",
       "expectText": "\"viewerRole\":\"owner\""
@@ -324,6 +322,36 @@
       "name": "Org workspace renders the Area Hierarchy section for an admin",
       "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/orgs",
       "expectText": "Area Hierarchy"
+    },
+    {
+      "name": "Closed election workspace shows Closed badge",
+      "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-closed-election",
+      "expectText": "Closed"
+    },
+    {
+      "name": "C1-KWK panel renders for Indonesia election",
+      "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/election/demo-pilpres-2024",
+      "expectSelector": "[data-c1kwk-panel]"
+    },
+    {
+      "name": "C1-KWK verify endpoint returns JSON for any payload",
+      "path": "/api/public/c1kwk/verify?payload=dGVzdA",
+      "expectText": "\"valid\""
+    },
+    {
+      "name": "Public elections list endpoint surfaces a seeded election (ingest→index→list path)",
+      "path": "/api/public/elections",
+      "expectText": "General Election"
+    },
+    {
+      "name": "Quick-count state lists a seeded active organization (orgs render in the list)",
+      "path": "/__quickcount/state",
+      "expectText": "Citizens Count"
+    },
+    {
+      "name": "Elections list screen shows a seeded election row",
+      "path": "/#/elections",
+      "expectText": "General Election"
     }
   ]
 }
