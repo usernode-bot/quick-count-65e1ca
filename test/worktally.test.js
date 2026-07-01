@@ -28,6 +28,7 @@ delete process.env.DATABASE_URL;
 const { app, indexer, buildDemoTxs, sanitizeWorkVotes } = require('../server');
 
 const ORG_A = 'ut1democitizenscount0000000000000000000000'; // owns demo-election
+const ORG_B_PENDING = 'ut1demounpaidorg000000000000000000000000000'; // unpaid/pending org
 const OUTSIDER = 'ut1nobody000000000000000000000000000000000';
 
 let server, base;
@@ -85,6 +86,16 @@ test('PUT worktally with no token on an indexed election is rejected (401 gate o
   // The global JWT gate denies unauthenticated /api/ writes (401); if a token
   // were present but unauthorized the handler returns 403. Either is a rejection.
   assert.ok(status === 401 || status === 403, 'unauthenticated write rejected, got ' + status);
+});
+
+test('the owner of a pending (unpaid) org cannot operate — paid gate denies the worktally guard', () => {
+  // The PUT guard rejects when indexer.canOperate(orgAddr, caller) is false. A
+  // pending org grants no operation rights even to its own founding wallet, so
+  // any election it tried to host would 403 here. (A pending org cannot create
+  // an election in the first place, which is why this is asserted at the gate's
+  // input rather than via a live PUT.)
+  assert.strictEqual(indexer.orgs.get(ORG_B_PENDING).active, false);
+  assert.strictEqual(indexer.canOperate(ORG_B_PENDING, ORG_B_PENDING), false);
 });
 
 // ── Read folding (works with or without a DB; empty array when no rows) ───────
