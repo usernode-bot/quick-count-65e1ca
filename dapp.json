@@ -249,6 +249,11 @@
       "expectText": "Member of"
     },
     {
+      "name": "Unpaid org owner sees the pay-fee prompt (management gated on payment)",
+      "path": "/?viewer=ut1demounpaidorg000000000000000000000000000#/orgs",
+      "expectText": "Pay registration fee"
+    },
+    {
       "name": "Orgs endpoint returns the seeded owner roster",
       "path": "/__quickcount/orgs?viewer=ut1democitizenscount0000000000000000000000",
       "expectText": "\"viewerRole\":\"owner\""
@@ -309,6 +314,16 @@
       "expectSelector": "[data-ballot-proof]"
     },
     {
+      "name": "Geo API returns seeded DKI Jakarta province for Pemilu Watch org",
+      "path": "/__quickcount/orgs/ut1demopemiluwatchid00000000000000000000000/geo",
+      "expectText": "DKI Jakarta"
+    },
+    {
+      "name": "Org workspace renders the Area Hierarchy section for an admin",
+      "path": "/?viewer=ut1demopemiluwatchid00000000000000000000000#/orgs",
+      "expectText": "Area Hierarchy"
+    },
+    {
       "name": "Closed election workspace shows Closed badge",
       "path": "/?viewer=ut1democitizenscount0000000000000000000000#/election/demo-closed-election",
       "expectText": "Closed"
@@ -322,6 +337,26 @@
       "name": "C1-KWK verify endpoint returns JSON for any payload",
       "path": "/api/public/c1kwk/verify?payload=dGVzdA",
       "expectText": "\"valid\""
+    },
+    {
+      "name": "Evidence Sheet verify endpoint returns JSON",
+      "path": "/api/public/evidence-sheet/verify/staging-demo-esheet-vid-0000000000000000",
+      "expectText": "\"status\""
+    },
+    {
+      "name": "Public elections list endpoint surfaces a seeded election (ingest→index→list path)",
+      "path": "/api/public/elections",
+      "expectText": "General Election"
+    },
+    {
+      "name": "Quick-count state lists a seeded active organization (orgs render in the list)",
+      "path": "/__quickcount/state",
+      "expectText": "Citizens Count"
+    },
+    {
+      "name": "Elections list screen shows a seeded election row",
+      "path": "/#/elections",
+      "expectText": "General Election"
     }
   ]
 }

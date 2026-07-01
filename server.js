@@ -22,11 +22,6 @@ const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
-let PDFDocument = null;
-try { PDFDocument = require('pdfkit'); } catch { /* pdfkit optional */ }
-let QRCode = null;
-try { QRCode = require('qrcode'); } catch { /* qrcode optional */ }
-
 const { normalizeTx, QuickCountIndexer } = require('./lib/indexer');
 const memo = require('./lib/memo');
 const mock = require('./lib/mockledger');
@@ -37,19 +32,35 @@ const { isValidDisplayName, isValidBio, isSupportedLang } = require('./lib/profi
 
 let Pool = null;
 try { ({ Pool } = require('pg')); } catch { /* pg optional in pure-memory mode */ }
+let PDFDocument = null;
+try { PDFDocument = require('pdfkit'); } catch { /* pdfkit optional */ }
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch { /* qrcode optional */ }
 
 // ── Configuration ───────────────────────────────────────────────────────────
 const LOCAL_DEV = process.argv.includes('--local-dev') || process.env.APP_MODE === 'local-dev';
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const IS_DEMO = LOCAL_DEV || IS_STAGING; // seed obviously-fake data so every screen renders
-// Always-on local-ingest ("mock") transaction flow. When true (the default in
-// EVERY environment), submissions are ingested directly into the event log via
-// /__mock/submit → ingestRaw → rebuild, with NO dependence on NODE_RPC_URL /
-// EXPLORER_API_URL / chain polling / chain read-back. Kept deliberately separate
-// from LOCAL_DEV and IS_DEMO so the developer-only affordances (persona switcher,
-// `viewer` identity override, demo seeding) stay gated on those and are NOT
-// enabled in staging/production. Set MOCK_TX_FLOW=false to restore real-chain reads.
-const MOCK_TX_FLOW = process.env.MOCK_TX_FLOW !== 'false';
+// Local-ingest ("mock") transaction flow. When true, submissions are ingested
+// directly into the event log via /__mock/submit → ingestRaw → rebuild, with NO
+// dependence on NODE_RPC_URL / EXPLORER_API_URL / chain polling / chain read-back.
+//
+// REAL on-chain mode is the genuine DEFAULT everywhere: an unset (or any value
+// other than the literal 'true') MOCK_TX_FLOW means real — the hosted bridge
+// signs/broadcasts per-user and the indexer reads transactions back from the
+// configured chain read source (pollOnce takes its else branch). Mock is opt-in.
+//
+// Two environments FORCE mock on regardless of the flag, so neither can ever
+// broadcast or read the real chain:
+//   • LOCAL_DEV — offline dev must keep using QCMock + the /__mock/* surface.
+//   • IS_STAGING — platform rule: "never broadcast real on-chain transactions
+//     from staging." Defense-in-depth on top of dapp.json's staging_default,
+//     so the staging preview always runs the seeded demo without a real wallet.
+// Kept deliberately separate from the developer-only affordances (persona
+// switcher, `viewer` identity override, demo seeding) which stay gated on
+// LOCAL_DEV / IS_DEMO. Set MOCK_TX_FLOW=true to opt a standalone/dev run into
+// local-ingest; leave it unset (or 'false') for real-chain reads and writes.
+const MOCK_TX_FLOW = LOCAL_DEV || IS_STAGING || process.env.MOCK_TX_FLOW === 'true';
 const PORT = process.env.PORT || 3000;
 const NODE_RPC_URL = process.env.NODE_RPC_URL || '';
 // Canonical chain read path: the public block explorer, addressed per-chain as
@@ -70,6 +81,7 @@ const ORG_FEE = Number(process.env.ORG_FEE) || 100;
 // Secrets now and it is reserved for future app-signed operations.
 const APP_PUBKEY = process.env.APP_PUBKEY || '';
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY || '';
+const C1KWK_HMAC_SECRET = process.env.C1KWK_HMAC_SECRET || APP_SECRET_KEY || 'quickcount-c1kwk-dev';
 // Poll / auto-refresh cadence (ms). Floored at 1000 so a stray small value
 // can't hammer the chain read source or the client. Surfaced to the SPA via
 // /__quickcount/config so the browser auto-refresh uses the same interval.
@@ -164,6 +176,10 @@ function ingestRaw(raw) {
   const n = normalizeTx(raw);
   if (!n.txId || seen.has(n.txId)) return false;
   seen.add(n.txId);
+  // Keep the mock ledger's id counter ahead of every id we've ingested, so a
+  // freshly minted submission can never reuse an id already in `seen` (which
+  // would be dropped as a duplicate here and never reach the indexer).
+  mock.noteId(n.txId);
   txLog.push(n);
   if (pool) {
     pool.query(
@@ -627,6 +643,115 @@ app.get('/__quickcount/orgs', (req, res) => {
   }
 });
 
+// Geographic hierarchy (Province → Regency → District → Village → TPS) per org.
+// Auth-exempt read under /__quickcount/; visibility-gated for private orgs.
+app.get('/__quickcount/orgs/:orgAddr/geo', async (req, res) => {
+  try {
+    const { orgAddr } = req.params;
+    const parentId = req.query.parent_id != null ? Number(req.query.parent_id) : null;
+    const viewer = (req.query.viewer || '').toString() || null;
+
+    const org = indexer.orgs.get(orgAddr);
+    if (org && org.visibility === 'private') {
+      const role = indexer.orgRole(orgAddr, viewer);
+      if (!role && !indexer.isAdmin(viewer)) return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!pool) return res.json({ nodes: [] });
+
+    const { rows } = await pool.query(
+      parentId === null
+        ? `SELECT n.id, n.level, n.name,
+                  (SELECT COUNT(*) FROM geo_nodes c WHERE c.parent_id = n.id)::int AS child_count
+           FROM geo_nodes n WHERE n.org_addr = $1 AND n.parent_id IS NULL ORDER BY n.name`
+        : `SELECT n.id, n.level, n.name,
+                  (SELECT COUNT(*) FROM geo_nodes c WHERE c.parent_id = n.id)::int AS child_count
+           FROM geo_nodes n WHERE n.org_addr = $1 AND n.parent_id = $2 ORDER BY n.name`,
+      parentId === null ? [orgAddr] : [orgAddr, parentId]
+    );
+    res.json({ nodes: rows.map((r) => ({ id: r.id, level: r.level, name: r.name, childCount: Number(r.child_count) })) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a geo node (owner/admin only — explicitly excludes moderators).
+app.post('/api/orgs/:orgAddr/geo', async (req, res) => {
+  try {
+    const { orgAddr } = req.params;
+    const pubkey = req.user && req.user.usernode_pubkey;
+    const role = indexer.orgRole(orgAddr, pubkey);
+    if (role !== 'owner' && role !== 'admin') return res.status(403).json({ error: 'Only org owners and administrators can manage geographic areas' });
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+
+    const { parent_id, name } = req.body || {};
+    if (!name || typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'name is required' });
+    const trimmed = name.trim().slice(0, 120);
+
+    let level;
+    if (parent_id == null) {
+      level = 1;
+    } else {
+      const pid = Number(parent_id);
+      if (!Number.isFinite(pid) || pid < 1) return res.status(400).json({ error: 'invalid parent_id' });
+      const { rows: prows } = await pool.query('SELECT level, org_addr FROM geo_nodes WHERE id = $1', [pid]);
+      if (!prows.length) return res.status(400).json({ error: 'parent not found' });
+      if (prows[0].org_addr !== orgAddr) return res.status(403).json({ error: 'parent belongs to a different org' });
+      if (prows[0].level >= 5) return res.status(400).json({ error: 'maximum depth reached' });
+      level = prows[0].level + 1;
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO geo_nodes (org_addr, level, parent_id, name, created_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, level, name`,
+      [orgAddr, level, parent_id != null ? Number(parent_id) : null, trimmed, pubkey]
+    );
+    res.json({ ok: true, node: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'An entry with that name already exists at this level' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a geo node and its subtree (CASCADE handles descendants; owner/admin only).
+app.delete('/api/orgs/:orgAddr/geo/:id', async (req, res) => {
+  try {
+    const { orgAddr } = req.params;
+    const id = Number(req.params.id);
+    const pubkey = req.user && req.user.usernode_pubkey;
+    const role = indexer.orgRole(orgAddr, pubkey);
+    if (role !== 'owner' && role !== 'admin') return res.status(403).json({ error: 'Only org owners and administrators can manage geographic areas' });
+    if (!pool) return res.status(503).json({ error: 'Database unavailable' });
+    if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: 'invalid id' });
+
+    const { rows } = await pool.query('SELECT org_addr FROM geo_nodes WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    if (rows[0].org_addr !== orgAddr) return res.status(403).json({ error: 'Access denied' });
+
+    await pool.query('DELETE FROM geo_nodes WHERE id = $1', [id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Platform-admin read view — all orgs incl. pending. Scoped to admin wallets.
+app.get('/__quickcount/admin', (req, res) => {
+  const viewer = (req.query.viewer || '').toString() || null;
+  if (!indexer.isAdmin(viewer)) return res.status(403).json({ error: 'admin scope required' });
+  const orgs = indexer.allOrgs();
+  res.json({
+    orgs,
+    stats: {
+      orgs: orgs.length,
+      activeOrgs: orgs.filter((o) => o.active).length,
+      elections: indexer.elections.size,
+      treasury: TREASURY_ADDR,
+      orgFee: ORG_FEE,
+    },
+  });
+});
+
 // ── Off-chain working tallies (per-station inline vote entry) ────────────────
 // The election workspace lets an organizer key a quick "working tally" straight
 // onto each polling-station row. This is NON-CONSENSUS off-chain data — not
@@ -1087,6 +1212,240 @@ app.get('/api/public/c1kwk/verify', (req, res) => {
   }
 });
 
+// Authenticated: generate and download a signed evidence-sheet PDF template for
+// an election. Assigns a UUID, computes a doc_hash from the canonical election
+// data snapshot, signs with HMAC-SHA256/JWT_SECRET, embeds a QR verification
+// link, and logs the download to evidence_sheet_downloads.
+app.post('/api/elections/:eid/evidence-sheet', async (req, res) => {
+  try {
+    const { eid } = req.params;
+    if (!PDFDocument || !QRCode) return res.status(503).json({ error: 'PDF generation libraries unavailable' });
+    if (!JWT_SECRET) return res.status(503).json({ error: 'Signing not available in this environment' });
+
+    const viewer = req.user && req.user.usernode_pubkey;
+    const visible = indexer.visibleElections({ viewer });
+    if (!visible.some((el) => el.eid === eid)) return res.status(404).json({ error: 'Election not found' });
+
+    const d = indexer.electionDetail(eid, 'latest');
+    if (!d) return res.status(404).json({ error: 'Election not found' });
+
+    const wallet = (req.user && req.user.usernode_pubkey) || null;
+    const username = (req.user && req.user.username) || null;
+    const ip_address = ((req.headers['x-forwarded-for'] || req.ip || '').split(',')[0] || '').trim();
+    const user_agent = req.headers['user-agent'] || null;
+
+    const vid = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+    const doc_version = 1;
+    const downloaded_at = new Date().toISOString();
+
+    // Canonical template data — stable snapshot of election content for hashing.
+    const candidates = (d.candidates || []).map((c) => ({ cid: c.cid, name: c.name || '' }));
+    const stations = (d.stations || []).map((s) => ({ sid: s.sid, name: s.name || ('Station ' + s.sid) }));
+    const elName = d.election.name || eid;
+    const canonicalJson = JSON.stringify({ eid, election_name: elName, doc_version, candidates, stations });
+    const doc_hash = crypto.createHash('sha256').update(canonicalJson).digest('hex');
+
+    const sig = crypto.createHmac('sha256', JWT_SECRET)
+      .update(JSON.stringify({ vid, eid, doc_hash, doc_version, wallet: wallet || '', downloaded_at }))
+      .digest('hex');
+
+    if (pool) {
+      await pool.query(
+        `INSERT INTO evidence_sheet_downloads (vid, eid, doc_hash, doc_version, sig, wallet, username, ip_address, user_agent, downloaded_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [vid, eid, doc_hash, doc_version, sig, wallet, username, ip_address, user_agent, downloaded_at]
+      );
+    }
+
+    const verifyUrl = `${req.protocol}://${req.get('host')}/#/verify?esheet=${encodeURIComponent(vid)}`;
+    const qrPng = await QRCode.toBuffer(verifyUrl, { type: 'png', width: 200 });
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const pdfDone = new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+    });
+
+    // ── Page 1: Tally Sheet Template ─────────────────────────────────────────
+    doc.fontSize(16).font('Helvetica-Bold').text('EVIDENCE TALLY SHEET', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text('Fill-in template — record vote counts and verify on the Evidence page', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica-Bold').text('Election: ', { continued: true }).font('Helvetica').text(elName);
+    doc.fontSize(9).font('Helvetica').fillColor('#666').text('Generated: ' + downloaded_at);
+    doc.fillColor('#000');
+    doc.moveDown(0.8);
+
+    for (let si = 0; si < stations.length; si++) {
+      const station = stations[si];
+      const stName = station.name;
+      doc.fontSize(11).font('Helvetica-Bold').text(stName);
+      doc.moveDown(0.2);
+      for (const c of candidates) {
+        const label = `  No. ${c.cid} — ${c.name || '(unknown)'}`;
+        doc.fontSize(10).font('Helvetica').text(label, { continued: true }).text('   Votes: ___________', { align: 'right' });
+      }
+      doc.moveDown(0.3);
+      doc.fontSize(10).font('Helvetica-Bold').text('  Valid votes:', { continued: true }).font('Helvetica').text('   ___________', { align: 'right' });
+      doc.fontSize(10).font('Helvetica-Bold').text('  Invalid votes:', { continued: true }).font('Helvetica').text('   ___________', { align: 'right' });
+      doc.fontSize(10).font('Helvetica-Bold').text('  Total votes:', { continued: true }).font('Helvetica').text('   ___________', { align: 'right' });
+      doc.moveDown(0.8);
+      if (doc.y > 680 && si < stations.length - 1) doc.addPage();
+    }
+
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica').fillColor('#555')
+      .text('To verify: fill in this form → save the file → go to the Evidence tab → drop the file in the verification panel → click "Verify a file against this" on the matching station card. The file never leaves your device.');
+    doc.fillColor('#000');
+
+    // ── Page 2: Download Certificate ─────────────────────────────────────────
+    doc.addPage();
+    doc.fontSize(16).font('Helvetica-Bold').text('DOWNLOAD CERTIFICATE', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').fillColor('#555')
+      .text('Proof of download — cryptographically signed by the Quick Count platform', { align: 'center' });
+    doc.fillColor('#000');
+    doc.moveDown(1);
+
+    const kv = (k, v) => {
+      doc.fontSize(10).font('Helvetica-Bold').text(k + ':', { continued: true });
+      doc.font('Helvetica').text(' ' + String(v == null ? '—' : v));
+    };
+    kv('Download ID', vid);
+    kv('Election', elName);
+    kv('Document version', doc_version);
+    kv('Downloaded at (UTC)', downloaded_at);
+    kv('Downloader wallet', wallet ? (wallet.slice(0, 20) + '…') : '(not linked)');
+    if (username) kv('Username', username);
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica-Bold').text('Document integrity hash (SHA-256):');
+    doc.font('Courier').fontSize(8).text(doc_hash);
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica-Bold').text('Server signature (HMAC-SHA256, truncated):');
+    doc.font('Courier').fontSize(8).text(sig.slice(0, 32) + '…');
+    doc.moveDown(1);
+
+    doc.fontSize(10).font('Helvetica').text('Scan the QR code to verify this certificate:');
+    doc.moveDown(0.3);
+    const qrY = doc.y;
+    doc.image(qrPng, 50, qrY, { width: 100 });
+    doc.fontSize(9).fillColor('#555').text(verifyUrl, 50, qrY + 104);
+    doc.fillColor('#000');
+
+    // Embed machine-readable marker in PDF metadata for client-side extraction.
+    const marker = 'ESQC1.' + Buffer.from(JSON.stringify({ vid })).toString('base64url');
+    doc.info.Title = 'Quick Count Evidence Sheet — ' + elName;
+    doc.info.Subject = 'Download Certificate';
+    doc.info.Author = 'Quick Count';
+    doc.info.Keywords = marker;
+
+    doc.end();
+    await pdfDone;
+
+    const pdf = Buffer.concat(chunks);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="evidence-sheet-${eid}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: verify an evidence sheet download certificate by UUID.
+// Under /api/public/ so no auth required — anyone who scans the QR code can check.
+// Writes every verification attempt to evidence_sheet_verify_log.
+app.get('/api/public/evidence-sheet/verify/:vid', async (req, res) => {
+  const { vid } = req.params;
+  const verifier_ip = ((req.headers['x-forwarded-for'] || req.ip || '').split(',')[0] || '').trim();
+  const verifier_ua = req.headers['user-agent'] || null;
+
+  async function logResult(result) {
+    if (!pool) return;
+    try {
+      await pool.query(
+        'INSERT INTO evidence_sheet_verify_log (vid, result, verifier_ip, verifier_ua) VALUES ($1,$2,$3,$4)',
+        [vid, result, verifier_ip, verifier_ua]
+      );
+    } catch { /* non-fatal */ }
+  }
+
+  try {
+    if (!pool) {
+      await logResult('not_found');
+      return res.json({ status: 'not_found' });
+    }
+
+    const { rows } = await pool.query('SELECT * FROM evidence_sheet_downloads WHERE vid = $1', [vid]);
+    if (!rows.length) {
+      await logResult('not_found');
+      return res.json({ status: 'not_found' });
+    }
+
+    const row = rows[0];
+    if (row.revoked) {
+      await logResult('revoked');
+      return res.json({
+        status: 'revoked',
+        meta: { vid: row.vid, eid: row.eid, downloaded_at: row.downloaded_at, wallet: row.wallet, username: row.username },
+      });
+    }
+
+    // Re-derive and verify the signature.
+    if (!JWT_SECRET || !row.sig) {
+      await logResult('invalid');
+      return res.json({ status: 'invalid' });
+    }
+    const rowAt = row.downloaded_at instanceof Date ? row.downloaded_at.toISOString() : row.downloaded_at;
+    const expected = crypto.createHmac('sha256', JWT_SECRET)
+      .update(JSON.stringify({ vid: row.vid, eid: row.eid, doc_hash: row.doc_hash, doc_version: row.doc_version, wallet: row.wallet || '', downloaded_at: rowAt }))
+      .digest('hex');
+    let sigValid = false;
+    try {
+      const sigBuf = Buffer.from(row.sig, 'hex');
+      const expBuf = Buffer.from(expected, 'hex');
+      sigValid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch { sigValid = false; }
+
+    if (!sigValid) {
+      await logResult('invalid');
+      return res.json({ status: 'invalid' });
+    }
+
+    // Re-derive doc_hash from current election state to detect data changes.
+    const d = indexer.electionDetail(row.eid, 'latest');
+    let currentHash = null;
+    if (d) {
+      const cands = (d.candidates || []).map((c) => ({ cid: c.cid, name: c.name || '' }));
+      const stats = (d.stations || []).map((s) => ({ sid: s.sid, name: s.name || ('Station ' + s.sid) }));
+      const elName = d.election.name || row.eid;
+      currentHash = crypto.createHash('sha256')
+        .update(JSON.stringify({ eid: row.eid, election_name: elName, doc_version: row.doc_version, candidates: cands, stations: stats }))
+        .digest('hex');
+    }
+
+    const meta = {
+      vid: row.vid, eid: row.eid, doc_hash: row.doc_hash, doc_version: row.doc_version,
+      wallet: row.wallet, username: row.username,
+      downloaded_at: rowAt,
+      ip_address: row.ip_address, user_agent: row.user_agent,
+    };
+
+    if (!currentHash) {
+      await logResult('doc_changed');
+      return res.json({ status: 'doc_changed', note: 'election state unavailable', meta });
+    }
+    if (currentHash !== row.doc_hash) {
+      await logResult('doc_changed');
+      return res.json({ status: 'doc_changed', meta });
+    }
+
+    await logResult('valid');
+    return res.json({ status: 'valid', meta });
+  } catch (err) {
+    res.status(500).json({ status: 'invalid', error: err.message });
+  }
+});
+
 // Public: list elections with counts (backed by in-memory indexer).
 app.get('/api/public/elections', (_req, res) => {
   try {
@@ -1504,6 +1863,23 @@ async function migrate() {
       PRIMARY KEY (eid, sid)
     )`);
   await pool.query(`COMMENT ON TABLE ballot_proofs IS 'staging:private'`);
+  // Geographic hierarchy reference data: Province → Regency/City → District (Kecamatan)
+  // → Village/Ward (Kelurahan/Desa) → TPS (polling station number). Per-org, public
+  // reference data managed by org owners and admins.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS geo_nodes (
+      id SERIAL PRIMARY KEY,
+      org_addr TEXT NOT NULL,
+      level SMALLINT NOT NULL CHECK (level BETWEEN 1 AND 5),
+      parent_id INTEGER REFERENCES geo_nodes(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      created_by TEXT
+    )`);
+  // NULL-safe uniqueness: SQL NULL != NULL so a single UNIQUE(org_addr, parent_id, name)
+  // allows duplicate root names. Two partial indexes cover both cases correctly.
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS geo_nodes_root_uniq ON geo_nodes (org_addr, name) WHERE parent_id IS NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS geo_nodes_child_uniq ON geo_nodes (org_addr, parent_id, name) WHERE parent_id IS NOT NULL`);
   // C1-KWK signed PDF download audit log. PRIVATE: records wallet addresses
   // that downloaded a signed form — PII. Staging gets schema only; seedStaging()
   // inserts obviously-fake rows so the endpoint is exercisable in previews.
@@ -1534,6 +1910,35 @@ async function migrate() {
       created_at TIMESTAMPTZ
     )`);
   await pool.query(`COMMENT ON TABLE audit_log IS 'staging:private'`);
+  // Evidence sheet downloads — signed PDF tally-sheet templates. PRIVATE: stores
+  // IP address, user-agent, wallet address — PII. Staging gets schema only;
+  // seedStaging() inserts an obviously-fake row for the demo election.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS evidence_sheet_downloads (
+      vid TEXT PRIMARY KEY,
+      eid TEXT NOT NULL,
+      doc_hash TEXT NOT NULL,
+      doc_version INTEGER NOT NULL DEFAULT 1,
+      sig TEXT,
+      wallet TEXT,
+      username TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      downloaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      revoked BOOLEAN NOT NULL DEFAULT FALSE
+    )`);
+  await pool.query(`COMMENT ON TABLE evidence_sheet_downloads IS 'staging:private'`);
+  // Evidence sheet verification audit log. PRIVATE: stores verifier IP addresses.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS evidence_sheet_verify_log (
+      id SERIAL PRIMARY KEY,
+      vid TEXT,
+      result TEXT NOT NULL,
+      verifier_ip TEXT,
+      verifier_ua TEXT,
+      checked_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  await pool.query(`COMMENT ON TABLE evidence_sheet_verify_log IS 'staging:private'`);
   // bio added in v2 of the profiles schema.
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT`);
   // v3 — username-as-identity: `profiles` is the authoritative username↔address
@@ -1572,6 +1977,11 @@ async function loadFromDb() {
   for (const r of rows) {
     if (seen.has(r.tx_id)) continue;
     seen.add(r.tx_id);
+    // Persisted ids include mock-ledger ids (mocktx_NNNNNN) from prior sessions —
+    // and, in staging, ids copied from the production DB. Advance the in-memory
+    // counter past them so post-restart submissions don't regenerate a colliding
+    // id that gets silently dropped as a duplicate.
+    mock.noteId(r.tx_id);
     txLog.push({
       txId: r.tx_id, from: r.from_addr, to: r.to_addr,
       amount: Number(r.amount) || 0, memo: r.memo,
@@ -1721,6 +2131,39 @@ async function seedStaging() {
     );
   }
 
+  // Geographic hierarchy seed for DEMO.orgID (Pemilu Watch Indonesia).
+  // Inserts a shallow demo tree so the drill-down UI is reviewable in staging.
+  const geoGet = async (orgAddr, parentId, name) => {
+    const q = parentId == null
+      ? 'SELECT id FROM geo_nodes WHERE org_addr = $1 AND parent_id IS NULL AND name = $2'
+      : 'SELECT id FROM geo_nodes WHERE org_addr = $1 AND parent_id = $2 AND name = $3';
+    const { rows } = await pool.query(q, parentId == null ? [orgAddr, name] : [orgAddr, parentId, name]);
+    return rows.length ? rows[0].id : null;
+  };
+  const geoEnsure = async (orgAddr, level, parentId, name) => {
+    const existing = await geoGet(orgAddr, parentId, name);
+    if (existing) return existing;
+    const { rows } = await pool.query(
+      'INSERT INTO geo_nodes (org_addr, level, parent_id, name, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [orgAddr, level, parentId, name, DEMO.orgID]
+    );
+    return rows[0].id;
+  };
+  // DKI Jakarta → Kota Jakarta Pusat → Gambir → Gambir (kelurahan) → TPS 001, TPS 002
+  const dkiId = await geoEnsure(DEMO.orgID, 1, null, 'DKI Jakarta');
+  const jakpusId = await geoEnsure(DEMO.orgID, 2, dkiId, 'Kota Jakarta Pusat');
+  const gambirKecId = await geoEnsure(DEMO.orgID, 3, jakpusId, 'Gambir');
+  const gambirKelId = await geoEnsure(DEMO.orgID, 4, gambirKecId, 'Gambir');
+  await geoEnsure(DEMO.orgID, 5, gambirKelId, 'TPS 001');
+  await geoEnsure(DEMO.orgID, 5, gambirKelId, 'TPS 002');
+  // Jawa Barat → Kota Bandung → Coblong → Dago → TPS 001, TPS 002, TPS 003
+  const jabarId = await geoEnsure(DEMO.orgID, 1, null, 'Jawa Barat');
+  const bandungId = await geoEnsure(DEMO.orgID, 2, jabarId, 'Kota Bandung');
+  const cobId = await geoEnsure(DEMO.orgID, 3, bandungId, 'Coblong');
+  const dagoId = await geoEnsure(DEMO.orgID, 4, cobId, 'Dago');
+  await geoEnsure(DEMO.orgID, 5, dagoId, 'TPS 001');
+  await geoEnsure(DEMO.orgID, 5, dagoId, 'TPS 002');
+  await geoEnsure(DEMO.orgID, 5, dagoId, 'TPS 003');
   // C1-KWK download log (staging:private → seed obviously-fake rows so the
   // audit trail is non-empty in PR previews). WHERE NOT EXISTS guards idempotency
   // since the SERIAL PK has no natural unique key to ON CONFLICT against.
@@ -1730,6 +2173,19 @@ async function seedStaging() {
      SELECT $1, $2, $3, $4, NOW()
      WHERE NOT EXISTS (SELECT 1 FROM c1kwk_downloads WHERE eid = $1 AND doc_hash = $2)`,
     [PILPRES_EID, demoHash, 'staging-demo-sig', DEMO.obs1]
+  );
+  // Evidence sheet downloads (staging:private → seed one obviously-fake row so
+  // the verify endpoint is exercisable in PR previews).
+  await pool.query(
+    `INSERT INTO evidence_sheet_downloads (vid, eid, doc_hash, doc_version, sig, wallet, username, ip_address, downloaded_at)
+     VALUES ($1, $2, $3, 1, NULL, $4, 'staging_demo_user', '127.0.0.1', '2026-06-19T08:30:00.000Z')
+     ON CONFLICT (vid) DO NOTHING`,
+    [
+      'staging-demo-esheet-vid-0000000000000000',
+      'demo-election',
+      '0000000000000000000000000000000000000000000000000000000000000000',
+      DEMO.orgA,
+    ]
   );
 }
 
@@ -1746,11 +2202,15 @@ async function start() {
   // a neutral "submitted — awaiting on-chain sync" notice instead of a false
   // success toast. We still log here so operators see it in container logs.
   if (MOCK_TX_FLOW && !LOCAL_DEV) {
+    // Reached in staging (forced on) or when a standalone/dev run explicitly
+    // opted in with MOCK_TX_FLOW=true. Real on-chain mode is the default
+    // everywhere else, so this is no longer the production path.
     console.log(
-      '[QuickCount] running in self-contained local-ingest mode (MOCK_TX_FLOW) — ' +
+      '[QuickCount] running in self-contained local-ingest mode (MOCK_TX_FLOW' +
+      (IS_STAGING ? ', forced on in staging' : '=true') + ') — ' +
       'submissions are recorded directly into the event log via /__mock/submit and ' +
       'persisted to chain_txs when DATABASE_URL is set; no chain broadcast/read-back. ' +
-      'Set MOCK_TX_FLOW=false to restore real-chain reads.'
+      'Unset MOCK_TX_FLOW (the default) for real-chain reads and writes.'
     );
   } else if (source.backend === 'none' && !LOCAL_DEV) {
     console.warn(

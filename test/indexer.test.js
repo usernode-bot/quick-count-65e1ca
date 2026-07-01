@@ -47,14 +47,40 @@ test('org is active only when the fee is paid to the treasury', () => {
   assert.strictEqual(ix.orgs.get('orgWrong').active, false);
 });
 
-test('elections from inactive orgs are hidden from the public but visible to owner', () => {
+test('a pending (unpaid) org cannot create elections; paying first unlocks it', () => {
   const ix = new QuickCountIndexer(CFG);
+  // Election creation by a pending org is rejected by canOperate (paid gate).
   ix.rebuild([
     mk('o1', 'org', 'TREASURY', 0, memo.orgMemo('Pending')),
     mk('el1', 'org', 'org', 0, memo.electionMemo('Hidden')),
   ]);
-  assert.strictEqual(ix.visibleElections({}).length, 0);
+  assert.strictEqual(ix.elections.size, 0);
+  assert.strictEqual(ix.canOperate('org', 'org'), false);
+
+  // Same log, but the org pays the fee before creating the election → unlocked
+  // and publicly visible.
+  ix.rebuild([
+    mk('o1', 'org', 'TREASURY', 100, memo.orgMemo('Paid')),
+    mk('el1', 'org', 'org', 0, memo.electionMemo('Visible')),
+  ]);
+  assert.strictEqual(ix.canOperate('org', 'org'), true);
+  assert.strictEqual(ix.visibleElections({}).length, 1);
   assert.strictEqual(ix.visibleElections({ viewer: 'org' }).length, 1);
+});
+
+test('a later top-up activates a pending org and unlocks operations', () => {
+  const ix = new QuickCountIndexer(CFG);
+  ix.rebuild([
+    mk('o1', 'org', 'TREASURY', 0, memo.orgMemo('Pending')),
+    // Rejected while pending.
+    mk('elBad', 'org', 'org', 0, memo.electionMemo('Too early')),
+    // Top-up settles the fee → active.
+    mk('o2', 'org', 'TREASURY', 100, memo.orgMemo('Now paid')),
+    mk('elOk', 'org', 'org', 0, memo.electionMemo('After payment')),
+  ]);
+  assert.strictEqual(ix.orgs.get('org').active, true);
+  assert.strictEqual(ix.elections.size, 1);
+  assert.ok(ix.elections.has('elOk'));
 });
 
 test('activeOrgs lists active orgs (incl. election-less), excludes pending, newest-first', () => {
