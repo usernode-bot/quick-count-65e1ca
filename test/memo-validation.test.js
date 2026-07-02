@@ -137,3 +137,15 @@ test('memo with unknown type is rejected', () => {
   const badType = { app: 'quickcount', v: 1, t: 'unknown', name: 'My Org' };
   assert.strictEqual(memo.decode(JSON.stringify(badType)), null);
 });
+
+test('resultMemo: blank/undefined tot and inv are omitted, not coerced to 0', () => {
+  const blank = memo.resultMemo('eid-123', 1, { 1: 10 }, undefined, undefined);
+  assert.ok(!('tot' in blank));
+  assert.ok(!('inv' in blank));
+});
+
+test('resultMemo: explicit "0" string still saves as 0', () => {
+  const zero = memo.resultMemo('eid-123', 1, { 1: 10 }, '0', '0');
+  assert.strictEqual(zero.tot, 0);
+  assert.strictEqual(zero.inv, 0);
+});

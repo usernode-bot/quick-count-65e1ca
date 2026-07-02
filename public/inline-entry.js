@@ -79,6 +79,30 @@
     return (entries || []).filter(function (e) { return !!(e && e.saved); }).length;
   }
 
+  // Convert a list of vote counts into integer percentages that always sum to
+  // exactly 100 (when the total is > 0) — used by chart styles whose segments
+  // must tile a fixed width/circle (stacked bar, pie), unlike the independent
+  // per-candidate rounding in voteShares(). Naive per-item Math.round() can
+  // land a hair over or under 100; the shortfall/excess is given to the
+  // largest share (ties broken by earliest position) so a single segment
+  // absorbs the rounding gap instead of leaving a visible sliver or overflow.
+  function adjustSharesTo100(votes) {
+    var arr = (votes || []).map(function (v) { return sanitizeCount(v); });
+    var grand = arr.reduce(function (s, n) { return s + n; }, 0);
+    if (grand <= 0) return arr.map(function () { return 0; });
+    var rounded = arr.map(function (n) { return Math.round((n / grand) * 100); });
+    var sum = rounded.reduce(function (a, b) { return a + b; }, 0);
+    var diff = 100 - sum;
+    if (diff !== 0) {
+      var bestIdx = 0;
+      for (var i = 1; i < arr.length; i++) {
+        if (arr[i] > arr[bestIdx]) bestIdx = i;
+      }
+      rounded[bestIdx] += diff;
+    }
+    return rounded;
+  }
+
   return {
     CANDIDATES: CANDIDATES,
     sanitizeCount: sanitizeCount,
@@ -87,5 +111,6 @@
     aggregateVotes: aggregateVotes,
     voteShares: voteShares,
     reportedCount: reportedCount,
+    adjustSharesTo100: adjustSharesTo100,
   };
 });

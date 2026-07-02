@@ -65,7 +65,8 @@
   <!-- Pure helpers for the off-chain working tally (CANDIDATES / aggregateVotes
        / voteShares) — shared with the in-app dashboard's workTallySection. -->
   <script src="/inline-entry.js"></script>
-  <!-- Working Tally PDF export. jsPDF is optional — degrades gracefully offline. -->
+  <!-- Results PDF export: jsPDF (CDN) + the shared generator. Optional — the
+       generator degrades gracefully when the CDN is unreachable (offline). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="/results-pdf.js"></script>
 </head>
@@ -219,6 +220,7 @@
                 stationReported: saved.length,
                 stationTotal: (d.stations || []).length || saved.length,
                 exportedAt: new Date().toISOString(),
+                lang: 'en',
               });
               pdfEl.textContent = 'Results PDF downloaded ✓';
               setTimeout(() => { pdfEl.textContent = origLabel; pdfEl.disabled = false; }, 2000);

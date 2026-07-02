@@ -74,6 +74,7 @@
   <script src="/evidence-fingerprint.js"></script>
   <script src="/evidence-pdf.js"></script>
   <script src="/evidence-verify.js"></script>
+  <!-- Working-tally results PDF export (reuses the jsPDF CDN load above). -->
   <script src="/results-pdf.js"></script>
   <!-- App-side bridge resilience: classifier (pure) then retry/notice layer.
        Must load AFTER the hosted bridge tag above. -->
@@ -676,7 +677,7 @@
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
       tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations',
       method_latest: 'Dernier envoi', method_first: 'Premier envoi', method_consensus: 'Consensus', method_median: 'Médiane', method_verified: 'Vérifiés seulement',
-      dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_pdf: 'Télécharger PDF', dashboard_pdf_generating: 'Génération en cours…', dashboard_pdf_unavailable: 'Outils PDF non disponibles — ouvrez cette page en ligne pour activer l\'export PDF.', dashboard_pdf_ready: 'PDF des résultats téléchargé ✓', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
+      dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_pdf: 'Télécharger PDF', dashboard_pdf_generating: 'Génération en cours…', dashboard_pdf_unavailable: "Outils PDF non disponibles — ouvrez cette page en ligne pour activer l'export PDF.", dashboard_pdf_ready: 'PDF des résultats téléchargé ✓', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
       elections_heading: 'Élections', elections_new: '+ Nouvelle élection', elections_no_elections: "Pas encore d'élections.", elections_open_workspace: "Ouvrir l'espace de travail →",
       orgs_heading: 'Organisations', orgs_active_orgs: 'Organisations actives', orgs_register_heading: 'Enregistrez votre organisation', orgs_register_desc: "L'enregistrement nécessite le paiement d'une cotisation unique de {fee} à la trésorerie de la plateforme. Jusqu'à confirmation, vos élections restent masquées.", orgs_register_button: "S'inscrire et payer", orgs_pay_fee: "Payer la cotisation d'inscription", orgs_name_placeholder: "Nom de l'organisation", orgs_jur_placeholder: 'Juridiction (facultatif)', orgs_active_badge: 'Active', orgs_pending_badge: 'En attente — cotisation non payée', orgs_connect_first: 'Connectez votre portefeuille en premier.', orgs_manage_elections: 'Vos élections sont en ligne. Gérez-les dans Élections.',
       evidence_heading: 'Preuves', evidence_upload_label: "Preuve (feuille de dépouillement) — hachée localement, le fichier n'est pas envoyé", evidence_submit: 'Vérifier un fichier contre ceci', evidence_no_evidence: 'Aucune empreinte de preuve enregistrée pour cette élection.',
@@ -1262,7 +1263,7 @@
     const results = Array.isArray(entry.sent) ? entry.sent.slice() : [];
     for (let i = results.length; i < steps.length; i++) {
       const spec = steps[i].build(results);
-      const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+      const r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent, exactAmount: spec.exactAmount });
       if (spec.require && !r) throw new Error(spec.require);
       results[i] = r;
       entry.sent = results.slice();
@@ -1671,7 +1672,7 @@
       try {
         App.txState.sentTime = Date.now();
         console.log('[QCTx] sendTx step ' + (i + 1) + '/' + steps.length + ': to=' + spec.to.slice(0, 20) + '..., amount=' + spec.amount + ', idempotent=' + spec.idempotent);
-        r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent });
+        r = await sendTx(spec.to, spec.amount, spec.memo, { idempotent: spec.idempotent, exactAmount: spec.exactAmount });
         if (spec.require && !r) throw new Error(spec.require);
         console.log('[QCTx] sendTx step ' + (i + 1) + ' succeeded: txId=' + (r ? r.slice(0, 20) + '...' : 'none'));
       } catch (e) {
@@ -1783,10 +1784,12 @@
     // Every transaction the app broadcasts must move at least 1 token — most
     // callers pass amount: 0 since the payload lives in the memo, but a
     // 0-amount transaction is invalid on-chain. Floor it here, once, so no
-    // call site (current or future) can regress this.
-    const amt = Math.max(1, Number(amount) || 0);
+    // call site (current or future) can regress this — unless the caller
+    // explicitly opts into sending the literal configured amount (e.g. a $0
+    // org fee must send 0, not 1).
+    const sendAmount = opts.exactAmount ? (Number(amount) || 0) : Math.max(1, Number(amount) || 0);
     if (App.cfg.localDev) {
-      return window.QCBridge.send(to, amt, memoStr, {
+      return window.QCBridge.send(to, sendAmount, memoStr, {
         idempotent: opts.idempotent,
         sender: (a, b, c) => window.QCMock.send(a, b, c),
       });
@@ -1798,12 +1801,12 @@
     // real user and the server can prefer req.user over the body. The server still
     // resolves `from` from req.user when authenticated, so this is spoof-resistant.
     if (App.cfg.mockMode) {
-      return window.QCBridge.send(to, amt, memoStr, {
+      return window.QCBridge.send(to, sendAmount, memoStr, {
         idempotent: opts.idempotent,
         sender: (a, b, c) => mockSubmit(a, b, c),
       });
     }
-    return window.QCBridge.send(to, amt, memoStr, { idempotent: opts.idempotent });
+    return window.QCBridge.send(to, sendAmount, memoStr, { idempotent: opts.idempotent });
   }
   // App-owned local-ingest submit used in platform mock mode. Returns the txId.
   async function mockSubmit(to, amount, memoStr) {
@@ -1913,6 +1916,9 @@
       <select id="method-picker" class="w-full sm:w-auto px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
         ${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}
       </select>
+      <select id="chart-picker" class="w-full sm:w-auto px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
+        ${CHART_TYPES.map((ct) => `<option value="${ct}" ${ct === App.chartType ? 'selected' : ''}>${t('chart_' + ct) || ct}</option>`).join('')}
+      </select>
     </div>`;
   }
   function wirePickers() {
@@ -1920,6 +1926,8 @@
     if (ep) ep.onchange = () => { App.eid = ep.value; refresh(); };
     const mp = document.getElementById('method-picker');
     if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
+    const cp = document.getElementById('chart-picker');
+    if (cp) cp.onchange = () => { App.chartType = cp.value; savePrefs(); refresh(); };
   }
 
   // ───────────────────────── Dashboard ─────────────────────────
@@ -2179,7 +2187,6 @@
       .map((k) => inlineEntry[k]);
     const saved = inlineSavedVotes();
     const totals = QC.aggregateVotes(saved);
-    const shares = QC.voteShares(totals);
     const cands = QC.CANDIDATES;
 
     if (reportLine) {
@@ -2189,6 +2196,7 @@
     }
 
     if (bars) {
+      const shares = QC.voteShares(totals);
       const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length || bars.dataset.chartType !== App.chartType;
       if (needBuild) {
         bars.dataset.chartType = App.chartType;
@@ -2316,9 +2324,9 @@
     if (!saved.length) return '';
     const votesList = saved.map((r) => r.votes || {});
     const totals = QC.aggregateVotes(votesList);
-    const shares = QC.voteShares(totals);
     const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
     if (grand <= 0) return '';
+    const shares = QC.voteShares(totals);
     const barRows = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
       .sort((a, b) => b.votes - a.votes)
       .map(({ c, i, votes, pct }) => ({ name: c.name, votesText: votes.toLocaleString(), pct, colorClass: COLORS[i % COLORS.length], colorHex: COLOR_HEX[i % COLOR_HEX.length] }));
@@ -2392,6 +2400,7 @@
             stationReported: saved.length,
             stationTotal: (d.stations || []).length || saved.length,
             exportedAt: new Date().toISOString(),
+            lang: App.lang,
           });
           btn.textContent = t('dashboard_pdf_ready');
           setTimeout(() => { btn.textContent = origLabel; btn.disabled = false; }, 2000);
@@ -2510,7 +2519,8 @@
     workEditable = canEditWorkTally(d.election.orgAddr);
     hydrateInlineFromWorkTally(d);
     subscribeLive(d.election.eid); // live-update this election's screen
-    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>`;
+    const methodSel = `<select id="method-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${App.cfg.methods.map((m) => `<option value="${m}" ${m === App.method ? 'selected' : ''}>${t('method_' + m) || METHOD_LABELS[m]}</option>`).join('')}</select>
+      <select id="chart-picker" class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">${CHART_TYPES.map((ct) => `<option value="${ct}" ${ct === App.chartType ? 'selected' : ''}>${t('chart_' + ct) || ct}</option>`).join('')}</select>`;
 
     v.innerHTML = `
       <a href="#/elections" class="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">${t('election_detail_back')}</a>
@@ -2525,6 +2535,7 @@
       <div id="station-table-wrap">${stationTable(d, { inlineEntry: true, editable: workEditable })}</div>
       <div id="ws" class="mt-6 space-y-4"></div>`;
     const mp = document.getElementById('method-picker'); if (mp) mp.onchange = () => { App.method = mp.value; savePrefs(); refresh(); };
+    const cp = document.getElementById('chart-picker'); if (cp) cp.onchange = () => { App.chartType = cp.value; savePrefs(); refresh(); };
     const wsOrgBtn = document.getElementById('ws-org-manage');
     if (wsOrgBtn) wsOrgBtn.onclick = () => { App.orgView = wsOrgBtn.dataset.addr; location.hash = '#/orgs'; };
 
@@ -3609,11 +3620,11 @@
     if (!name) return toast(t('toast_enter_org_name'), 'warn');
     // Fee payment is NOT idempotent — a relay timeout shows Try-again, never a
     // silent re-charge.
-    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, memo: QC.org(name, jur) },
+    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, exactAmount: true, memo: QC.org(name, jur) },
       { loading: t('loading_registering'), success: () => { txSuccessToast('toast_org_registered'); refreshSoon(); } });
   }
   function payOrgFee() {
-    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, memo: QC.org(App.role.org.name, App.role.org.jur || '') },
+    runTx({ to: App.cfg.treasury, amount: App.cfg.orgFee, exactAmount: true, memo: QC.org(App.role.org.name, App.role.org.jur || '') },
       { loading: t('loading_paying'), success: () => { txSuccessToast('toast_fee_paid'); refreshSoon(); } });
   }
 

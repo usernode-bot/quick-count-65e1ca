@@ -7,6 +7,11 @@
 //   • jsPDF → window.jspdf.jsPDF
 // QuickCountInline (window.QuickCountInline) must also be present.
 //
+// Callers pass their own language code via opts.lang (index.html forwards
+// App.lang, dashboard.html has no i18n so it forwards the 'en' fallback) so
+// the "Exported" stamp renders in the viewer's language via
+// Intl.DateTimeFormat instead of a fixed English month-name format.
+//
 // Exposed as window.QCResultsPDF.
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(null);
@@ -26,13 +31,17 @@
     return String(s || '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'results';
   }
 
-  function fmtTimestamp(iso) {
+  // BCP-47 locale tag per app language code (see index.html's LANGS).
+  var LOCALE_MAP = {
+    en: 'en-US', id: 'id-ID', 'zh-Hans': 'zh-Hans-CN', es: 'es-ES',
+    hi: 'hi-IN', ar: 'ar-EG', fr: 'fr-FR',
+  };
+
+  function fmtTimestamp(iso, lang) {
     try {
       var d = new Date(iso);
-      var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-      return d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear() +
-        ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ' UTC';
+      var locale = LOCALE_MAP[lang] || LOCALE_MAP.en;
+      return new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(d);
     } catch (e) { return iso || ''; }
   }
 
@@ -46,11 +55,12 @@
   }
 
   // Generate + trigger browser download.
-  // opts: { electionName, candidates, totals, shares, stationReported, stationTotal, exportedAt }
+  // opts: { electionName, candidates, totals, shares, stationReported, stationTotal, exportedAt, lang }
   //   candidates  — array of { key, name } (QuickCountInline.CANDIDATES)
   //   totals      — { key: number } from aggregateVotes()
   //   shares      — { key: number } from voteShares()
   //   exportedAt  — ISO timestamp string, stamped by the caller at click time
+  //   lang        — app language code; controls the "Exported" stamp's locale
   function generate(opts) {
     if (!available()) throw new Error('PDF libraries unavailable');
     opts = opts || {};
@@ -62,6 +72,7 @@
     var stationTotal = Number(opts.stationTotal) || stationReported;
     var exportedAt = opts.exportedAt || '';
     var electionName = opts.electionName || 'Election';
+    var lang = opts.lang || 'en';
 
     var grand = candidates.reduce(function (s, c) { return s + (Number(totals[c.key]) || 0); }, 0);
 
@@ -89,7 +100,7 @@
 
     doc.setFontSize(9);
     doc.setTextColor(120);
-    doc.text('Exported ' + fmtTimestamp(exportedAt), x, y);
+    doc.text('Exported ' + fmtTimestamp(exportedAt, lang), x, y);
     doc.setTextColor(0);
     y += 5;
 
@@ -159,5 +170,7 @@
   return {
     available: available,
     generate: generate,
+    fmtTimestamp: fmtTimestamp,
+    fmtDate: fmtDate,
   };
 });
