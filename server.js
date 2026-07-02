@@ -1767,6 +1767,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
+// A freshly built staging container's Postgres may not be reachable in the
+// first instant `node server.js` runs (the DB copy/provisioning can lag
+// slightly behind the app container coming up). Since `start()` never calls
+// `app.listen()` until migrate()/loadFromDb() succeed, and any rejection
+// there triggers `process.exit(1)` below, a transient connection failure here
+// used to kill the whole container before it ever bound the port — instead of
+// the fast-crash-loop-until-a-later-restart-wins behavior, retry briefly so a
+// normal cold-start race resolves within this same process.
+async function waitForDb(maxAttempts = 15, delayMs = 2000) {
+  if (!pool) return;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await pool.query('SELECT 1');
+      return;
+    } catch (err) {
+      if (attempt === maxAttempts) throw err;
+      console.warn(`[QuickCount] Postgres not reachable yet (attempt ${attempt}/${maxAttempts}): ${err.message}`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 async function migrate() {
   if (!pool) return;
   await pool.query(`
@@ -2190,6 +2212,7 @@ async function seedStaging() {
 }
 
 async function start() {
+  await waitForDb();
   await migrate();
   await loadFromDb();
   seedDemo();

@@ -82,6 +82,8 @@
   <script src="/usernode-resilience.js"></script>
   <!-- Local-first election-creation queue (pure helpers; DOM/timer wiring below). -->
   <script src="/election-queue.js"></script>
+  <!-- Local-first vote-count save queue (worktally + result); pure helpers, DOM/timer wiring below. -->
+  <script src="/vote-queue.js"></script>
   <style>
     .tab-on { background:#4f46e5; color:#fff; }
     .badge { font-size:.65rem; font-weight:600; padding:.1rem .4rem; border-radius:.3rem; }
@@ -129,12 +131,12 @@
     state: null,        // last /__quickcount/state response
     eid: '',            // selected election
     method: 'latest',
+    chartType: 'bar_h', // bar_h | bar_v | dot — how vote-tally bars render
     wallet: { connected: false, address: null },
     user: { username: null, address: null }, // active Usernode identity (username = UI/identity key)
     refreshTimer: null,
     me: null,           // last /api/me response
     lang: 'en',         // active UI language
-    chartType: 'bar_h', // vote-share chart style (bar_h | bar_stacked | pie)
     menuOpen: false,    // wallet dropdown menu open?
     txState: { sentTime: null, confirmStartTime: null, lastError: null, retryCount: 0 }, // transaction state tracking
   };
@@ -149,10 +151,22 @@
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
-  // Hex twins of COLORS (Tailwind v3 *-500), needed wherever a real CSS color
-  // value is required instead of a class name (the pie chart's conic-gradient).
-  const HEX_COLORS = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#f43f5e','#d946ef','#14b8a6'];
-  const CHART_TYPES = ['bar_h', 'bar_stacked', 'pie'];
+  // Same palette as COLORS, as hex — conic-gradient() can't consume Tailwind
+  // utility classes, so the pie chart needs literal color values alongside
+  // the bg-* class used everywhere else (legend swatches, other chart types).
+  const COLOR_HEX = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#d946ef', '#14b8a6'];
+  const CHART_TYPES = ['bar_h', 'bar_v', 'dot', 'pie', 'bar_stacked'];
+  // Builds a conic-gradient() stop list from { pct, colorHex } rows. A
+  // rows total under 100% (rounding) is fine: CSS gradients hold the last
+  // explicit color from its stop through to 100%, so no gap appears.
+  function conicGradientStops(rows) {
+    let acc = 0;
+    return rows.map(({ pct, colorHex }) => {
+      const start = acc;
+      acc += pct;
+      return `${colorHex} ${start}% ${acc}%`;
+    }).join(', ');
+  }
 
   // ───────────────────────── i18n (full-app) ─────────────────────────
   // Mirrors lib/profile.js (LANGS + display-name regex). Translations are
@@ -178,6 +192,8 @@
       label_joined: 'Joined', joined_unknown: 'Unknown',
       label_language: 'Language',
       desc_language: 'Choose the language for your profile and settings. Your choice is saved on this device and to your profile.',
+      label_chart_type: 'Chart style', desc_chart_type: 'How vote totals are displayed in the election workspace.',
+      chart_type_bar_h: 'Horizontal bars', chart_type_bar_v: 'Vertical bars', chart_type_dot: 'Dot chart', chart_type_pie: 'Pie chart', chart_type_bar_stacked: 'Stacked bar',
       readonly_note: 'Your username and wallet are managed by Usernode and shown read-only. Only your display name can be changed.',
       no_wallet_note: 'Link a Usernode wallet to set a display name. Your language choice is still saved on this device.',
       not_linked: 'Not linked', loading: 'Loading…', connect_wallet: 'Connect wallet',
@@ -189,7 +205,6 @@
       verify_verdict_verified_desc: 'The document is internally sound and matches what was recorded on-chain.', verify_verdict_offchain_desc: 'The document is internally sound; no live chain was reachable to cross-check.', verify_verdict_fail_desc: 'One or more checks did not pass — see the details below.',
       verify_fingerprint_label: 'Fingerprint', verify_status_pass: 'PASS', verify_status_fail: 'FAIL', verify_status_skip: 'SKIPPED', verify_error: 'Could not verify this file',
       method_latest: 'Latest submission', method_first: 'First submission', method_consensus: 'Consensus', method_median: 'Median', method_verified: 'Verified only',
-      chart_bar_h: 'Bars', chart_bar_stacked: 'Stacked bar', chart_pie: 'Pie chart',
       dashboard_heading: 'Dashboard', dashboard_select_election: 'Select an election to view live results.', dashboard_export_csv: 'Export CSV', dashboard_export_pdf: 'Download PDF', dashboard_pdf_generating: 'Generating…', dashboard_pdf_unavailable: 'PDF tools unavailable — open this page online to enable PDF export.', dashboard_pdf_ready: 'Results PDF downloaded ✓', dashboard_export_json: 'Export JSON', dashboard_by_station: 'By station', dashboard_no_stations: 'No candidates.', dashboard_last_submission: 'Last submission', dashboard_auto_refreshing: 'auto-refreshing', dashboard_no_submissions: 'No submissions yet', dashboard_stations_reported: 'stations reported', dashboard_votes: 'votes',
       dashboard_working_tally: 'Working tally', dashboard_working_tally_desc: 'Entered by organizers in the workspace — separate from official results.', dashboard_working_tally_reported: '{reported} of {total} stations entered',
       elections_heading: 'Elections', elections_new: '+ New election', elections_no_elections: 'No elections yet.', elections_open_workspace: 'Open election workspace →',
@@ -280,12 +295,13 @@
       label_joined: 'Bergabung', joined_unknown: 'Tidak diketahui',
       label_language: 'Bahasa',
       desc_language: 'Pilih bahasa untuk profil dan pengaturan Anda. Pilihan Anda disimpan di perangkat ini dan ke profil Anda.',
+      label_chart_type: 'Gaya grafik', desc_chart_type: 'Cara total suara ditampilkan di ruang kerja pemilihan.',
+      chart_type_bar_h: 'Batang horizontal', chart_type_bar_v: 'Batang vertikal', chart_type_dot: 'Grafik titik', chart_type_pie: 'Diagram lingkaran', chart_type_bar_stacked: 'Batang bertumpuk',
       readonly_note: 'Nama pengguna dan dompet Anda dikelola oleh Usernode dan hanya bisa dibaca. Hanya nama tampilan yang dapat diubah.',
       no_wallet_note: 'Tautkan dompet Usernode untuk mengatur nama tampilan. Pilihan bahasa Anda tetap disimpan di perangkat ini.',
       not_linked: 'Belum ditautkan', loading: 'Memuat…', connect_wallet: 'Hubungkan dompet',
       tab_dashboard: 'Dasbor', tab_elections: 'Pemilihan', tab_orgs: 'Organisasi', tab_evidence: 'Bukti', tab_disputes: 'Sengketa',
       method_latest: 'Laporan terbaru', method_first: 'Laporan pertama', method_consensus: 'Konsensus', method_median: 'Median', method_verified: 'Terverifikasi saja',
-      chart_bar_h: 'Batang', chart_bar_stacked: 'Batang bertumpuk', chart_pie: 'Diagram lingkaran',
       dashboard_heading: 'Dasbor', dashboard_select_election: 'Pilih pemilihan untuk melihat hasil langsung.', dashboard_export_csv: 'Ekspor CSV', dashboard_export_pdf: 'Unduh PDF', dashboard_pdf_generating: 'Membuat dokumen…', dashboard_pdf_unavailable: 'Alat PDF tidak tersedia — buka halaman ini secara online untuk mengaktifkan ekspor PDF.', dashboard_pdf_ready: 'PDF hasil diunduh ✓', dashboard_export_json: 'Ekspor JSON', dashboard_by_station: 'Per TPS', dashboard_no_stations: 'Belum ada kandidat.', dashboard_last_submission: 'Laporan terakhir', dashboard_auto_refreshing: 'memperbarui otomatis', dashboard_no_submissions: 'Belum ada laporan', dashboard_stations_reported: 'TPS dilaporkan', dashboard_votes: 'suara',
       dashboard_working_tally: 'Hitungan kerja', dashboard_working_tally_desc: 'Dimasukkan oleh penyelenggara di ruang kerja — terpisah dari hasil resmi.', dashboard_working_tally_reported: '{reported} dari {total} TPS dimasukkan',
       elections_heading: 'Pemilihan', elections_new: '+ Pemilihan baru', elections_no_elections: 'Belum ada pemilihan.', elections_open_workspace: 'Buka ruang kerja pemilihan →',
@@ -361,12 +377,13 @@
       label_joined: '加入时间', joined_unknown: '未知',
       label_language: '语言',
       desc_language: '选择您的资料和设置所用的语言。您的选择会保存在本设备并同步到您的资料。',
+      label_chart_type: '图表样式', desc_chart_type: '选举工作区中票数的显示方式。',
+      chart_type_bar_h: '横向条形图', chart_type_bar_v: '纵向条形图', chart_type_dot: '点状图', chart_type_pie: '饼图', chart_type_bar_stacked: '堆叠条形图',
       readonly_note: '您的用户名和钱包由 Usernode 管理，此处仅供查看。只有显示名称可以修改。',
       no_wallet_note: '关联 Usernode 钱包以设置显示名称。您的语言选择仍会保存在本设备。',
       not_linked: '未关联', loading: '加载中…', connect_wallet: '连接钱包',
       tab_dashboard: '仪表盘', tab_elections: '选举', tab_orgs: '机构', tab_evidence: '证据', tab_disputes: '争议',
       method_latest: '最新提交', method_first: '首次提交', method_consensus: '共识', method_median: '中位数', method_verified: '仅已验证',
-      chart_bar_h: '条形图', chart_bar_stacked: '堆叠条形图', chart_pie: '饼图',
       dashboard_heading: '仪表盘', dashboard_select_election: '选择一场选举以查看实时结果。', dashboard_export_csv: '导出 CSV', dashboard_export_pdf: '下载 PDF', dashboard_pdf_generating: '生成中…', dashboard_pdf_unavailable: 'PDF 工具不可用 — 请在线打开此页面以启用 PDF 导出。', dashboard_pdf_ready: '结果 PDF 已下载 ✓', dashboard_export_json: '导出 JSON', dashboard_by_station: '按投票站', dashboard_no_stations: '暂无候选人。', dashboard_last_submission: '最后提交', dashboard_auto_refreshing: '自动刷新', dashboard_no_submissions: '暂无提交', dashboard_stations_reported: '个投票站已上报', dashboard_votes: '票',
       elections_heading: '选举', elections_new: '+ 新建选举', elections_no_elections: '暂无选举。', elections_open_workspace: '打开选举工作区 →',
       orgs_heading: '机构', orgs_active_orgs: '活跃机构', orgs_register_heading: '注册您的机构', orgs_register_desc: '注册需向平台财库缴纳一次性费用 {fee}。在确认之前，您的选举将保持隐藏。', orgs_register_button: '注册并缴费', orgs_pay_fee: '缴纳注册费', orgs_name_placeholder: '机构名称', orgs_jur_placeholder: '管辖区（可选）', orgs_active_badge: '活跃', orgs_pending_badge: '待审 — 费用未缴纳', orgs_connect_first: '请先连接钱包。', orgs_manage_elections: '您的选举已上线，请在"选举"标签页进行管理。',
@@ -433,12 +450,13 @@
       label_joined: 'Te uniste', joined_unknown: 'Desconocido',
       label_language: 'Idioma',
       desc_language: 'Elige el idioma de tu perfil y tu configuración. Tu elección se guarda en este dispositivo y en tu perfil.',
+      label_chart_type: 'Estilo de gráfico', desc_chart_type: 'Cómo se muestran los totales de votos en el espacio de trabajo de la elección.',
+      chart_type_bar_h: 'Barras horizontales', chart_type_bar_v: 'Barras verticales', chart_type_dot: 'Gráfico de puntos', chart_type_pie: 'Gráfico circular', chart_type_bar_stacked: 'Barra apilada',
       readonly_note: 'Tu nombre de usuario y tu billetera los gestiona Usernode y aquí son de solo lectura. Solo puedes cambiar tu nombre visible.',
       no_wallet_note: 'Vincula una billetera de Usernode para definir un nombre visible. Tu idioma se guarda igualmente en este dispositivo.',
       not_linked: 'Sin vincular', loading: 'Cargando…', connect_wallet: 'Conectar billetera',
       tab_dashboard: 'Panel', tab_elections: 'Elecciones', tab_orgs: 'Organizaciones', tab_evidence: 'Evidencia', tab_disputes: 'Disputas',
       method_latest: 'Último envío', method_first: 'Primer envío', method_consensus: 'Consenso', method_median: 'Mediana', method_verified: 'Solo verificados',
-      chart_bar_h: 'Barras', chart_bar_stacked: 'Barra apilada', chart_pie: 'Gráfico circular',
       dashboard_heading: 'Panel', dashboard_select_election: 'Selecciona una elección para ver los resultados en vivo.', dashboard_export_csv: 'Exportar CSV', dashboard_export_pdf: 'Descargar PDF', dashboard_pdf_generating: 'Generando…', dashboard_pdf_unavailable: 'Herramientas PDF no disponibles — abra esta página en línea para habilitar la exportación PDF.', dashboard_pdf_ready: 'PDF de resultados descargado ✓', dashboard_export_json: 'Exportar JSON', dashboard_by_station: 'Por mesa', dashboard_no_stations: 'Sin candidatos.', dashboard_last_submission: 'Último envío', dashboard_auto_refreshing: 'actualización automática', dashboard_no_submissions: 'Sin envíos aún', dashboard_stations_reported: 'mesas reportadas', dashboard_votes: 'votos',
       elections_heading: 'Elecciones', elections_new: '+ Nueva elección', elections_no_elections: 'Sin elecciones aún.', elections_open_workspace: 'Abrir espacio de trabajo →',
       orgs_heading: 'Organizaciones', orgs_active_orgs: 'Organizaciones activas', orgs_register_heading: 'Registra tu organización', orgs_register_desc: 'El registro paga una cuota única de {fee} al tesoro de la plataforma. Hasta que se confirme, tus elecciones permanecerán ocultas.', orgs_register_button: 'Registrar y pagar', orgs_pay_fee: 'Pagar cuota de registro', orgs_name_placeholder: 'Nombre de la organización', orgs_jur_placeholder: 'Jurisdicción (opcional)', orgs_active_badge: 'Activa', orgs_pending_badge: 'Pendiente — cuota no pagada', orgs_connect_first: 'Conecta tu billetera primero.', orgs_manage_elections: 'Tus elecciones están activas. Gestiónelas en Elecciones.',
@@ -506,12 +524,13 @@
       label_joined: 'शामिल हुए', joined_unknown: 'अज्ञात',
       label_language: 'भाषा',
       desc_language: 'अपनी प्रोफ़ाइल और सेटिंग्स के लिए भाषा चुनें। आपका चयन इस डिवाइस और आपकी प्रोफ़ाइल में सहेजा जाता है।',
+      label_chart_type: 'चार्ट शैली', desc_chart_type: 'चुनाव कार्यक्षेत्र में मतों की कुल संख्या कैसे दिखाई जाती है।',
+      chart_type_bar_h: 'क्षैतिज बार', chart_type_bar_v: 'लंबवत बार', chart_type_dot: 'डॉट चार्ट', chart_type_pie: 'पाई चार्ट', chart_type_bar_stacked: 'स्टैक्ड बार',
       readonly_note: 'आपका उपयोगकर्ता नाम और वॉलेट Usernode द्वारा प्रबंधित हैं और यहाँ केवल पढ़े जा सकते हैं। केवल प्रदर्शित नाम बदला जा सकता है।',
       no_wallet_note: 'प्रदर्शित नाम सेट करने के लिए Usernode वॉलेट लिंक करें। आपकी भाषा का चयन फिर भी इस डिवाइस पर सहेजा जाता है।',
       not_linked: 'लिंक नहीं है', loading: 'लोड हो रहा है…', connect_wallet: 'वॉलेट कनेक्ट करें',
       tab_dashboard: 'डैशबोर्ड', tab_elections: 'चुनाव', tab_orgs: 'संगठन', tab_evidence: 'साक्ष्य', tab_disputes: 'विवाद',
       method_latest: 'नवीनतम सबमिशन', method_first: 'पहला सबमिशन', method_consensus: 'सहमति', method_median: 'माध्यिका', method_verified: 'केवल सत्यापित',
-      chart_bar_h: 'बार', chart_bar_stacked: 'स्टैक्ड बार', chart_pie: 'पाई चार्ट',
       dashboard_heading: 'डैशबोर्ड', dashboard_select_election: 'लाइव परिणाम देखने के लिए चुनाव चुनें।', dashboard_export_csv: 'CSV निर्यात करें', dashboard_export_pdf: 'PDF डाउनलोड करें', dashboard_pdf_generating: 'बना रहा है…', dashboard_pdf_unavailable: 'PDF टूल अनुपलब्ध — PDF निर्यात सक्षम करने के लिए इस पृष्ठ को ऑनलाइन खोलें।', dashboard_pdf_ready: 'परिणाम PDF डाउनलोड हुआ ✓', dashboard_export_json: 'JSON निर्यात करें', dashboard_by_station: 'बूथ के अनुसार', dashboard_no_stations: 'कोई उम्मीदवार नहीं।', dashboard_last_submission: 'अंतिम सबमिशन', dashboard_auto_refreshing: 'स्वतः ताज़ा हो रहा है', dashboard_no_submissions: 'अभी तक कोई सबमिशन नहीं', dashboard_stations_reported: 'बूथों ने रिपोर्ट किया', dashboard_votes: 'वोट',
       elections_heading: 'चुनाव', elections_new: '+ नया चुनाव', elections_no_elections: 'अभी तक कोई चुनाव नहीं।', elections_open_workspace: 'चुनाव कार्यक्षेत्र खोलें →',
       orgs_heading: 'संगठन', orgs_active_orgs: 'सक्रिय संगठन', orgs_register_heading: 'अपना संगठन पंजीकृत करें', orgs_register_desc: 'पंजीकरण के लिए प्लेटफ़ॉर्म कोषागार को {fee} का एकमुश्त शुल्क देना होगा। पुष्टि होने तक आपके चुनाव छिपे रहेंगे।', orgs_register_button: 'पंजीकरण करें और शुल्क दें', orgs_pay_fee: 'पंजीकरण शुल्क दें', orgs_name_placeholder: 'संगठन का नाम', orgs_jur_placeholder: 'क्षेत्राधिकार (वैकल्पिक)', orgs_active_badge: 'सक्रिय', orgs_pending_badge: 'लंबित — शुल्क नहीं दिया गया', orgs_connect_first: 'पहले अपना वॉलेट कनेक्ट करें।', orgs_manage_elections: 'आपके चुनाव सक्रिय हैं। चुनाव टैब में उन्हें प्रबंधित करें।',
@@ -578,12 +597,13 @@
       label_joined: 'انضم في', joined_unknown: 'غير معروف',
       label_language: 'اللغة',
       desc_language: 'اختر لغة ملفك الشخصي وإعداداتك. يُحفظ اختيارك على هذا الجهاز وفي ملفك الشخصي.',
+      label_chart_type: 'نمط الرسم البياني', desc_chart_type: 'كيفية عرض إجماليات الأصوات في مساحة عمل الانتخابات.',
+      chart_type_bar_h: 'أعمدة أفقية', chart_type_bar_v: 'أعمدة عمودية', chart_type_dot: 'رسم نقطي', chart_type_pie: 'رسم دائري', chart_type_bar_stacked: 'أعمدة مكدّسة',
       readonly_note: 'اسم المستخدم والمحفظة يُداران بواسطة Usernode ويظهران للقراءة فقط. يمكنك تغيير الاسم المعروض فقط.',
       no_wallet_note: 'اربط محفظة Usernode لتعيين اسم معروض. سيظل اختيار اللغة محفوظًا على هذا الجهاز.',
       not_linked: 'غير مرتبط', loading: 'جارٍ التحميل…', connect_wallet: 'ربط المحفظة',
       tab_dashboard: 'لوحة التحكم', tab_elections: 'الانتخابات', tab_orgs: 'المنظمات', tab_evidence: 'الأدلة', tab_disputes: 'النزاعات',
       method_latest: 'آخر تقرير', method_first: 'أول تقرير', method_consensus: 'إجماع', method_median: 'الوسيط', method_verified: 'الموثّق فقط',
-      chart_bar_h: 'أعمدة', chart_bar_stacked: 'عمود مكدس', chart_pie: 'مخطط دائري',
       dashboard_heading: 'لوحة التحكم', dashboard_select_election: 'اختر انتخابات لعرض النتائج الحية.', dashboard_export_csv: 'تصدير CSV', dashboard_export_pdf: 'تنزيل PDF', dashboard_pdf_generating: 'جارٍ الإنشاء…', dashboard_pdf_unavailable: 'أدوات PDF غير متاحة — افتح هذه الصفحة عبر الإنترنت لتمكين تصدير PDF.', dashboard_pdf_ready: 'تم تنزيل PDF النتائج ✓', dashboard_export_json: 'تصدير JSON', dashboard_by_station: 'حسب مركز الاقتراع', dashboard_no_stations: 'لا يوجد مرشحون.', dashboard_last_submission: 'آخر تقرير', dashboard_auto_refreshing: 'تحديث تلقائي', dashboard_no_submissions: 'لا توجد تقارير بعد', dashboard_stations_reported: 'مراكز أبلغت', dashboard_votes: 'أصوات',
       elections_heading: 'الانتخابات', elections_new: '+ انتخابات جديدة', elections_no_elections: 'لا توجد انتخابات بعد.', elections_open_workspace: 'فتح مساحة العمل →',
       orgs_heading: 'المنظمات', orgs_active_orgs: 'المنظمات النشطة', orgs_register_heading: 'سجّل منظمتك', orgs_register_desc: 'يتطلب التسجيل دفع رسوم لمرة واحدة قدرها {fee} إلى خزينة المنصة. حتى التأكيد، ستبقى انتخاباتك مخفية.', orgs_register_button: 'التسجيل ودفع الرسوم', orgs_pay_fee: 'دفع رسوم التسجيل', orgs_name_placeholder: 'اسم المنظمة', orgs_jur_placeholder: 'نطاق الاختصاص (اختياري)', orgs_active_badge: 'نشطة', orgs_pending_badge: 'قيد الانتظار — لم تُدفع الرسوم', orgs_connect_first: 'وصّل محفظتك أولاً.', orgs_manage_elections: 'انتخاباتك نشطة. أدِرها من تبويب الانتخابات.',
@@ -650,12 +670,13 @@
       label_joined: 'Inscrit le', joined_unknown: 'Inconnu',
       label_language: 'Langue',
       desc_language: 'Choisissez la langue de votre profil et de vos paramètres. Votre choix est enregistré sur cet appareil et dans votre profil.',
+      label_chart_type: 'Style de graphique', desc_chart_type: "Comment les totaux de voix s'affichent dans l'espace de travail de l'élection.",
+      chart_type_bar_h: 'Barres horizontales', chart_type_bar_v: 'Barres verticales', chart_type_dot: 'Graphique à points', chart_type_pie: 'Graphique circulaire', chart_type_bar_stacked: 'Barre empilée',
       readonly_note: "Votre nom d'utilisateur et votre portefeuille sont gérés par Usernode et affichés en lecture seule. Seul votre nom d'affichage est modifiable.",
       no_wallet_note: "Liez un portefeuille Usernode pour définir un nom d'affichage. Votre choix de langue reste enregistré sur cet appareil.",
       not_linked: 'Non lié', loading: 'Chargement…', connect_wallet: 'Connecter le portefeuille',
       tab_dashboard: 'Tableau de bord', tab_elections: 'Élections', tab_orgs: 'Organisations', tab_evidence: 'Preuves', tab_disputes: 'Contestations',
       method_latest: 'Dernier envoi', method_first: 'Premier envoi', method_consensus: 'Consensus', method_median: 'Médiane', method_verified: 'Vérifiés seulement',
-      chart_bar_h: 'Barres', chart_bar_stacked: 'Barre empilée', chart_pie: 'Diagramme circulaire',
       dashboard_heading: 'Tableau de bord', dashboard_select_election: 'Sélectionnez une élection pour voir les résultats en direct.', dashboard_export_csv: 'Exporter CSV', dashboard_export_pdf: 'Télécharger PDF', dashboard_pdf_generating: 'Génération en cours…', dashboard_pdf_unavailable: "Outils PDF non disponibles — ouvrez cette page en ligne pour activer l'export PDF.", dashboard_pdf_ready: 'PDF des résultats téléchargé ✓', dashboard_export_json: 'Exporter JSON', dashboard_by_station: 'Par bureau', dashboard_no_stations: 'Aucun candidat.', dashboard_last_submission: 'Dernier envoi', dashboard_auto_refreshing: 'actualisation automatique', dashboard_no_submissions: "Aucun envoi pour l'instant", dashboard_stations_reported: 'bureaux déclarés', dashboard_votes: 'voix',
       elections_heading: 'Élections', elections_new: '+ Nouvelle élection', elections_no_elections: "Pas encore d'élections.", elections_open_workspace: "Ouvrir l'espace de travail →",
       orgs_heading: 'Organisations', orgs_active_orgs: 'Organisations actives', orgs_register_heading: 'Enregistrez votre organisation', orgs_register_desc: "L'enregistrement nécessite le paiement d'une cotisation unique de {fee} à la trésorerie de la plateforme. Jusqu'à confirmation, vos élections restent masquées.", orgs_register_button: "S'inscrire et payer", orgs_pay_fee: "Payer la cotisation d'inscription", orgs_name_placeholder: "Nom de l'organisation", orgs_jur_placeholder: 'Juridiction (facultatif)', orgs_active_badge: 'Active', orgs_pending_badge: 'En attente — cotisation non payée', orgs_connect_first: 'Connectez votre portefeuille en premier.', orgs_manage_elections: 'Vos élections sont en ligne. Gérez-les dans Élections.',
@@ -1349,6 +1370,188 @@
     renderElq();
     kickElq();
   }
+  // ── Local-first vote-count save queue (worktally + on-chain result) ────────
+  // A failed-or-unconfirmed working-tally save or QC.res result submission is
+  // held in localStorage and retried automatically while the backend is
+  // reachable — no manual "Try again" click required. Two kinds share one
+  // queue, keyed per (kind, election, station) with latest-wins semantics (a
+  // fresh save for the same station supersedes any entry still queued for it):
+  //   'worktally' — the off-chain PUT behind saveWorkTally / the inline table
+  //   'result'    — the on-chain QC.res send behind the observer submit form
+  // Pure helpers (entry shape, entryKey, backoff, (de)serialization) live in
+  // window.QCVoteQueue (public/vote-queue.js); the DOM/timer/fetch/tx wiring —
+  // mirroring the election-creation queue above — is here.
+  const VQ = window.QCVoteQueue;
+  App.vq = App.vq || [];
+  let _vqRunning = false;
+
+  function vqKey() {
+    const id = (App.user && App.user.username) || App.wallet.address || 'anon';
+    return 'qc_vote_queue::' + id;
+  }
+  function persistVq() {
+    try { localStorage.setItem(vqKey(), VQ.serialize(App.vq || [])); } catch (_) {}
+  }
+  function vqEntryFor(kind, eid, sid) {
+    const key = kind + ':' + eid + ':' + sid;
+    return (App.vq || []).find((e) => VQ.entryKey(e) === key);
+  }
+  // Enqueue a save, replacing any existing queued entry for the same
+  // (kind, eid, sid) — latest-wins, matching the write semantics of both the
+  // worktally PUT and the QC.res submission (a resend simply overwrites).
+  function enqueueVq(input) {
+    const key = (input.kind === 'result' ? 'result' : 'worktally') + ':' + input.eid + ':' + input.sid;
+    App.vq = (App.vq || []).filter((e) => VQ.entryKey(e) !== key);
+    const entry = VQ.makeEntry(input);
+    App.vq.push(entry);
+    persistVq();
+    kickVq();
+    return entry;
+  }
+  function removeVq(id) {
+    App.vq = (App.vq || []).filter((e) => e.id !== id);
+    persistVq();
+  }
+  // Reflect the current queue state (or its absence) for the observer result
+  // form's currently-selected station. Called on station-select change, right
+  // after enqueueing a submit, and whenever the driver advances a 'result'
+  // entry — so the "saved locally / offline" text tracks the live queue
+  // without needing to rebuild the whole panel.
+  function refreshObStatus() {
+    const el = document.getElementById('ob-status');
+    const sel = document.getElementById('ob-station');
+    const cur = App.state && App.state.detail;
+    if (!el || !sel || !cur) return;
+    const entry = vqEntryFor('result', cur.election.eid, Number(sel.value));
+    el.textContent = entry ? (entry.offline ? t('queue_saved_offline') : t('queue_saved_locally')) : '';
+  }
+  // One persistence attempt for a queued working-tally save. Returns
+  // 'confirmed', 'terminal' (bad input/permission — drop it), or 'pending'
+  // (recoverable — keep and retry).
+  async function attemptWorktallyVq(entry) {
+    entry.attempts = (entry.attempts || 0) + 1;
+    persistVq();
+    try {
+      const r = await fetch('/api/elections/' + encodeURIComponent(entry.eid) + '/worktally/' + encodeURIComponent(entry.sid), {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ votes: entry.votes }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) {
+        entry.lastError = j.error || ('HTTP ' + r.status);
+        persistVq();
+        return VQ.classifyFetchStatus(r.status) === 'terminal' ? 'terminal' : 'pending';
+      }
+      return 'confirmed';
+    } catch (e) {
+      // A thrown fetch (no response at all) is a network failure — transient.
+      entry.lastError = (e && e.message) || String(e);
+      persistVq();
+      return 'pending';
+    }
+  }
+  // One persistence attempt for a queued on-chain result submission. Sends the
+  // (idempotent — the aggregate is latest-wins) QC.res tx and waits for chain
+  // inclusion, mirroring runQueuedSteps's single-step case.
+  async function attemptResultVq(entry) {
+    entry.attempts = (entry.attempts || 0) + 1;
+    persistVq();
+    try {
+      const r = await sendTx(entry.orgAddr, 0, QC.res(entry.eid, entry.sid, entry.votes, entry.tot, entry.inv, entry.evHash), { idempotent: true });
+      if (r) {
+        const pid = addPending(t('loading_submitting'), { txId: r, to: entry.orgAddr });
+        try { await confirmTx(r, { to: entry.orgAddr }); } finally { removePending(pid); }
+      }
+      entry.lastTxId = r || null;
+      return 'confirmed';
+    } catch (e) {
+      entry.lastError = (e && e.message) || String(e);
+      persistVq();
+      return (elqClassify(e) === 'terminal') ? 'terminal' : 'pending';
+    }
+  }
+  function attemptVq(entry) {
+    return entry.kind === 'result' ? attemptResultVq(entry) : attemptWorktallyVq(entry);
+  }
+  function onVqConfirmed(entry) {
+    if (entry.kind === 'worktally') {
+      const k = entry.eid + ':' + entry.sid;
+      if (inlineEntry[k]) inlineEntry[k].saved = true;
+      if (App.eid === entry.eid) { rerenderStations(); rerenderInlineSummary(); }
+    } else {
+      toast(t('toast_submit_result'));
+      refreshSoon();
+      const cur = App.state && App.state.detail;
+      if (cur && cur.election.eid === entry.eid) {
+        offerSubmitPdf(cur, entry.sid, entry.votes, entry.tot, entry.inv, entry.evHash, entry.lastTxId);
+      }
+      refreshObStatus();
+    }
+  }
+  function onVqTerminal(entry) {
+    toast(t('toast_failed') + ' ' + (entry.lastError || ''), 'error');
+    if (entry.kind === 'worktally' && App.eid === entry.eid) { rerenderStations(); rerenderInlineSummary(); }
+    else if (entry.kind === 'result') refreshObStatus();
+  }
+  function onVqStateChanged(entry) {
+    if (entry.kind === 'worktally') { if (App.eid === entry.eid) rerenderStations(); }
+    else refreshObStatus();
+  }
+  // Single recursive driver, mirroring driveElq: process the head drivable
+  // entry to a verdict, then either remove it (confirmed/terminal) or back off
+  // and retry. Self-stops when the drivable queue empties or the device goes
+  // offline (the 'online' listener below re-kicks). Entries that exhaust
+  // MAX_ATTEMPTS are parked offline and skipped.
+  async function driveVq() {
+    if (_vqRunning) return;
+    _vqRunning = true;
+    try {
+      while (true) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) break;
+        const entry = (App.vq || []).find((e) => !e.demo && !e.offline);
+        if (!entry) break;
+        const verdict = await attemptVq(entry);
+        if (verdict === 'confirmed') {
+          removeVq(entry.id);
+          onVqConfirmed(entry);
+        } else if (verdict === 'terminal') {
+          removeVq(entry.id);
+          onVqTerminal(entry);
+        } else if (VQ.isExhausted(entry)) {
+          entry.offline = true;
+          persistVq();
+          onVqStateChanged(entry);
+          continue; // the find() above now skips this entry → next drivable / break
+        } else {
+          onVqStateChanged(entry);
+          await new Promise((res) => setTimeout(res, VQ.nextBackoff(entry.attempts)));
+        }
+      }
+    } finally {
+      _vqRunning = false;
+    }
+  }
+  function kickVq() {
+    if (!App.vq || !App.vq.some((e) => !e.demo && !e.offline)) return;
+    if (_vqRunning) return;
+    driveVq();
+  }
+  // Resume the queue on boot/connect: rehydrate from localStorage and re-seed
+  // inlineEntry for any restored worktally entry so a reload doesn't lose the
+  // "saved locally, syncing…" row state (mirrors restoreElectionQueue).
+  async function restoreVoteQueue() {
+    let saved = [];
+    try { saved = VQ.deserialize(localStorage.getItem(vqKey()) || '[]'); } catch (_) { saved = []; }
+    App.vq = Array.isArray(saved) ? saved : [];
+    App.vq.forEach((entry) => {
+      if (entry.kind !== 'worktally') return;
+      const k = entry.eid + ':' + entry.sid;
+      if (!inlineEntry[k]) inlineEntry[k] = { open: false, draft: Object.assign({}, entry.votes || {}), votes: entry.votes || {}, saved: false };
+    });
+    kickVq();
+  }
+
   if (typeof window !== 'undefined' && window.addEventListener) {
     // Regaining connectivity is the natural reset point: clear the offline cap
     // and attempt counter on real (non-demo) parked entries so the queue retries
@@ -1361,6 +1564,16 @@
       });
       if (changed) { persistElq(); renderElq(); }
       kickElq();
+      let vqChanged = false;
+      (App.vq || []).forEach(function (e) {
+        if (!e.demo && (e.offline || e.attempts)) { e.offline = false; e.attempts = 0; vqChanged = true; }
+      });
+      if (vqChanged) {
+        persistVq();
+        if (App.eid) { rerenderStations(); rerenderInlineSummary(); }
+        refreshObStatus();
+      }
+      kickVq();
     });
   }
 
@@ -1551,6 +1764,7 @@
     restorePrefs();
     await restorePending();
     await restoreElectionQueue();
+    await restoreVoteQueue();
     await refresh();
     renderChrome();
   }
@@ -1567,11 +1781,13 @@
       throw e;
     }
     const memoStr = JSON.stringify(memoObj);
-    // Placeholder sends (amount: 0 — the payload lives in the memo) still need a
-    // nonzero on-chain amount to be relayed by some bridges, so floor to 1 token
-    // unless the caller explicitly opts into sending the literal configured amount
-    // (e.g. a $0 org fee must send 0, not 1).
-    const sendAmount = opts.exactAmount ? (amount || 0) : Math.max(1, amount || 0);
+    // Every transaction the app broadcasts must move at least 1 token — most
+    // callers pass amount: 0 since the payload lives in the memo, but a
+    // 0-amount transaction is invalid on-chain. Floor it here, once, so no
+    // call site (current or future) can regress this — unless the caller
+    // explicitly opts into sending the literal configured amount (e.g. a $0
+    // org fee must send 0, not 1).
+    const sendAmount = opts.exactAmount ? (Number(amount) || 0) : Math.max(1, Number(amount) || 0);
     if (App.cfg.localDev) {
       return window.QCBridge.send(to, sendAmount, memoStr, {
         idempotent: opts.idempotent,
@@ -1715,51 +1931,69 @@
   }
 
   // ───────────────────────── Dashboard ─────────────────────────
-  // Shared vote-share chart renderer. `rows` is [{ name, votes, colorClass,
-  // colorIdx }], already representing one bar/segment/slice per candidate;
-  // sorting by votes descending is this function's job so every chart style
-  // agrees on ordering. `bar_stacked` and `pie` both need their segment widths
-  // to sum to exactly 100 (a stacked bar with a gap, or a pie with an overlap/
-  // undershoot, looks broken) — adjustSharesTo100() is the single place that
-  // rounding-remainder fix lives, so the two chart styles can't drift apart.
+  // Renders a list of { name, votesText, pct, colorClass, colorHex } rows as
+  // one of the five user-selectable chart styles (App.chartType): horizontal
+  // bars (default), vertical bars, dot chart, pie chart, or a single stacked
+  // bar. Used by every static (i.e. non-live-patched) tally — the live inline
+  // tally has its own DOM-patching version below, inlineBarRowHtml() plus the
+  // dedicated pie/bar_stacked build blocks in rerenderInlineSummary().
   function renderBars(rows, chartType) {
-    const sorted = rows.slice().sort((a, b) => b.votes - a.votes);
-    if (chartType === 'bar_stacked') {
-      const pcts = QuickCountInline.adjustSharesTo100(sorted.map((r) => r.votes));
-      const segs = sorted.map((r, i) => `<div class="h-full ${r.colorClass}" style="width:${pcts[i]}%" title="${esc(r.name)}: ${pcts[i]}%"></div>`).join('');
-      const legend = sorted.map((r, i) => `<div class="flex items-center justify-between text-sm mb-1">
-        <span class="inline-flex items-center gap-2"><span class="inline-block w-3 h-3 rounded-sm ${r.colorClass}"></span>${esc(r.name)}</span>
-        <span class="font-mono text-slate-700 dark:text-slate-300">${r.votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pcts[i]}%)</span></span>
-      </div>`).join('');
-      return `<div class="h-4 rounded overflow-hidden flex mb-3 bg-slate-200 dark:bg-slate-800">${segs}</div>${legend}`;
-    }
     if (chartType === 'pie') {
-      const pcts = QuickCountInline.adjustSharesTo100(sorted.map((r) => r.votes));
-      let acc = 0;
-      const stops = sorted.map((r, i) => {
-        const start = acc, end = acc + pcts[i];
-        acc = end;
-        return `${HEX_COLORS[r.colorIdx % HEX_COLORS.length]} ${start}% ${end}%`;
-      }).join(', ');
-      const legend = sorted.map((r, i) => `<div class="flex items-center justify-between text-sm mb-1">
-        <span class="inline-flex items-center gap-2"><span class="inline-block w-3 h-3 rounded-sm ${r.colorClass}"></span>${esc(r.name)}</span>
-        <span class="font-mono text-slate-700 dark:text-slate-300">${r.votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pcts[i]}%)</span></span>
+      const legend = rows.map(({ name, votesText, pct, colorClass }) => `<div class="flex items-center gap-2 text-sm mb-1.5">
+        <span class="w-3 h-3 rounded-sm shrink-0 ${colorClass}"></span>
+        <span class="flex-1 truncate">${esc(name)}</span>
+        <span class="font-mono text-slate-600 dark:text-slate-400">${votesText} (${pct}%)</span>
       </div>`).join('');
-      return `<div class="flex items-center gap-4 mb-3"><div class="w-24 h-24 rounded-full shrink-0" style="background:conic-gradient(${stops})"></div><div class="flex-1">${legend}</div></div>`;
-    }
-    // Default: bar_h — one independently-rounded horizontal bar per row.
-    const total = sorted.reduce((s, r) => s + r.votes, 0) || 1;
-    return sorted.map((r) => {
-      const pct = Math.round((r.votes / total) * 100);
-      return `<div class="mb-3">
-        <div class="flex justify-between text-sm mb-1"><span>${esc(r.name)}</span>
-        <span class="font-mono text-slate-700 dark:text-slate-300">${r.votes.toLocaleString()} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
-        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${r.colorClass}" style="width:${pct}%"></div></div>
+      const grand = rows.reduce((s, r) => s + (r.pct || 0), 0);
+      const bg = grand > 0 ? `conic-gradient(${conicGradientStops(rows)})` : '#e2e8f0';
+      return `<div class="flex items-center gap-5 mb-3 flex-wrap">
+        <div class="w-32 h-32 rounded-full shrink-0" style="background:${bg}"></div>
+        <div class="flex-1 min-w-[10rem]">${legend}</div>
       </div>`;
-    }).join('');
+    }
+    if (chartType === 'bar_stacked') {
+      const segments = rows.map(({ name, pct, colorClass }) => `<div class="${colorClass} h-full" style="width:${pct}%" title="${esc(name)} (${pct}%)"></div>`).join('');
+      const legend = rows.map(({ name, votesText, pct, colorClass }) => `<div class="flex items-center gap-2 text-sm mb-1">
+        <span class="w-3 h-3 rounded-sm shrink-0 ${colorClass}"></span>
+        <span class="flex-1 truncate">${esc(name)}</span>
+        <span class="font-mono text-slate-600 dark:text-slate-400">${votesText} (${pct}%)</span>
+      </div>`).join('');
+      return `<div class="mb-3">
+        <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden flex">${segments}</div>
+        <div class="mt-2">${legend}</div>
+      </div>`;
+    }
+    if (chartType === 'bar_v') {
+      const cols = rows.map(({ name, votesText, pct, colorClass }) => `
+        <div class="flex flex-col items-center justify-end h-full flex-1 min-w-0">
+          <span class="text-xs font-mono text-slate-700 dark:text-slate-300 mb-1">${pct}%</span>
+          <div class="w-full max-w-10 rounded-t bg-slate-200 dark:bg-slate-800 overflow-hidden flex flex-col justify-end" style="height:100%">
+            <div class="${colorClass}" style="height:${pct}%"></div>
+          </div>
+          <span class="text-xs text-slate-600 dark:text-slate-400 mt-1 truncate max-w-[4rem]" title="${esc(name)}">${esc(name)}</span>
+          <span class="text-[10px] font-mono text-slate-500 dark:text-slate-500">${votesText}</span>
+        </div>`).join('');
+      return `<div class="h-28 flex items-end gap-2 mb-3">${cols}</div>`;
+    }
+    if (chartType === 'dot') {
+      return rows.map(({ name, votesText, pct, colorClass }) => `<div class="mb-3">
+        <div class="flex justify-between text-sm mb-1"><span>${esc(name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300">${votesText} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+        <div class="h-1 rounded-full bg-slate-200 dark:bg-slate-700 relative"><div class="${colorClass} w-3 h-3 rounded-full absolute -translate-y-1/2 -translate-x-1/2" style="top:50%;left:${pct}%"></div></div>
+      </div>`).join('');
+    }
+    // bar_h (default)
+    return rows.map(({ name, votesText, pct, colorClass }) => `<div class="mb-3">
+      <div class="flex justify-between text-sm mb-1"><span>${esc(name)}</span>
+      <span class="font-mono text-slate-700 dark:text-slate-300">${votesText} <span class="text-slate-600 dark:text-slate-500">(${pct}%)</span></span></div>
+      <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div class="h-full ${colorClass}" style="width:${pct}%"></div></div>
+    </div>`).join('');
   }
   function tallyBars(d) {
-    const rows = d.candidates.map((c, i) => ({ name: c.name, votes: d.tally[c.cid] || 0, colorClass: COLORS[i % COLORS.length], colorIdx: i }));
+    const total = Object.values(d.tally).reduce((s, n) => s + n, 0) || 1;
+    const rows = d.candidates.map((c, i) => ({ c, i, votes: d.tally[c.cid] || 0 }))
+      .sort((a, b) => b.votes - a.votes)
+      .map(({ c, i, votes }) => ({ name: c.name, votesText: votes.toLocaleString(), pct: Math.round((votes / total) * 100), colorClass: COLORS[i % COLORS.length], colorHex: COLOR_HEX[i % COLOR_HEX.length] }));
     return renderBars(rows, App.chartType);
   }
   // ── Inline TPS vote-entry (off-chain working tally) ──
@@ -1824,12 +2058,19 @@
     const rows = d.stations.map((s) => {
       const entry = inline ? inlineEntry[inlineKey(s.sid)] : null;
       const saved = !!(entry && entry.saved);
+      // A queued-but-unconfirmed save for this station (if any) — drives the
+      // "saved locally, syncing…" / "Saved Locally (Offline)" badge below.
+      // `saved` is only ever true once the server has confirmed the write, so
+      // the two states never render together for the same row.
+      const vqEntry = inline ? vqEntryFor('worktally', App.eid, s.sid) : null;
       const badges = [];
       if (s.invalid) badges.push(`<span class="badge bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">${t('station_badge_invalidated')}</span>`);
       else if (s.disputed) badges.push(`<span class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">${t('station_badge_disputed')}</span>`);
       if (s.needsReview && !s.invalid) badges.push(`<span class="badge bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">${t('station_badge_review')}</span>`);
       if (s.sources > 1) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('station_badge_reports').replace('{n}', s.sources)}</span>`);
       if (saved) badges.push(`<span class="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">${t('inline_done_badge')} · ${QuickCountInline.totalVotes(entry.votes).toLocaleString()}</span>`);
+      else if (vqEntry && vqEntry.offline) badges.push(`<span class="badge bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300">${t('queue_saved_offline')}</span>`);
+      else if (vqEntry) badges.push(`<span class="badge bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">${t('queue_saved_locally')}</span>`);
       const open = !!(editable && entry && entry.open);
       // Active-row highlight: lighter sticky-cell tone + a left accent bar that
       // lines up with the form panel below. A transparent border in the closed
@@ -1849,7 +2090,7 @@
       const formRow = open ? inlineFormRow(d, s.sid, entry) : '';
       let main;
       if (!s.reported) {
-        const cell = saved
+        const cell = (saved || vqEntry)
           ? `<td class="py-3 font-mono text-slate-700 dark:text-slate-300" colspan="${d.candidates.length + 1}">${esc(QuickCountInline.formatVoteSummary(entry.votes))}</td>`
           : `<td class="py-3 text-slate-600 dark:text-slate-500" colspan="${d.candidates.length + 1}">${t('station_awaiting')}</td>`;
         main = `<tr${rowAttrs}>${label}${cell}${chevCell}</tr>`;
@@ -1890,6 +2131,47 @@
   // already exist we mutate width/label in place so the CSS width transition
   // runs from the previous value; we only rebuild markup on first paint or an
   // election switch (keyed by candidate count, which is fixed at 3 here).
+  // Per-candidate live-tally row markup for the three chart styles, with
+  // data-inl-bar-fill/-total/-pct hooks that rerenderInlineSummary() patches
+  // in place on every keystroke (avoids rebuilding the whole DOM on each tick,
+  // which would interrupt the fill's CSS transition).
+  function inlineBarRowHtml(c, i, chartType) {
+    const color = COLORS[i % COLORS.length];
+    if (chartType === 'bar_v') {
+      return `<div class="flex flex-col items-center justify-end h-full flex-1 min-w-0" data-inl-bar="${c.key}">
+        <span class="text-xs font-mono text-slate-700 dark:text-slate-300 mb-1"><span data-inl-bar-pct>0</span>%</span>
+        <div class="w-full max-w-10 rounded-t bg-slate-200 dark:bg-slate-800 overflow-hidden flex flex-col justify-end" style="height:100%">
+          <div data-inl-bar-fill class="${color} transition-all duration-500 ease-out" style="height:0%"></div>
+        </div>
+        <span class="text-xs text-slate-600 dark:text-slate-400 mt-1 truncate max-w-[4rem]" title="${esc(c.name)}">${esc(c.name)}</span>
+        <span class="text-[10px] font-mono text-slate-500 dark:text-slate-500"><span data-inl-bar-total>0</span></span>
+      </div>`;
+    }
+    if (chartType === 'dot') {
+      return `<div class="mb-3" data-inl-bar="${c.key}">
+        <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+        <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
+        <div class="h-1 rounded-full bg-slate-200 dark:bg-slate-700 relative"><div data-inl-bar-fill class="${color} w-3 h-3 rounded-full absolute -translate-y-1/2 -translate-x-1/2 transition-all duration-500 ease-out" style="top:50%;left:0%"></div></div>
+      </div>`;
+    }
+    return `<div class="mb-3" data-inl-bar="${c.key}">
+      <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
+      <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
+      <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${color} transition-all duration-500 ease-out" style="width:0%"></div></div>
+    </div>`;
+  }
+  // Legend-row markup shared by the live pie and stacked-bar charts: both
+  // lean on a swatch + name + total/pct line instead of an inline bar, since
+  // the chart itself (the pie circle / the single stacked track) isn't
+  // per-candidate. Uses the same data-inl-bar/-total/-pct hooks as
+  // inlineBarRowHtml() so the patch loop below needs no special-casing.
+  function inlineLegendRowHtml(c, i) {
+    return `<div class="flex items-center gap-2 text-sm mb-1.5" data-inl-bar="${c.key}">
+      <span class="w-3 h-3 rounded-sm shrink-0 ${COLORS[i % COLORS.length]}"></span>
+      <span class="flex-1 truncate">${esc(c.name)}</span>
+      <span class="font-mono text-slate-600 dark:text-slate-400"><span data-inl-bar-total>0</span> (<span data-inl-bar-pct>0</span>%)</span>
+    </div>`;
+  }
   function rerenderInlineSummary() {
     const d = App.state && App.state.detail;
     const QC = window.QuickCountInline;
@@ -1914,32 +2196,55 @@
     }
 
     if (bars) {
-      if (App.chartType === 'bar_h') {
-        // In-place DOM diffing (rather than a full innerHTML rebuild) so the
-        // width transition animates from the previous value on every refresh.
-        const shares = QC.voteShares(totals);
-        const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length;
-        if (needBuild) {
-          bars.innerHTML = cands.map((c, i) => `<div class="mb-3" data-inl-bar="${c.key}">
-            <div class="flex justify-between text-sm mb-1"><span>${esc(c.name)}</span>
-            <span class="font-mono text-slate-700 dark:text-slate-300"><span data-inl-bar-total>0</span> <span class="text-slate-600 dark:text-slate-500">(<span data-inl-bar-pct>0</span>%)</span></span></div>
-            <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden"><div data-inl-bar-fill class="h-full ${COLORS[i % COLORS.length]} transition-all duration-500 ease-out" style="width:0%"></div></div>
-          </div>`).join('');
+      const shares = QC.voteShares(totals);
+      const needBuild = bars.querySelectorAll('[data-inl-bar]').length !== cands.length || bars.dataset.chartType !== App.chartType;
+      if (needBuild) {
+        bars.dataset.chartType = App.chartType;
+        if (App.chartType === 'pie') {
+          const legend = cands.map((c, i) => inlineLegendRowHtml(c, i)).join('');
+          bars.innerHTML = `<div class="flex items-center gap-5 mb-3 flex-wrap">
+            <div data-inl-pie class="w-32 h-32 rounded-full shrink-0" style="background:#e2e8f0"></div>
+            <div class="flex-1 min-w-[10rem]">${legend}</div>
+          </div>`;
+        } else if (App.chartType === 'bar_stacked') {
+          const segments = cands.map((c, i) => `<div data-inl-seg="${c.key}" class="${COLORS[i % COLORS.length]} h-full transition-all duration-500 ease-out" style="width:0%" title="${esc(c.name)}"></div>`).join('');
+          const legend = cands.map((c, i) => inlineLegendRowHtml(c, i)).join('');
+          bars.innerHTML = `<div class="mb-3">
+            <div class="h-4 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden flex">${segments}</div>
+            <div class="mt-2">${legend}</div>
+          </div>`;
+        } else {
+          const innerHtml = cands.map((c, i) => inlineBarRowHtml(c, i, App.chartType)).join('');
+          bars.innerHTML = (App.chartType === 'bar_v') ? `<div class="h-28 flex items-end gap-2">${innerHtml}</div>` : innerHtml;
         }
-        cands.forEach((c) => {
-          const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
-          if (!block) return;
-          const pct = shares[c.key] || 0;
-          block.querySelector('[data-inl-bar-total]').textContent = (totals[c.key] || 0).toLocaleString();
-          block.querySelector('[data-inl-bar-pct]').textContent = pct;
-          block.querySelector('[data-inl-bar-fill]').style.width = pct + '%';
-        });
-      } else {
-        // bar_stacked / pie don't animate a single fill width, so a full
-        // rebuild through the shared renderBars() helper is simplest — it's
-        // also what keeps their rounding-remainder fix in one place.
-        const rows = cands.map((c, i) => ({ name: c.name, votes: totals[c.key] || 0, colorClass: COLORS[i % COLORS.length], colorIdx: i }));
-        bars.innerHTML = renderBars(rows, App.chartType);
+      }
+      cands.forEach((c) => {
+        const pct = shares[c.key] || 0;
+        const block = bars.querySelector(`[data-inl-bar="${c.key}"]`);
+        if (block) {
+          const totalEl = block.querySelector('[data-inl-bar-total]');
+          if (totalEl) totalEl.textContent = (totals[c.key] || 0).toLocaleString();
+          const pctEl = block.querySelector('[data-inl-bar-pct]');
+          if (pctEl) pctEl.textContent = pct;
+          const fill = block.querySelector('[data-inl-bar-fill]');
+          if (fill) {
+            if (App.chartType === 'bar_v') fill.style.height = pct + '%';
+            else if (App.chartType === 'dot') fill.style.left = pct + '%';
+            else fill.style.width = pct + '%';
+          }
+        }
+        if (App.chartType === 'bar_stacked') {
+          const seg = bars.querySelector(`[data-inl-seg="${c.key}"]`);
+          if (seg) seg.style.width = pct + '%';
+        }
+      });
+      if (App.chartType === 'pie') {
+        const pieEl = bars.querySelector('[data-inl-pie]');
+        if (pieEl) {
+          const grand = cands.reduce((s, c) => s + (totals[c.key] || 0), 0);
+          const gradRows = cands.map((c, i) => ({ pct: shares[c.key] || 0, colorHex: COLOR_HEX[i % COLOR_HEX.length] }));
+          pieEl.style.background = grand > 0 ? `conic-gradient(${conicGradientStops(gradRows)})` : '#e2e8f0';
+        }
       }
     }
   }
@@ -1987,31 +2292,17 @@
           draft[key] = inp.value;
           votes[key] = QuickCountInline.sanitizeCount(inp.value);
         });
-        // Optimistic local update + re-render, then persist to Postgres so the
-        // entry survives reload and reaches the dashboard.
-        inlineEntry[k] = { open: true, draft: draft, votes: votes, saved: true };
-        toast(t('inline_done_badge') + ' · ' + QuickCountInline.totalVotes(votes).toLocaleString());
+        // `saved` stays false until the server confirms the write (via the
+        // vote-count save queue below) — the "done" badge is no longer shown
+        // optimistically. The row now shows a "saved locally, syncing…" badge
+        // while the save queue works, matching the election-creation queue.
+        inlineEntry[k] = { open: true, draft: draft, votes: votes, saved: false };
+        toast(t('queue_saved_locally'));
         rerenderStations();
         rerenderInlineSummary();
-        saveWorkTally(sid, votes);
+        enqueueVq({ kind: 'worktally', eid: App.eid, sid: Number(sid), votes: votes });
       });
     });
-  }
-  // Persist one station's working tally. Token-forwarded like putProfile; the
-  // server enforces the owner/admin/mod guard. A failure surfaces the shared
-  // recoverable-error notice (the optimistic local state is kept).
-  async function saveWorkTally(sid, votes) {
-    try {
-      const r = await fetch('/api/elections/' + encodeURIComponent(App.eid) + '/worktally/' + encodeURIComponent(sid), {
-        method: 'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ votes: votes }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
-    } catch (err) {
-      handleTxFailure(err, { onRetry: () => saveWorkTally(sid, votes) });
-    }
   }
   function marginBanner(d) {
     const m = d.margin;
@@ -2035,8 +2326,11 @@
     const totals = QC.aggregateVotes(votesList);
     const grand = QC.CANDIDATES.reduce((s, c) => s + (totals[c.key] || 0), 0);
     if (grand <= 0) return '';
-    const rows = QC.CANDIDATES.map((c, i) => ({ name: c.name, votes: totals[c.key] || 0, colorClass: COLORS[i % COLORS.length], colorIdx: i }));
-    const bars = renderBars(rows, App.chartType);
+    const shares = QC.voteShares(totals);
+    const barRows = QC.CANDIDATES.map((c, i) => ({ c, i, votes: totals[c.key] || 0, pct: shares[c.key] || 0 }))
+      .sort((a, b) => b.votes - a.votes)
+      .map(({ c, i, votes, pct }) => ({ name: c.name, votesText: votes.toLocaleString(), pct, colorClass: COLORS[i % COLORS.length], colorHex: COLOR_HEX[i % COLOR_HEX.length] }));
+    const bars = renderBars(barRows, App.chartType);
     const reported = t('dashboard_working_tally_reported')
       .replace('{reported}', saved.length)
       .replace('{total}', (d.stations || []).length || saved.length);
@@ -2380,7 +2674,8 @@
       <label class="block text-xs mb-1 text-slate-500 dark:text-slate-400">${t('evidence_upload_label')}</label>
       <input id="ob-file" type="file" class="w-full mb-1 text-xs text-slate-600 dark:text-slate-400">
       <p id="ob-hash" class="text-[0.65rem] text-slate-600 dark:text-slate-500 break-all mb-3 font-mono"></p>
-      <button id="ob-submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm">${t('election_observer_submit_btn')}</button>`;
+      <button id="ob-submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm">${t('election_observer_submit_btn')}</button>
+      <p id="ob-status" class="text-xs mt-2 text-slate-600 dark:text-slate-500"></p>`;
     const p = panel(t('election_observer_title') + (myObs.sid != null ? ' ' + t('election_observer_your_station') : ''), inner);
     setTimeout(() => {
       let evHash = '';
@@ -2388,18 +2683,19 @@
         const f = e.target.files[0]; if (!f) { evHash = ''; p.querySelector('#ob-hash').textContent = ''; return; }
         evHash = await sha256File(f); p.querySelector('#ob-hash').textContent = 'sha256: ' + evHash;
       };
+      p.querySelector('#ob-station').addEventListener('change', refreshObStatus);
+      refreshObStatus();
       p.querySelector('#ob-submit').onclick = () => {
-        // Capture the form values up front so Try-again resends exactly these.
+        // Capture the form values up front, then hand the whole submission to
+        // the local-first vote queue. Result submission is latest-wins (the
+        // aggregate methods collapse repeats), so it is safe to enqueue,
+        // auto-retry, and resume across a reload without ever double-counting.
         const sid = Number(p.querySelector('#ob-station').value);
         const votes = {}; p.querySelectorAll('.ob-v').forEach((i) => votes[i.dataset.cid] = Number(i.value) || 0);
-        // Blank means "not reported" (omitted from the memo), NOT zero — an
-        // explicit "0" must still save as 0, so only trim-empty is undefined.
-        const totRaw = p.querySelector('#ob-tot').value, invRaw = p.querySelector('#ob-inv').value;
-        const tot = totRaw.trim() === '' ? undefined : totRaw, inv = invRaw.trim() === '' ? undefined : invRaw;
-        // Result submission is latest-wins (the aggregate methods collapse
-        // repeats), so it is safe to auto-retry an ambiguous relay timeout.
-        runTx({ to: d.election.orgAddr, amount: 0, memo: QC.res(d.election.eid, sid, votes, tot, inv, evHash), idempotent: true },
-          { loading: t('loading_submitting'), success: (results) => { toast(t('toast_submit_result')); refreshSoon(); offerSubmitPdf(d, sid, votes, tot, inv, evHash, results && results[0]); } });
+        const tot = p.querySelector('#ob-tot').value, inv = p.querySelector('#ob-inv').value;
+        enqueueVq({ kind: 'result', eid: d.election.eid, sid: sid, votes: votes, tot: tot, inv: inv, evHash: evHash, orgAddr: d.election.orgAddr });
+        toast(t('queue_saved_locally'));
+        refreshObStatus();
       };
     });
     return p;
@@ -3631,7 +3927,7 @@
       const a = document.createElement('a'); a.href = url; a.download = 'evidence-sheet-' + eid + '.pdf';
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err.message || 'Download failed');
+      toast(t('toast_failed') + ' ' + (err && err.message || ''), 'error');
     } finally {
       btn.textContent = origText; btn.disabled = false;
     }
@@ -3997,17 +4293,28 @@
       </div>`;
   }
 
+  function chartTypeSelect(id) {
+    const opts = CHART_TYPES.map((c) => `<option value="${c}" ${c === App.chartType ? 'selected' : ''}>${esc(t('chart_type_' + c))}</option>`).join('');
+    return `<select id="${id}" class="px-3 py-2 rounded-lg bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800 outline-none text-sm">${opts}</select>`;
+  }
   function renderSettings(v) {
     v.innerHTML = `
-      <div class="max-w-xl">
-        <h2 class="text-xl font-bold mb-5">${esc(t('title_settings'))}</h2>
+      <div class="max-w-xl space-y-4">
+        <h2 class="text-xl font-bold mb-1">${esc(t('title_settings'))}</h2>
         <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
           <label class="block text-sm font-medium mb-1">${esc(t('label_language'))}</label>
           <p class="text-xs text-slate-500 mb-3">${esc(t('desc_language'))}</p>
           ${langSelect('settings-lang')}
         </div>
+        <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+          <label class="block text-sm font-medium mb-1">${esc(t('label_chart_type'))}</label>
+          <p class="text-xs text-slate-500 mb-3">${esc(t('desc_chart_type'))}</p>
+          ${chartTypeSelect('settings-chart-type')}
+        </div>
       </div>`;
     wireLangSelect('settings-lang');
+    const ctSel = document.getElementById('settings-chart-type');
+    if (ctSel) ctSel.onchange = () => { App.chartType = ctSel.value; savePrefs(); refresh(); };
   }
 
   // ───────────────────────── Boot ─────────────────────────
@@ -4161,6 +4468,7 @@
       restorePrefs();
       await restorePending();
       await restoreElectionQueue();
+      await restoreVoteQueue();
 
       // Staging-only reviewable "pending" pill (no DB; strict no-op elsewhere).
       if (App.cfg.staging && new URLSearchParams(location.search).get('demo') === '1') {

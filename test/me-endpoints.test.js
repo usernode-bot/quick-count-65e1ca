@@ -106,6 +106,14 @@ test('PUT /api/me/profile accepts a prefs-only payload (falls through to no-DB 5
   assert.strictEqual(status, 503);
 });
 
+test('PUT /api/me/profile accepts a prefs payload with chartType (falls through to no-DB 503)', async () => {
+  // chartType (the user's chosen vote-bar chart style: bar_h/bar_v/dot) rides
+  // inside the same prefs JSON blob as theme/method — the handler stores prefs
+  // as an opaque object, so a chartType key must not be rejected here either.
+  const { status } = await req('PUT', '/api/me/profile?viewer=ut1tester000000000000000000000000000000', { prefs: { theme: 'dark', method: 'verified', chartType: 'bar_v' } });
+  assert.strictEqual(status, 503);
+});
+
 test('POST /api/unlock/verify without a DB returns 503, not 500', async () => {
   // The unlock record is off-chain; with no Postgres the feature degrades
   // cleanly (503) instead of throwing a generic 500. No token here → the handler
