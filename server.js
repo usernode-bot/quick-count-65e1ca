@@ -440,7 +440,12 @@ const MOCK_FALLBACK_ADDR = 'ut1mockwallet000000000000000000000000000000';
 app.use((req, _res, next) => {
   if (!req.user) {
     const token = req.query.token || req.headers['x-usernode-token'];
-    if (token && JWT_SECRET) { try { req.user = jwt.verify(token, JWT_SECRET); } catch { /* ignore */ } }
+    if (token && USERNODE_JWT_PUBLIC_KEY) {
+      try {
+        const payload = jwt.verify(token, USERNODE_JWT_PUBLIC_KEY, { algorithms: ['RS256'], issuer: 'usernode', audience: 'usernode:app:' + process.env.USERNODE_APP_ID });
+        if (payload && payload.pur === 'iframe') req.user = payload;
+      } catch { /* ignore */ }
+    }
   }
   next();
 });
@@ -493,6 +498,9 @@ const UNLOCK_PRICE = Math.max(0, parseInt(process.env.UNLOCK_PRICE_TOKENS || '0'
 const UNLOCK_ENABLED = !!UNLOCK_RECIPIENT;
 
 // Paths that stay open without authentication.
+const USERNODE_JWT_PUBLIC_KEY = process.env.USERNODE_JWT_PUBLIC_KEY;
+// App-internal document signing secret (C1-KWK / evidence-sheet HMAC) — not the
+// platform JWT, which is verified with USERNODE_JWT_PUBLIC_KEY above.
 const JWT_SECRET = process.env.JWT_SECRET;
 // /api/me + /api/me/profile are listed public so they don't 401 without a
 // token: identity is resolved inside the handlers. In production the wallet
@@ -503,7 +511,12 @@ const PUBLIC_API_PATHS = new Set(['/health', '/api/me', '/api/me/profile']);
 const PUBLIC_PREFIXES = ['/__quickcount/', '/__mock/', '/explorer-api/', '/api/public/'];
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
-  if (token && JWT_SECRET) { try { req.user = jwt.verify(token, JWT_SECRET); } catch { /* ignore */ } }
+  if (token && USERNODE_JWT_PUBLIC_KEY) {
+    try {
+      const payload = jwt.verify(token, USERNODE_JWT_PUBLIC_KEY, { algorithms: ['RS256'], issuer: 'usernode', audience: 'usernode:app:' + process.env.USERNODE_APP_ID });
+      if (payload && payload.pur === 'iframe') req.user = payload;
+    } catch { /* ignore */ }
+  }
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     if (PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
