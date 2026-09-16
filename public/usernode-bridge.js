@@ -2,7 +2,7 @@
 //
 // NOTE: this is NOT a vendored copy of the platform's hosted bridge. Inside
 // Usernode the app loads the canonical bridge from
-//   https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js
+//   /usernode-bridge/v1/bridge.js
 // (see index.html). This file only provides a *mock* wallet for --local-dev,
 // so the whole app can be exercised offline against the /__mock/* endpoints.
 //
