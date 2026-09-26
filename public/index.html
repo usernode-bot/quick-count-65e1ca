@@ -2701,7 +2701,10 @@
         // auto-retry, and resume across a reload without ever double-counting.
         const sid = Number(p.querySelector('#ob-station').value);
         const votes = {}; p.querySelectorAll('.ob-v').forEach((i) => votes[i.dataset.cid] = Number(i.value) || 0);
-        const tot = p.querySelector('#ob-tot').value, inv = p.querySelector('#ob-inv').value;
+        // Blank means "not reported" (omitted from the memo), NOT zero — an
+        // explicit "0" must still save as 0, so only trim-empty is undefined.
+        const totRaw = p.querySelector('#ob-tot').value, invRaw = p.querySelector('#ob-inv').value;
+        const tot = totRaw.trim() === '' ? undefined : totRaw, inv = invRaw.trim() === '' ? undefined : invRaw;
         enqueueVq({ kind: 'result', eid: d.election.eid, sid: sid, votes: votes, tot: tot, inv: inv, evHash: evHash, orgAddr: d.election.orgAddr });
         toast(t('queue_saved_locally'));
         refreshObStatus();

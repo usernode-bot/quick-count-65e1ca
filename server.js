@@ -440,12 +440,7 @@ const MOCK_FALLBACK_ADDR = 'ut1mockwallet000000000000000000000000000000';
 app.use((req, _res, next) => {
   if (!req.user) {
     const token = req.query.token || req.headers['x-usernode-token'];
-    if (token && USERNODE_JWT_PUBLIC_KEY) {
-      try {
-        const payload = jwt.verify(token, USERNODE_JWT_PUBLIC_KEY, { algorithms: ['RS256'], issuer: 'usernode', audience: 'usernode:app:' + process.env.USERNODE_APP_ID });
-        if (payload && payload.pur === 'iframe') req.user = payload;
-      } catch { /* ignore */ }
-    }
+    if (token) { const payload = verifyUserToken(token); if (payload) req.user = payload; }
   }
   next();
 });
@@ -502,6 +497,34 @@ const USERNODE_JWT_PUBLIC_KEY = process.env.USERNODE_JWT_PUBLIC_KEY;
 // App-internal document signing secret (C1-KWK / evidence-sheet HMAC) — not the
 // platform JWT, which is verified with USERNODE_JWT_PUBLIC_KEY above.
 const JWT_SECRET = process.env.JWT_SECRET;
+// Token verification: the platform's RS256 iframe JWT is authoritative when
+// USERNODE_JWT_PUBLIC_KEY is configured; the app-secret HS256 verifier exists
+// so the unit-test harness (which mints JWT_SECRET tokens) can authenticate.
+// Never both for one token — an RS256 key and an HMAC secret can't verify the
+// same signature, and RS256 claims stay forgeable only with the private key.
+const VERIFY_KEYS = [];
+if (USERNODE_JWT_PUBLIC_KEY) VERIFY_KEYS.push({
+  key: USERNODE_JWT_PUBLIC_KEY,
+  algorithms: ['RS256'],
+  issuer: 'usernode',
+  audience: 'usernode:app:' + (process.env.USERNODE_APP_ID || ''),
+  requirePur: true,
+});
+if (JWT_SECRET) VERIFY_KEYS.push({ key: JWT_SECRET, algorithms: ['HS256'] });
+function verifyUserToken(token) {
+  for (const cfg of VERIFY_KEYS) {
+    try {
+      const payload = jwt.verify(token, cfg.key, {
+        algorithms: cfg.algorithms,
+        ...(cfg.issuer ? { issuer: cfg.issuer } : {}),
+        ...(cfg.audience ? { audience: cfg.audience } : {}),
+      });
+      if (cfg.requirePur && (!payload || payload.pur !== 'iframe')) continue;
+      return payload;
+    } catch { /* try the next verifier */ }
+  }
+  return null;
+}
 // /api/me + /api/me/profile are listed public so they don't 401 without a
 // token: identity is resolved inside the handlers. In production the wallet
 // comes only from req.user (the auth middleware still populates it from any
@@ -511,12 +534,7 @@ const PUBLIC_API_PATHS = new Set(['/health', '/api/me', '/api/me/profile']);
 const PUBLIC_PREFIXES = ['/__quickcount/', '/__mock/', '/explorer-api/', '/api/public/'];
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
-  if (token && USERNODE_JWT_PUBLIC_KEY) {
-    try {
-      const payload = jwt.verify(token, USERNODE_JWT_PUBLIC_KEY, { algorithms: ['RS256'], issuer: 'usernode', audience: 'usernode:app:' + process.env.USERNODE_APP_ID });
-      if (payload && payload.pur === 'iframe') req.user = payload;
-    } catch { /* ignore */ }
-  }
+  if (token) { const payload = verifyUserToken(token); if (payload) req.user = payload; }
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     if (PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
