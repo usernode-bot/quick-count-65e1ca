@@ -148,6 +148,7 @@
     { id: 'evidence', label: 'Evidence', icon: '🔎' },
     { id: 'disputes', label: 'Disputes', icon: '⚖️' },
     { id: 'heatmap', label: 'Heatmap', icon: '🗺️' },
+    { id: 'compare', label: 'Compare', icon: '⇄' },
   ];
   const METHOD_LABELS = { latest: 'Latest submission', first: 'First submission', consensus: 'Consensus', median: 'Median', verified: 'Verified only' }; // English-only; used in CSV export — do not replace with t()
   const COLORS = ['bg-indigo-500','bg-sky-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500','bg-teal-500'];
@@ -183,6 +184,7 @@
       toast_submitted_awaiting_sync: 'Submitted — waiting for on-chain sync',
       menu_profile: 'My Profile', menu_settings: 'Settings', menu_connected: 'Signed in as',
       title_profile: 'My Profile', title_settings: 'Settings',
+      tab_compare: 'Compare', compare_heading: 'Compare elections', compare_a: 'Election A', compare_b: 'Election B', compare_same_warning: 'Pick two different elections to compare.', compare_pick_two: 'Choose two elections to see their results side by side.', compare_votes: 'Votes', compare_share: 'Share', compare_turnout: 'Turnout', compare_stations: 'Stations reported', compare_candidates: 'Candidates', compare_no_results: 'No results reported yet.', compare_no_a: 'Pick election A above.', compare_no_b: 'Pick election B above.', compare_last_update: 'Last submission',
       label_username: 'Username', hint_username: 'Managed by Usernode',
       label_wallet: 'Wallet address', action_copy: 'Copy', copied: 'Copied',
       label_display_name: 'Display name',
@@ -286,6 +288,7 @@
       toast_submitted_awaiting_sync: 'Terkirim — menunggu sinkronisasi on-chain',
       menu_profile: 'Profil Saya', menu_settings: 'Pengaturan', menu_connected: 'Masuk sebagai',
       title_profile: 'Profil Saya', title_settings: 'Pengaturan',
+      tab_compare: 'Bandingkan', compare_heading: 'Bandingkan pemilihan', compare_a: 'Pemilihan A', compare_b: 'Pemilihan B', compare_same_warning: 'Pilih dua pemilihan yang berbeda untuk dibandingkan.', compare_pick_two: 'Pilih dua pemilihan untuk melihat hasilnya berdampingan.', compare_votes: 'Suara', compare_share: 'Pangsa', compare_turnout: 'Partisipasi', compare_stations: 'TPS dilaporkan', compare_candidates: 'Kandidat', compare_no_results: 'Belum ada hasil yang dilaporkan.', compare_no_a: 'Pilih pemilihan A di atas.', compare_no_b: 'Pilih pemilihan B di atas.', compare_last_update: 'Laporan terakhir',
       label_username: 'Nama pengguna', hint_username: 'Dikelola oleh Usernode',
       label_wallet: 'Alamat dompet', action_copy: 'Salin', copied: 'Tersalin',
       label_display_name: 'Nama tampilan',
@@ -368,6 +371,7 @@
       toast_submitted_awaiting_sync: '已提交 — 等待链上同步',
       menu_profile: '我的资料', menu_settings: '设置', menu_connected: '当前登录',
       title_profile: '我的资料', title_settings: '设置',
+      tab_compare: '对比', compare_heading: '对比选举', compare_a: '选举 A', compare_b: '选举 B', compare_same_warning: '请选择两场不同的选举进行对比。', compare_pick_two: '选择两场选举以并排查看结果。', compare_votes: '票数', compare_share: '得票率', compare_turnout: '投票率', compare_stations: '已上报投票站', compare_candidates: '候选人', compare_no_results: '暂无已上报结果。', compare_no_a: '请先在上方选择选举 A。', compare_no_b: '请先在上方选择选举 B。', compare_last_update: '最后提交',
       label_username: '用户名', hint_username: '由 Usernode 管理',
       label_wallet: '钱包地址', action_copy: '复制', copied: '已复制',
       label_display_name: '显示名称',
@@ -441,6 +445,7 @@
       toast_submitted_awaiting_sync: 'Enviado — esperando la sincronización on-chain',
       menu_profile: 'Mi perfil', menu_settings: 'Configuración', menu_connected: 'Sesión de',
       title_profile: 'Mi perfil', title_settings: 'Configuración',
+      tab_compare: 'Comparar', compare_heading: 'Comparar elecciones', compare_a: 'Elección A', compare_b: 'Elección B', compare_same_warning: 'Elige dos elecciones distintas para comparar.', compare_pick_two: 'Elige dos elecciones para ver sus resultados en paralelo.', compare_votes: 'Votos', compare_share: 'Porcentaje', compare_turnout: 'Participación', compare_stations: 'Mesas reportadas', compare_candidates: 'Candidatos', compare_no_results: 'Aún no hay resultados reportados.', compare_no_a: 'Elige la elección A arriba.', compare_no_b: 'Elige la elección B arriba.', compare_last_update: 'Último envío',
       label_username: 'Nombre de usuario', hint_username: 'Gestionado por Usernode',
       label_wallet: 'Dirección de la billetera', action_copy: 'Copiar', copied: 'Copiado',
       label_display_name: 'Nombre visible',
@@ -515,6 +520,7 @@
       toast_submitted_awaiting_sync: 'सबमिट किया गया — ऑन-चेन सिंक की प्रतीक्षा है',
       menu_profile: 'मेरी प्रोफ़ाइल', menu_settings: 'सेटिंग्स', menu_connected: 'साइन इन',
       title_profile: 'मेरी प्रोफ़ाइल', title_settings: 'सेटिंग्स',
+      tab_compare: 'तुलना', compare_heading: 'चुनावों की तुलना', compare_a: 'चुनाव A', compare_b: 'चुनाव B', compare_same_warning: 'तुलना के लिए दो अलग चुनाव चुनें।', compare_pick_two: 'नतीजे साथ-साथ देखने के लिए दो चुनाव चुनें।', compare_votes: 'वोट', compare_share: 'हिस्सा', compare_turnout: 'मतदान', compare_stations: 'रिपोर्ट किए गए बूथ', compare_candidates: 'उम्मीदवार', compare_no_results: 'अभी कोई परिणाम रिपोर्ट नहीं हुआ।', compare_no_a: 'ऊपर चुनाव A चुनें।', compare_no_b: 'ऊपर चुनाव B चुनें।', compare_last_update: 'अंतिम सबमिशन',
       label_username: 'उपयोगकर्ता नाम', hint_username: 'Usernode द्वारा प्रबंधित',
       label_wallet: 'वॉलेट पता', action_copy: 'कॉपी करें', copied: 'कॉपी हो गया',
       label_display_name: 'प्रदर्शित नाम',
@@ -588,6 +594,7 @@
       toast_submitted_awaiting_sync: 'تم الإرسال — في انتظار المزامنة على السلسلة',
       menu_profile: 'ملفي الشخصي', menu_settings: 'الإعدادات', menu_connected: 'تسجيل الدخول باسم',
       title_profile: 'ملفي الشخصي', title_settings: 'الإعدادات',
+      tab_compare: 'مقارنة', compare_heading: 'مقارنة الانتخابات', compare_a: 'الانتخابات A', compare_b: 'الانتخابات B', compare_same_warning: 'اختر انتخابين مختلفين للمقارنة.', compare_pick_two: 'اختر انتخابين لعرض نتائجهما جنباً إلى جنب.', compare_votes: 'الأصوات', compare_share: 'الحصة', compare_turnout: 'نسبة المشاركة', compare_stations: 'المراكز المُبلَّغ عنها', compare_candidates: 'المرشحون', compare_no_results: 'لم تُبلَّغ عن أي نتائج بعد.', compare_no_a: 'اختر الانتخابات A في الأعلى.', compare_no_b: 'اختر الانتخابات B في الأعلى.', compare_last_update: 'آخر تقرير',
       label_username: 'اسم المستخدم', hint_username: 'تُدار بواسطة Usernode',
       label_wallet: 'عنوان المحفظة', action_copy: 'نسخ', copied: 'تم النسخ',
       label_display_name: 'الاسم المعروض',
@@ -661,6 +668,7 @@
       toast_submitted_awaiting_sync: "Envoyé — en attente de la synchronisation on-chain",
       menu_profile: 'Mon profil', menu_settings: 'Paramètres', menu_connected: 'Connecté en tant que',
       title_profile: 'Mon profil', title_settings: 'Paramètres',
+      tab_compare: 'Comparer', compare_heading: "Comparer les élections", compare_a: 'Élection A', compare_b: 'Élection B', compare_same_warning: "Choisissez deux élections différentes à comparer.", compare_pick_two: "Choisissez deux élections pour voir leurs résultats côte à côte.", compare_votes: 'Voix', compare_share: 'Part', compare_turnout: 'Participation', compare_stations: 'Bureaux déclarés', compare_candidates: 'Candidats', compare_no_results: "Aucun résultat déclaré pour l'instant.", compare_no_a: "Choisissez l'élection A ci-dessus.", compare_no_b: "Choisissez l'élection B ci-dessus.", compare_last_update: 'Dernier envoi',
       label_username: "Nom d'utilisateur", hint_username: 'Géré par Usernode',
       label_wallet: 'Adresse du portefeuille', action_copy: 'Copier', copied: 'Copié',
       label_display_name: "Nom d'affichage",
@@ -1899,6 +1907,7 @@
       case 'verify': return renderEvidence(v);
       case 'disputes': return renderDisputes(v);
       case 'heatmap': return renderHeatmap(v);
+      case 'compare': return renderCompare(v);
       case 'profile': return renderProfile(v);
       case 'settings': return renderSettings(v);
       case 'user': return renderUserProfile(v, route.arg);
@@ -4065,6 +4074,124 @@
       <p class="text-xs text-slate-500 mt-3">${summary} · ${t('dashboard_auto_refreshing')}</p>`;
   }
 
+  // ───────────────────────── Election Compare ─────────────────────────
+  // Side-by-side read-only view of two elections' official results + turnout,
+  // fetched from /__quickcount/compare (chain-sourced, visibility-gated per
+  // viewer like /__quickcount/state). Selection state lives on App so the
+  // auto-refresh timer re-fetches and re-renders without losing the picks.
+  function pctStr(x) {
+    return (Number.isFinite(x) ? x : 0).toFixed(1) + '%';
+  }
+  function compareSideHtml(label, sel, missingMsg) {
+    const sideHead = `<h3 class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">${esc(label)}</h3>`;
+    if (!sel) return `<div>${sideHead}<p class="text-sm text-slate-600 dark:text-slate-500">${esc(missingMsg)}</p></div>`;
+    const total = Object.values(sel.tally || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+    const reported = sel.stationReported || 0, totalS = sel.stationTotal || 0;
+    const turnoutPct = totalS ? (100 * reported / totalS) : 0;
+    const validPct = (sel.totSum != null && sel.totSum > 0 && sel.invSum != null)
+      ? (100 * (sel.totSum - sel.invSum) / sel.totSum)
+      : null;
+    const rows = sel.candidateNames.map((name, i) => {
+      const votes = Number(sel.tally[i + 1]) || 0;
+      const pct = total > 0 ? (100 * votes / total) : 0;
+      return { name, votes, pct, colorClass: COLORS[i % COLORS.length], colorHex: COLOR_HEX[i % COLOR_HEX.length] };
+    }).sort((x, y) => y.votes - x.votes);
+    const bars = rows.map((r) => `<div class="mb-2">
+      <div class="flex items-center gap-2 text-sm mb-1">
+        <span class="w-3 h-3 rounded-sm shrink-0 ${r.colorClass}"></span>
+        <span class="flex-1 truncate">${esc(r.name)}</span>
+        <span class="font-mono text-slate-600 dark:text-slate-400">${r.votes.toLocaleString()} (${pctStr(r.pct)})</span>
+      </div>
+      <div class="h-2.5 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden">
+        <div class="h-full ${r.colorClass}" style="width:${r.pct.toFixed(1)}%"></div>
+      </div>
+    </div>`).join('');
+    return `<div>
+      ${sideHead}
+      <p class="text-base font-semibold mb-3 truncate">${esc(sel.name)}${sel.closed ? ' · ' + esc(t('election_closed_badge')) : ''}</p>
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="text-center">
+          <div class="text-lg font-bold font-mono">${total.toLocaleString()}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">${esc(t('compare_votes'))}</div>
+        </div>
+        <div class="text-center">
+          <div class="text-lg font-bold font-mono">${pctStr(turnoutPct)}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">${esc(t('compare_turnout'))}</div>
+        </div>
+        <div class="text-center">
+          <div class="text-lg font-bold font-mono">${reported}/${totalS}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">${esc(t('compare_stations'))}</div>
+        </div>
+      </div>
+      ${rows.length ? bars : `<p class="text-sm text-slate-600 dark:text-slate-500">${esc(t('compare_no_results'))}</p>`}
+      ${validPct != null ? `<p class="mt-3 text-xs text-slate-500 dark:text-slate-400">${esc(t('heatmap_col_valid_rate'))}: ${pctStr(validPct)}</p>` : ''}
+    </div>`;
+  }
+  function renderCompare(v) {
+    v.innerHTML = `
+      <div class="mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <select id="cmp-a" class="w-full px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
+            <option value="">${esc(t('compare_a'))}</option>
+          </select>
+          <select id="cmp-b" class="w-full px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 outline-none text-sm">
+            <option value="">${esc(t('compare_b'))}</option>
+          </select>
+        </div>
+      </div>
+      <div id="cmp-body"></div>`;
+    const body = document.getElementById('cmp-body');
+    const els = (App.state && App.state.elections) || [];
+    if (!els.length) {
+      body.innerHTML = `<p class="text-sm text-slate-600 dark:text-slate-500">${esc(t('elections_none_published'))}</p>`;
+      return;
+    }
+    // Default the pair once, to the two most-recent visible elections. After
+    // that the user's picks always win (they're re-applied on every rerender).
+    if (!App.compareA) { App.compareA = els[0] ? els[0].eid : ''; }
+    if (!App.compareB && els.length > 1) { App.compareB = els[1].eid; }
+    if (App.compareB === App.compareA && els.length > 1) {
+      App.compareB = els.find((e) => e.eid !== App.compareA).eid;
+    }
+    fetchCompare();
+    async function fetchCompare() {
+      const viewer = App.wallet.address || URL_VIEWER || '';
+      const q = '?viewer=' + encodeURIComponent(viewer)
+        + '&method=' + encodeURIComponent(App.method)
+        + '&a=' + encodeURIComponent(App.compareA)
+        + '&b=' + encodeURIComponent(App.compareB);
+      let data = null;
+      try { data = await api('/__quickcount/compare' + q); }
+      catch (e) {
+        body.innerHTML = `<p class="text-sm text-rose-600 dark:text-rose-300">${esc(e.message || 'Failed to load comparison')}</p>`;
+        return;
+      }
+      const avail = data.available || [];
+      for (const id of ['cmp-a', 'cmp-b']) {
+        const el = document.getElementById(id);
+        if (!el) return; // user navigated away mid-fetch
+        const want = id === 'cmp-a' ? App.compareA : App.compareB;
+        el.innerHTML = `<option value="">${esc(t(id === 'cmp-a' ? 'compare_a' : 'compare_b'))}</option>`
+          + avail.map((e) => `<option value="${esc(e.eid)}" ${e.eid === want ? 'selected' : ''}>${esc(e.name)}${e.closed ? ' · ' + esc(t('election_closed_badge')) : ''}</option>`).join('');
+        el.onchange = () => {
+          if (id === 'cmp-a') App.compareA = el.value;
+          else App.compareB = el.value;
+          fetchCompare();
+        };
+      }
+      // Render regardless of same-pick: the warning (below) explains it, and
+      // clearing a side is an intentional "hide this side" state.
+      const same = App.compareA && App.compareB && App.compareA === App.compareB;
+      body.innerHTML = `
+        ${same ? `<div class="mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30 text-sm text-amber-700 dark:text-amber-200">${esc(t('compare_same_warning'))}</div>` : ''}
+        ${(!App.compareA && !App.compareB) ? `<p class="text-sm text-slate-600 dark:text-slate-500 mb-3">${esc(t('compare_pick_two'))}</p>` : ''}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          ${compareSideHtml(t('compare_a'), data.a, t('compare_no_a'))}
+          ${compareSideHtml(t('compare_b'), data.b, t('compare_no_b'))}
+        </div>`;
+    }
+  }
+
   // ───────────────────────── Profile & Settings ─────────────────────────
   function langSelect(id) {
     const opts = LANGS.map((l) => `<option value="${l}" ${l === App.lang ? 'selected' : ''}>${esc(LANG_NAMES[l])}</option>`).join('');
@@ -4340,10 +4467,10 @@
     // current tab; for tabs whose render() fetches its own data (orgs, profile,
     // user) the re-render re-runs those fetches, so a still-syncing
     // registration appears without a manual reload.
-    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'user'];
+    const tabs = ['dashboard', 'election', 'evidence', 'disputes', 'orgs', 'elections', 'profile', 'user', 'compare'];
     // Cadence comes from server config (TIMER_DURATION_MS), floored at 1000ms so
     // a stray small value can't spin the refresh loop; falls back to 6000ms.
-    const cadence = Math.max(1000, Number(App.cfg && App.cfg.timerDurationMs) || 6000);
+      const cadence = Math.max(1000, Number(App.cfg && App.cfg.timerDurationMs) || 6000);
     App.refreshTimer = setInterval(() => {
       if (isEditingField()) return; // don't yank focus out of a field mid-type
       const r = currentRoute();

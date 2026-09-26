@@ -239,6 +239,16 @@
       "expectText": "North district"
     },
     {
+      "name": "Compare tab shows side-by-side elections",
+      "path": "/#/compare",
+      "expectText": "General Election"
+    },
+    {
+      "name": "Compare tab shows the second seeded election side by side",
+      "path": "/#/compare",
+      "expectText": "Pilpres 2024"
+    },
+    {
       "name": "Orgs tab renders the organizations heading",
       "path": "/#/orgs",
       "expectText": "Organizations"

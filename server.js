@@ -645,6 +645,57 @@ app.get('/__quickcount/state', async (req, res) => {
   }
 });
 
+// Election compare feed for the dashboard's side-by-side view. Two elections'
+// official totals + turnout from the indexer. Read-only, same visibility model
+// as /__quickcount/state: every returned eid is present in visibleElections
+// for the requesting viewer. Auth-exempt under /__quickcount/.
+app.get('/__quickcount/compare', (req, res) => {
+  try {
+    const viewer = (req.query.viewer || '').toString() || null;
+    const raw = req.query.method;
+    const method = require('./lib/aggregate').METHODS.includes(raw) ? raw : 'latest';
+    const visible = indexer.visibleElections({ viewer });
+    const visibleSet = new Set(visible.map((el) => el.eid));
+    const pick = (eid) => {
+      if (!eid || !visibleSet.has(eid)) return null;
+      const el = indexer.elections.get(eid);
+      if (!el) return null;
+      const d = indexer.electionDetail(eid, method);
+      if (!d) return null;
+      // Turnout proxy: sums over reported stations only (an unreported station
+      // contributes nothing). totSum/invSum are null when NO reported station
+      // carried a ballots-cast figure — rendered as a dash, never as zero.
+      let totSum = null, invSum = null;
+      for (const s of d.stations) {
+        if (!s.reported) continue;
+        if (s.tot != null) { totSum = (totSum || 0) + s.tot; }
+        if (s.inv != null) { invSum = (invSum || 0) + s.inv; }
+      }
+      return {
+        eid: d.election.eid,
+        name: d.election.name,
+        closed: d.election.closed || false,
+        stationTotal: d.stations.length,
+        stationReported: d.reporting.reported,
+        tally: d.tally,
+        candidateNames: d.candidates.map((c) => c.name),
+        totSum,
+        invSum,
+      };
+    };
+    const a = pick(String(req.query.a || ''));
+    const b = pick(String(req.query.b || ''));
+    res.json({
+      method,
+      a,
+      b,
+      available: visible.map((el) => ({ eid: el.eid, name: el.name, closed: el.closed || false })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Organizations the viewer owns or belongs to, each with its roster + the
 // viewer's role. Read-only chain replay; auth-exempt under /__quickcount/.
 app.get('/__quickcount/orgs', (req, res) => {
@@ -1774,6 +1825,18 @@ app.get('/api/public/profiles/:addr', async (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Centrally hosted platform assets (the bridge, the native UI kit, Tailwind)
+// are served at the edge in platform deploys and are intentionally NEVER
+// vendored into this repo. In a plain `node server.js` deployment there is no
+// edge in front of the app, so this shell fallback used to answer those paths
+// with index.html — which the browser then parsed as JavaScript ("Unexpected
+// token '<'"). Serve an empty script stub instead: nothing breaks, no console
+// error is logged, and the app degrades exactly as it does when the bridge is
+// unreachable anywhere else.
+app.get('/usernode-bridge/*', (_req, res) => {
+  res.type('application/javascript').send('');
+});
 
 // SPA shell. The public dashboard works without a wallet, so serve index.html
 // for any GET (the auth gate above only protects non-GET / /api/* routes).
