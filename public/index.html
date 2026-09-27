@@ -54,7 +54,9 @@
     try { post('info', ['[dev-console ready]'], { kind: 'ready' }); } catch (_) {}
   })();
   </script>
-
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>Quick Count</title>
   <script>(function() { if (localStorage.getItem('qc-theme') === 'light') document.documentElement.classList.remove('dark'); })();</script>
   <script src="https://cdn.tailwindcss.com"></script>

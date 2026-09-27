@@ -1,5 +1,8 @@
 {
   "name": "Quick Count",
+  "icon": {
+    "image": "public/icon.png"
+  },
   "secrets": [
     {
       "key": "EXPLORER_API_URL",
