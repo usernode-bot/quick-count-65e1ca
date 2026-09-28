@@ -1688,6 +1688,19 @@ function profileKey(req) {
   return null;
 }
 
+// Platform usernames are unique and the verified JWT is authoritative for which
+// wallet a username belongs to right now. When a user relinks a wallet (or a
+// staging identity returns with a fresh one), an older row can still hold the
+// username; release it there first so binding it here can't trip
+// profiles_username_uniq and 500 every page load.
+async function releaseUsername(pubkey, username) {
+  if (!username || !pubkey || !pool) return;
+  await pool.query(
+    'UPDATE profiles SET username = NULL, updated_at = NOW() WHERE username = $1 AND usernode_pubkey <> $2',
+    [username, pubkey]
+  );
+}
+
 // GET /api/me — caller identity + their profile row (upserts on first access
 // so created_at is captured). Degrades to nulls when unauthenticated.
 app.get('/api/me', async (req, res) => {
@@ -1701,6 +1714,7 @@ app.get('/api/me', async (req, res) => {
     const id = (req.user && req.user.id) || null;
     let profile = null;
     if (pubkey && pool) {
+      await releaseUsername(pubkey, username);
       await pool.query(
         `INSERT INTO profiles (usernode_pubkey, username, created_at, updated_at)
          VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (usernode_pubkey) DO NOTHING`,
@@ -1758,6 +1772,7 @@ app.put('/api/me/profile', async (req, res) => {
     }
     if (!pool) return res.status(503).json({ error: 'Profiles are unavailable in this environment' });
     const username = (req.user && req.user.username) || null;
+    await releaseUsername(pubkey, username);
     // Empty string clears the bio (stored as null); non-empty sets it.
     const newBio = hasBio ? (body.bio === '' ? null : body.bio) : null;
     const newPrefs = hasPrefs ? JSON.stringify(body.prefs) : null;
